@@ -8,6 +8,14 @@ build/
 dist/
 *.spec
 
+# ---------- Node.js 与网页测试 ----------
+node_modules/
+coverage/
+playwright-report/
+test-results/
+.vite/
+*.tsbuildinfo
+
 # ---------- 你的打包发行版 ----------
 Majowolf1.0.2/
 Majowolf1.0.2.zip

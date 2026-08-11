@@ -1,0 +1,47 @@
+.game { height: 100dvh; min-height: 600px; display: grid; grid-template-rows: 72px 1fr; overflow: hidden; background: var(--paper); color: var(--ink); }
+.topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 18px; border-bottom: 4px solid var(--ink); background: var(--paper-bright); }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand > span { display: grid; width: 42px; height: 42px; place-items: center; background: var(--ink); color: var(--verdict-light); font-family: var(--sans); font-weight: 900; }
+.brand div, .phase { display: grid; }
+.brand small, .phase small, .historyPane header span, .result span, .playerDialog span, .confirm > span { color: var(--verdict); font-family: var(--sans); font-size: 9px; font-weight: 900; }
+.brand strong { font-size: 18px; }
+.phase { min-width: 150px; padding: 7px 18px; border-right: 1px solid var(--line); border-left: 1px solid var(--line); text-align: center; }
+.phase strong { font-size: 21px; }
+.mode { justify-self: end; display: flex; align-items: center; gap: 8px; color: var(--muted); font-family: var(--sans); font-size: 12px; font-weight: 700; }
+.mode svg { width: 19px; color: var(--intel-dark); }
+.workspace { min-height: 0; display: grid; grid-template-columns: 270px minmax(360px, 1fr) 360px; overflow: hidden; }
+.rosterPane, .livePane, .sidePane { min-width: 0; min-height: 0; }
+.sidePane { display: grid; grid-template-rows: auto minmax(250px, auto) 1fr; border-left: 1px solid var(--line); overflow: hidden; background: var(--paper-bright); }
+.intel { min-height: 0; overflow: hidden; border-top: 1px solid var(--line); }
+.intel header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.intel header svg { width: 17px; color: var(--intel-dark); }
+.intel h2 { margin: 0; font-size: 16px; }
+.intel > div { height: calc(100% - 48px); overflow-y: auto; padding: 4px 16px 16px; }
+.intel p, .historyBody p { margin: 0; padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1.5; }
+.mobileTabs, .historyPane { display: none; }
+.result { position: fixed; z-index: 30; left: 50%; bottom: 22px; width: min(680px, calc(100% - 32px)); display: grid; grid-template-columns: 54px 1fr auto; gap: 16px; align-items: center; padding: 17px 20px; transform: translateX(-50%); border: 2px solid var(--magic-dark); background: var(--ink); color: white; box-shadow: 0 18px 50px rgb(0 0 0 / 35%); }
+.result > svg { width: 48px; height: 48px; padding: 10px; background: var(--magic); color: var(--ink); }
+.result h2 { margin: 2px 0; font-size: 25px; }
+.result p { margin: 0; color: var(--paper-dim); }
+.result button { min-height: 46px; padding: 0 16px; border: 1px solid white; background: transparent; color: white; font-weight: 800; }
+.modalBackdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 18px; background: rgb(23 22 26 / 72%); }
+.playerDialog { position: relative; width: min(720px, 100%); max-height: calc(100vh - 36px); display: grid; grid-template-columns: minmax(220px, .75fr) 1.25fr; overflow-y: auto; border-top: 6px solid var(--verdict); background: var(--paper-bright); box-shadow: 0 26px 80px rgb(0 0 0 / 40%); }
+.playerDialog > img { width: 100%; height: 100%; min-height: 330px; object-fit: cover; object-position: top; }
+.playerDialog > div { padding: 34px; }
+.playerDialog h2 { margin: 5px 0 2px; font-size: 34px; }
+.playerDialog p { color: var(--muted); }
+.playerDialog dl { display: grid; gap: 5px; margin-top: 28px; }
+.playerDialog dt { margin-top: 12px; color: var(--verdict); font-family: var(--sans); font-size: 10px; font-weight: 900; }
+.playerDialog dd { margin: 0; line-height: 1.7; }
+.close { position: absolute; top: 10px; right: 10px; display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--ink); background: var(--paper-bright); }
+.close svg { width: 19px; }
+.confirm { width: min(440px, 100%); padding: 28px; border-top: 6px solid var(--verdict); background: var(--paper-bright); text-align: left; }
+.confirm > svg { width: 38px; color: var(--magic-dark); }
+.confirm h2 { margin: 5px 0; font-size: 27px; }
+.confirm p { color: var(--muted); }
+.confirm div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.confirm button { min-height: 46px; padding: 0 17px; border: 1px solid var(--ink); background: transparent; font-weight: 800; }
+.confirm .danger { border-color: var(--verdict); background: var(--verdict); color: white; }
+@media (max-width: 1099px) { .game { min-height: 700px; } .workspace { grid-template-columns: minmax(300px, .9fr) minmax(360px, 1.1fr); grid-template-rows: minmax(280px, .85fr) minmax(330px, 1.15fr); } .rosterPane { grid-column: 1; grid-row: 1; } .sidePane { grid-column: 2; grid-row: 1 / 3; } .livePane { grid-column: 1; grid-row: 2; } }
+@media (max-width: 719px) { .game { min-height: 560px; grid-template-rows: 62px 52px 1fr; overflow: hidden; } .topbar { grid-template-columns: 1fr auto; padding: 0 12px; } .brand > span { width: 38px; height: 38px; } .brand small, .mode { display: none; } .brand strong { font-size: 17px; } .phase { min-width: 120px; padding: 5px 9px; border-right: 0; } .phase strong { font-size: 17px; } .mobileTabs { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); background: var(--paper-bright); } .mobileTabs button { min-height: 51px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: var(--muted); font-weight: 800; } .mobileTabs button + button { border-left: 1px solid var(--line); } .mobileTabs svg { width: 17px; } .mobileTabs .activeTab { box-shadow: inset 0 -3px var(--verdict); color: var(--ink); } .workspace { display: block; overflow: hidden; } .rosterPane, .livePane, .historyPane { display: none; height: 100%; } .workspace[data-mobile-tab='players'] .rosterPane, .workspace[data-mobile-tab='live'] .livePane, .workspace[data-mobile-tab='history'] .historyPane { display: block; } .sidePane { position: fixed; z-index: 20; right: 0; bottom: 0; left: 0; display: block; border-left: 0; pointer-events: none; } .sidePane > * { pointer-events: auto; } .sidePane > section:last-child { display: none; } .historyPane { overflow-y: auto; background: var(--paper); } .historyPane > header { display: flex; align-items: center; gap: 10px; padding: 16px; border-bottom: 2px solid var(--ink); } .historyPane header svg { width: 24px; color: var(--magic-dark); } .historyPane h2 { margin: 2px 0 0; font-size: 21px; } .historyBody { padding: 12px 16px 190px; } .historyBody h3 { margin: 18px 0 5px; font-size: 17px; } .archive { margin-top: 18px; padding: 12px; border: 1px solid var(--magic-dark); background: var(--magic-soft); } .result { bottom: 174px; grid-template-columns: 42px 1fr; padding: 12px; } .result > svg { width: 40px; height: 40px; } .result h2 { font-size: 19px; } .result button { grid-column: 1 / -1; } .playerDialog { grid-template-columns: 1fr; } .playerDialog > img { max-height: 280px; min-height: 0; } .playerDialog > div { padding: 22px; } .playerDialog h2 { font-size: 28px; } }
+@media (max-height: 560px) and (orientation: landscape) { .game { min-height: 420px; } .result { left: 10px; bottom: 10px; width: min(480px, calc(100% - 20px)); transform: none; } }

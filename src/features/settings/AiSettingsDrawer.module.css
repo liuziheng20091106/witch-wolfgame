@@ -1,0 +1,23 @@
+.backdrop { position: fixed; inset: 0; z-index: 100; display: flex; justify-content: flex-end; background: rgb(23 22 26 / 62%); }
+.drawer { width: min(540px, 100%); height: 100%; overflow-y: auto; background: var(--paper); border-left: 4px solid var(--ink); box-shadow: -18px 0 48px rgb(0 0 0 / 24%); }
+.header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 24px 28px 18px; background: var(--paper); border-bottom: 1px solid var(--line); }
+.header h2 { margin: 4px 0 0; font-size: 28px; }
+.eyebrow { color: var(--verdict); font-family: var(--sans); font-size: 12px; font-weight: 800; }
+.iconButton, .keyField button { display: inline-grid; width: 44px; height: 44px; place-items: center; padding: 0; border: 1px solid var(--line); background: transparent; color: var(--ink); }
+.iconButton svg, .keyField svg { width: 20px; }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 28px; }
+.form label { display: grid; gap: 8px; color: var(--muted); font-family: var(--sans); font-size: 14px; font-weight: 750; }
+.form input, .form select { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 2px; background: var(--paper-bright); color: var(--ink); }
+.wide, .disclosure, .error, .success, .actions { grid-column: 1 / -1; }
+.keyField { display: grid; grid-template-columns: 1fr 44px; }
+.keyField input { border-right: 0; }
+.disclosure { display: flex; gap: 8px; align-items: flex-start; margin: 0; color: var(--muted); font-family: var(--sans); font-size: 13px; line-height: 1.5; }
+.disclosure svg { width: 18px; flex: 0 0 auto; color: var(--intel); }
+.error, .success { margin: 0; padding: 12px; border-left: 4px solid var(--verdict); background: var(--verdict-soft); color: var(--verdict-dark); }
+.success { border-color: var(--intel); background: var(--intel-soft); color: var(--intel-dark); }
+.actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 8px; }
+.actions button { min-height: 46px; display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; border: 1px solid var(--ink); font-weight: 800; }
+.actions svg { width: 18px; }
+.primary { background: var(--ink); color: var(--paper-bright); }
+.secondary { background: transparent; color: var(--ink); }
+@media (max-width: 600px) { .form { grid-template-columns: 1fr; padding: 22px 18px; } .header { padding-inline: 18px; } .actions { flex-direction: column-reverse; } .actions button { justify-content: center; } }
