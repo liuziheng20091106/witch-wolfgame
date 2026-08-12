@@ -163,7 +163,17 @@ export function useGameController(): GameController {
     void requestDecision({ observation: actorObservation, pendingDecision: pending }, settings, controller.signal)
       .then((decision) => {
         if (disposed) return;
-        dispatch({ type: 'submit-decision', pendingDecisionId: pending.id, actorId: pending.actorId, decision }, pending.id);
+        const current = gameRef.current;
+        if (!current || current.pendingDecision?.id !== pending.id) return;
+        const marked = settings.provider === 'free'
+          ? reduceGame(current, { type: 'mark-free-provider-used' })
+          : current;
+        commit(reduceGame(marked, {
+          type: 'submit-decision',
+          pendingDecisionId: pending.id,
+          actorId: pending.actorId,
+          decision,
+        }));
       })
       .catch((error: unknown) => {
         if (disposed || controller.signal.aborted) return;

@@ -6,6 +6,7 @@ import { roleDescriptions, roleNames } from '../../domain/catalog/roles';
 import { witchSkillDefinitions } from '../../domain/catalog/witchSkills';
 import type { GameObservation, PlayerId, SubmittedDecision } from '../../domain/model';
 import brandMark from '../../assets/icon.ico';
+import supportQr from '../../assets/support/free-provider-wechat.png';
 import { DecisionPanel } from './DecisionPanel';
 import { GameControls } from './GameControls';
 import { PlayerRoster } from './PlayerRoster';
@@ -80,7 +81,7 @@ export function GameView(props: GameViewProps) {
       </section>
     </div>
 
-    {observation.result && <section className={styles.result} aria-live="assertive"><Gavel /><div><span>FINAL VERDICT</span><h2>{observation.result.winner === 'wolf' ? '狼人阵营获胜' : '好人阵营获胜'}</h2><p>{observation.mode === 'player' && observation.viewerPlayerId !== null ? `你的阵营${observation.players.find((player) => player.id === observation.viewerPlayerId)?.roleId === 'wolf' ? observation.result.winner === 'wolf' ? '获胜' : '失败' : observation.result.winner === 'good' ? '获胜' : '失败'}。` : '所有职业、技能与伪造来源已揭晓。'}</p></div><button type="button" onClick={() => setConfirmRestart(true)}>再来一局</button></section>}
+    {observation.result && <section className={`${styles.result} ${observation.usedFreeProvider ? styles.resultWithSupport : ''}`} aria-live="assertive"><Gavel /><div><span>FINAL VERDICT</span><h2>{observation.result.winner === 'wolf' ? '狼人阵营获胜' : '好人阵营获胜'}</h2><p>{observation.mode === 'player' && observation.viewerPlayerId !== null ? `你的阵营${observation.players.find((player) => player.id === observation.viewerPlayerId)?.roleId === 'wolf' ? observation.result.winner === 'wolf' ? '获胜' : '失败' : observation.result.winner === 'good' ? '获胜' : '失败'}。` : '所有职业、技能与伪造来源已揭晓。'}</p></div><button type="button" onClick={() => setConfirmRestart(true)}>再来一局</button>{observation.usedFreeProvider && <aside className={styles.resultSupport}><div className={styles.resultQr}><img src={supportQr} alt="微信赞赏二维码" /></div><div><span>FREE SERVICE</span><strong>本局使用了免费服务</strong><p>若这局体验不错，欢迎扫码赞赏。</p></div></aside>}</section>}
 
     {selectedPlayer && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedPlayerId(null)}><section className={styles.playerDialog} role="dialog" aria-modal="true" aria-labelledby="player-detail-title">
       <button className={styles.close} type="button" onClick={() => setSelectedPlayerId(null)} aria-label="关闭角色详情"><X /></button>

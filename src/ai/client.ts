@@ -1,9 +1,16 @@
 import { z } from 'zod';
+import { APP_VERSION } from '../config/version';
 import type { SubmittedDecision } from '../domain/model';
 import { buildDecisionPrompt, type PromptMessage } from './prompts';
 import { parseDecision } from './schemas';
-import { AiCommandError, type AiDecisionRequest, type AiProviderConfig } from './types';
-
+import {
+  AiCommandError,
+  FREE_PROVIDER_CLIENT_NAME,
+  FREE_PROVIDER_ENDPOINT,
+  type AiDecisionRequest,
+  type AiProviderConfig,
+  type CustomAiProviderConfig,
+} from './types';
 const responseSchema = z.object({
   choices: z.array(z.object({
     message: z.object({ content: z.string().nullable() }),
@@ -26,7 +33,7 @@ export function validateAiEndpoint(endpoint: string): void {
   }
 }
 
-function validateConfig(config: AiProviderConfig): void {
+function validateCustomConfig(config: CustomAiProviderConfig): void {
   validateAiEndpoint(config.endpoint);
   if (!config.apiKey.trim() || !config.model.trim()) {
     throw new AiCommandError('config', 'API Key 和模型不能为空');
@@ -34,30 +41,45 @@ function validateConfig(config: AiProviderConfig): void {
 }
 
 function buildPayload(config: AiProviderConfig, messages: PromptMessage[]): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
-    model: config.model,
-    messages,
-    response_format: { type: 'json_object' },
-  };
-  if (config.reasoningEffort !== 'none') {
+  const payload: Record<string, unknown> = config.provider === 'free'
+    ? {
+      client: { name: FREE_PROVIDER_CLIENT_NAME, version: APP_VERSION, protocol: 'majo-wolf-free-v1' },
+      messages,
+      response_format: { type: 'json_object' },
+    }
+    : {
+      model: config.model,
+      messages,
+      response_format: { type: 'json_object' },
+    };
+  if (config.provider === 'custom' && config.reasoningEffort !== 'none') {
     payload.reasoning_effort = config.reasoningEffort;
   }
   return payload;
 }
 
 async function requestContent(messages: PromptMessage[], config: AiProviderConfig, signal: AbortSignal): Promise<string> {
-  validateConfig(config);
+  if (config.provider === 'custom') {
+    validateCustomConfig(config);
+  }
   const timeoutController = new AbortController();
   const timeout = window.setTimeout(() => timeoutController.abort(), 60_000);
   const abort = () => timeoutController.abort();
   signal.addEventListener('abort', abort, { once: true });
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (config.provider === 'free') {
+    headers['X-Majo-Wolf-Client'] = FREE_PROVIDER_CLIENT_NAME;
+    headers['X-Majo-Wolf-Version'] = APP_VERSION;
+  } else {
+    headers.Authorization = `Bearer ${config.apiKey}`;
+  }
+  const endpoint = config.provider === 'free' ? FREE_PROVIDER_ENDPOINT : config.endpoint;
   try {
-    const response = await fetch(config.endpoint, {
+    const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(buildPayload(config, messages)),
       signal: timeoutController.signal,
     });

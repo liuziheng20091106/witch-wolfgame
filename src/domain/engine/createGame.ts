@@ -17,7 +17,7 @@ const playerIds: PlayerId[] = [0, 1, 2, 3, 4, 5];
 const rolePool: RoleId[] = ['wolf', 'wolf', 'seer', 'witch', 'villager', 'villager'];
 
 export function createRewindSnapshot(state: GameState): RewindSnapshot {
-  const { morningCheckpoint: _checkpoint, causalLocks: _locks, archivedTimelines: _archives, ...snapshot } = state;
+  const { morningCheckpoint: _checkpoint, causalLocks: _locks, archivedTimelines: _archives, usedFreeProvider: _freeProvider, ...snapshot } = state;
   return structuredClone(snapshot);
 }
 
@@ -90,6 +90,7 @@ export function createGame(setup: GameSetup): GameState {
     gameId: `game-${seed}-${setup.mode}-${setup.humanCharacterId ?? 'auto'}`,
     mode: setup.mode,
     automationMode: 'remote',
+    usedFreeProvider: false,
     humanPlayerId: setup.mode === 'player' ? 0 : null,
     seed,
     rngState,

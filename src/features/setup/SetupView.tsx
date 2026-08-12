@@ -20,6 +20,7 @@ interface SetupViewProps {
 }
 
 function hasUsableSettings(settings: AiProviderConfig): boolean {
+  if (settings.provider === 'free') return true;
   if (!settings.endpoint.trim() || !settings.apiKey.trim() || !settings.model.trim()) return false;
   try {
     const url = new URL(settings.endpoint);
@@ -78,8 +79,8 @@ export function SetupView({ settings, setup, savedGame, storageError, onUpdateSe
       <section className={styles.launchBand}>
         <div className={styles.aiStatus}>
           <Bot />
-          <div><strong>Chat Completions</strong><span>{settings.model || '请填写模型'}</span></div>
-          <button type="button" onClick={onOpenSettings}>打开设置<ChevronRight /></button>
+          <div><strong>{settings.provider === 'free' ? '免费服务' : '自定义服务'}</strong><span>{settings.provider === 'free' ? '公益服务，不保证稳定可用' : settings.model || '请填写模型'}</span></div>
+          <button type="button" onClick={onOpenSettings}>{settings.provider === 'free' ? '服务详情' : '打开设置'}<ChevronRight /></button>
         </div>
         {storageError && <p className={styles.storageError} role="alert">{storageError}</p>}
         <div className={styles.launchActions}>

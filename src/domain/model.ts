@@ -267,6 +267,7 @@ export interface GameState {
   gameId: string;
   mode: GameMode;
   automationMode: AutomationMode;
+  usedFreeProvider: boolean;
   humanPlayerId: PlayerId | null;
   seed: number;
   rngState: number;
@@ -286,8 +287,7 @@ export interface GameState {
   causalLocks: string[];
   result: GameResult | null;
 }
-
-export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks' | 'archivedTimelines'>;
+export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks' | 'archivedTimelines' | 'usedFreeProvider'>;
 
 export interface GameSetup {
   mode: GameMode;
@@ -300,6 +300,7 @@ export type GameEvent =
   | { type: 'submit-decision'; pendingDecisionId: string; actorId: PlayerId; decision: SubmittedDecision }
   | { type: 'set-automation'; automationMode: AutomationMode }
   | { type: 'set-rng-state'; rngState: number }
+  | { type: 'mark-free-provider-used' }
   | { type: 'record-ai-error'; message: string };
 
 export interface GameCommand {
@@ -322,6 +323,7 @@ export interface GameObservation {
   gameId: string;
   mode: GameMode;
   automationMode: AutomationMode;
+  usedFreeProvider: boolean;
   day: number;
   phase: GamePhase;
   viewerPlayerId: PlayerId | null;

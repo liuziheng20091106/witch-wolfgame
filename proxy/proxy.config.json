@@ -1,0 +1,13 @@
+{
+  "listen": { "host": "0.0.0.0", "port": 34023 },
+  "tls": {
+    "ca": "../certs/ca.crt",
+    "cert": "../certs/proxy-server.crt",
+    "key": "../certs/proxy-server.key"
+  },
+  "connectionPasswordEnv": "MAJO_PROXY_PASSWORD_PRIMARY",
+  "acceptedClientVersions": ["2.1.0"],
+  "providersFile": "./providers.json",
+  "upstreamTimeoutMs": 60000,
+  "maxAttempts": 4
+}

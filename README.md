@@ -7,8 +7,8 @@
 - 全自动 AI 观战，以及用户加入一个席位的参与模式
 - 狼人密议与袭击、预言家查验、女巫解药/毒药、公开顺序投票和一次平票重投
 - 14 项完整魔女技：魔女杀手、死亡回溯、洗脑、操控液体、力气大、漂浮、治愈、千里眼、视线诱导、灵魂交换、看到内心、点火、声音模仿、魔女因子回收
-- 所有 AI 请求固定使用 OpenAI Chat Completions JSON 格式
-- 用户填写完整 `/chat/completions` 端点、模型、API Key 和思考强度；`none` 不发送 `reasoning_effort`，默认 `low`
+- 默认使用经主后端校验与限流的公益免费服务，无需 API Key；服务不保证稳定可用，可随时切换到自定义服务
+- 也可切换到自定义 Chat Completions 服务，填写完整 `/chat/completions` 端点、模型、API Key 与思考强度；`none` 不发送 `reasoning_effort`，默认 `low`
 - 设置、准备区选择和可恢复游戏进度保存在浏览器 `localStorage`
 - 桌面三栏、平板双栏、手机标签页与底部行动面板
 
@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-开发服务器默认使用 `http://127.0.0.1:5173/`。首次使用时在准备区打开“AI 设置”，填写 Chat Completions 端点、模型和 API Key 后开始游戏。
+开发服务器默认使用 `http://127.0.0.1:5173/`。公益服务默认请求同源 `/api/ai/chat/completions`；开发时可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
 
 ## 构建与部署
 
@@ -30,18 +30,52 @@ npm run build
 npm run preview
 ```
 
-生产文件输出到 `dist/`。Vite 使用相对资源路径，整个 `dist/` 可部署到任意静态站点或子路径，不需要 Node.js 服务端。
+生产文件输出到 `dist/`。Vite 使用相对资源路径，可部署到静态站点或子路径。公益服务需要将同源 `/api/ai/chat/completions` 反向代理到主后端；也可在构建时设置 `VITE_MAIN_BACKEND_ENDPOINT` 为公开主后端完整地址。
 
-浏览器会直接请求用户填写的 AI 端点，因此端点必须允许部署站点的 CORS。项目不包含隐藏代理，也不会把 API Key 写入构建产物。API Key 会以明文保存在当前 origin 的 `majo-wolf.settings.v1`；不要在共享或不受信任的浏览器中保存真实密钥。
+## 主后端与代理服务
+
+主后端接受浏览器公益请求，校验客户端版本、固定游戏提示词协议和 JSON 响应要求，并按客户端 IP 执行滑动窗口与并发限制。代理节点保存服务商、模型和 API Key 池；主后端可配置多个不同地址的代理节点并在网络错误或 5xx 时切换。代理节点默认监听 `34023`，主后端与代理之间使用 TLS 1.3 双向证书认证及带时间戳、nonce、请求体摘要的 HMAC-SHA256 连接密码。
+
+```bash
+npm run certs:generate
+copy server\\main.config.example.json server\\main.config.json
+copy proxy\\proxy.config.example.json proxy\\proxy.config.json
+copy proxy\\providers.example.json proxy\\providers.json
+npm run server:proxy
+npm run server:main
+```
+
+把 `server/.env.example` 与 `proxy/.env.example` 中对应的 `MAJO_PROXY_PASSWORD_PRIMARY` 设置为同一个高熵随机值，并通过进程管理器注入；服务不会自动加载 `.env`。`providers.json` 的 `apiKeysEnv` 指向逗号分隔的密钥环境变量。每个代理节点可使用独立密码变量、证书和服务商池；在主后端 `proxies` 中分别配置。
+
+`npm run certs:generate` 生成私有 CA、代理服务端证书和主后端客户端证书。部署时：
+
+- CA 私钥 `certs/ca.key` 仅离线保管，不复制到任何运行节点。
+- 代理节点只放置 `ca.crt`、`proxy-server.crt`、`proxy-server.key`。
+- 主后端只放置 `ca.crt`、`main-client.crt`、`main-client.key`。
+- `certs/` 已被 Git 忽略，禁止提交任何私钥。
+
+主后端默认绑定 `127.0.0.1:34022`。公网必须只能通过你的 Cloudflare/反向代理访问该端口；反向代理必须覆盖客户端提交的同名头并写入可信的 `CF-Connecting-IP`。主后端按你的要求直接信任此头，不校验请求是否来自 Cloudflare，因此不要把主后端监听端口直接暴露公网。代理节点应通过防火墙只允许主后端来源访问 `34023`，mTLS 与 HMAC 是额外防线。
+
+免费请求不包含浏览器 API Key。用户自定义 API Key 仅用于浏览器主动直连，仍以明文保存在当前 origin 的 `majo-wolf.settings.v1`；不要在共享或不受信任的浏览器中保存真实密钥。
+
+后端安全链路可重复验证：
+
+```bash
+npm run test:backend
+```
 
 
 ## 浏览器存储
 
-- `majo-wolf.settings.v1`：Chat Completions 端点、模型、API Key 与思考强度
+- `majo-wolf.settings.v1`：免费服务选择，或自定义 Chat Completions 端点、模型、API Key 与思考强度
 - `majo-wolf.setup.v1`：模式、玩家角色和随机种子
 - `majo-wolf.game.v1`：版本化完整游戏状态
 
 刷新发生在 AI 请求中时，只恢复待处理决策，不会自动重发请求。用户可以重试、将本局切换为确定性本地策略，或返回设置。
+
+## 免费服务与赞赏
+
+免费服务在本局首次成功响应后会写入局内状态；对局结束时将显示微信赞赏二维码。仅浏览免费服务设置、使用本地策略或使用自定义服务不会显示该二维码。赞赏完全自愿，不影响游戏功能；公益服务不保证稳定可用。
 
 ## 角色与技能
 

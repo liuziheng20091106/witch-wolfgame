@@ -511,6 +511,10 @@ export function reduceGame(state: GameState, event: GameEvent): GameState {
     next.rngState = event.rngState >>> 0;
     return next;
   }
+  if (event.type === 'mark-free-provider-used') {
+    next.usedFreeProvider = true;
+    return next;
+  }
   addPublicEvent(next, 'ai-error', `AI 决策暂停：${event.message}`);
   return next;
 }

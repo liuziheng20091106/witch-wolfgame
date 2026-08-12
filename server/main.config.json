@@ -1,0 +1,18 @@
+{
+  "listen": { "host": "127.0.0.1", "port": 34022 },
+  "cors": { "allowedOrigins": ["https://example.com"] },
+  "proxies": [
+    {
+      "name": "proxy-primary",
+      "url": "https://127.0.0.1:34023/internal/v1/chat/completions",
+      "ca": "../certs/ca.crt",
+      "clientCert": "../certs/main-client.crt",
+      "clientKey": "../certs/main-client.key",
+      "serverName": "proxy.internal",
+      "connectionPasswordEnv": "MAJO_PROXY_PASSWORD_PRIMARY",
+      "timeoutMs": 65000
+    }
+  ],
+  "rateLimit": { "windowMs": 60000, "maxRequests": 20, "maxConcurrent": 2 },
+  "acceptedClientVersions": ["2.1.0"]
+}

@@ -24,6 +24,8 @@ backup/
 
 # ---------- 敏感信息 ----------
 .env
+certs/
+.tmp-certs-check/
 
 # ---------- IDE 配置 ----------
 .vscode/

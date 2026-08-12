@@ -1,13 +1,24 @@
 import type { GameObservation, PendingDecision, SubmittedDecision } from '../domain/model';
 
 export type ReasoningEffort = 'none' | 'low' | 'high' | 'max';
+export type AiProviderKind = 'free' | 'custom';
 
-export interface AiProviderConfig {
+export interface FreeAiProviderConfig {
+  provider: 'free';
+}
+
+export interface CustomAiProviderConfig {
+  provider: 'custom';
   endpoint: string;
   apiKey: string;
   model: string;
   reasoningEffort: ReasoningEffort;
 }
+
+export type AiProviderConfig = FreeAiProviderConfig | CustomAiProviderConfig;
+
+export const FREE_PROVIDER_ENDPOINT = import.meta.env.VITE_MAIN_BACKEND_ENDPOINT?.trim() || '/api/ai/chat/completions';
+export const FREE_PROVIDER_CLIENT_NAME = 'majo-wolf';
 
 export interface AiDecisionRequest<T extends SubmittedDecision = SubmittedDecision> {
   observation: GameObservation;
@@ -29,7 +40,12 @@ export class AiCommandError extends Error {
   }
 }
 
-export const defaultAiConfig: AiProviderConfig = {
+export const defaultAiConfig: FreeAiProviderConfig = {
+  provider: 'free',
+};
+
+export const defaultCustomAiConfig: CustomAiProviderConfig = {
+  provider: 'custom',
   endpoint: '',
   apiKey: '',
   model: '',

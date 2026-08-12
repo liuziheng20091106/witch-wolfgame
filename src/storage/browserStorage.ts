@@ -38,12 +38,23 @@ const skillIdSchema = z.enum([
   'clairvoyance', 'gaze-guidance', 'soul-exchange', 'mind-reading', 'ignition', 'voice-mimic', 'witch-factor-recovery',
 ] satisfies WitchSkillId[]);
 
-const settingsSchema = z.object({
+const freeSettingsSchema = z.object({
+  provider: z.literal('free'),
+});
+const customSettingsSchema = z.object({
+  provider: z.literal('custom'),
   endpoint: z.string(),
   apiKey: z.string(),
   model: z.string(),
   reasoningEffort: z.enum(['none', 'low', 'high', 'max']),
 });
+const settingsSchema = z.discriminatedUnion('provider', [freeSettingsSchema, customSettingsSchema]);
+const legacySettingsSchema = z.object({
+  endpoint: z.string(),
+  apiKey: z.string(),
+  model: z.string(),
+  reasoningEffort: z.enum(['none', 'low', 'high', 'max']),
+}).passthrough();
 const setupSchema = z.strictObject({
   mode: z.enum(['spectator', 'player']),
   humanCharacterId: z.enum(characterIds).nullable(),
@@ -54,6 +65,7 @@ const stateSchema = z.object({
   gameId: z.string().min(1),
   mode: z.enum(['spectator', 'player']),
   automationMode: z.enum(['remote', 'local']),
+  usedFreeProvider: z.boolean().default(false),
   humanPlayerId: playerIdSchema.nullable(),
   seed: z.number().int().min(0).max(0xffff_ffff),
   rngState: z.number().int().min(0).max(0xffff_ffff),
@@ -107,7 +119,33 @@ function readValue<T>(key: string, schema: z.ZodType<T>): StorageResult<T> {
 }
 
 export function loadSettings(): StorageResult<AiProviderConfig> {
-  return readValue(SETTINGS_KEY, settingsSchema);
+  const raw = localStorage.getItem(SETTINGS_KEY);
+  if (raw === null) return { ok: true, value: null };
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: `${SETTINGS_KEY} 不是合法 JSON` };
+  }
+  const current = settingsSchema.safeParse(value);
+  if (current.success) return { ok: true, value: current.data };
+  const legacy = legacySettingsSchema.safeParse(value);
+  if (legacy.success) {
+    if (!legacy.data.endpoint.trim() || !legacy.data.apiKey.trim() || !legacy.data.model.trim()) {
+      return { ok: true, value: { provider: 'free' } };
+    }
+    return {
+      ok: true,
+      value: {
+        provider: 'custom',
+        endpoint: legacy.data.endpoint,
+        apiKey: legacy.data.apiKey,
+        model: legacy.data.model,
+        reasoningEffort: legacy.data.reasoningEffort,
+      },
+    };
+  }
+  return { ok: false, error: `${SETTINGS_KEY} 版本或结构不受支持` };
 }
 
 export function saveSettings(config: AiProviderConfig): void {
