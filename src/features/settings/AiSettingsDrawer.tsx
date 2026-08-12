@@ -1,20 +1,17 @@
-import { Eye, EyeOff, FlaskConical, Save, ShieldCheck, X } from 'lucide-react';
+import { Eye, EyeOff, Save, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { validateAiEndpoint } from '../../ai/client';
 import type { AiProviderConfig } from '../../ai/types';
-import type { ConnectionState } from '../../app/useGameController';
 import styles from './AiSettingsDrawer.module.css';
 
 interface AiSettingsDrawerProps {
   open: boolean;
   config: AiProviderConfig;
-  connection: ConnectionState;
   onClose(): void;
   onSave(config: AiProviderConfig): void;
-  onTest(config: AiProviderConfig): Promise<void>;
 }
 
-export function AiSettingsDrawer({ open, config, connection, onClose, onSave, onTest }: AiSettingsDrawerProps) {
+export function AiSettingsDrawer({ open, config, onClose, onSave }: AiSettingsDrawerProps) {
   const [draft, setDraft] = useState(config);
   const [showKey, setShowKey] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -63,8 +60,8 @@ export function AiSettingsDrawer({ open, config, connection, onClose, onSave, on
     setValidationError(null);
   };
   const validate = () => {
-    if (!draft.providerName.trim() || !draft.apiKey.trim() || !draft.model.trim()) {
-      throw new Error('服务商名称、API Key 和模型不能为空');
+    if (!draft.apiKey.trim() || !draft.model.trim()) {
+      throw new Error('API Key 和模型不能为空');
     }
     validateAiEndpoint(draft.endpoint);
   };
@@ -92,33 +89,18 @@ export function AiSettingsDrawer({ open, config, connection, onClose, onSave, on
             setValidationError(error instanceof Error ? error.message : '设置不合法');
           }
         }}>
-          <label>服务商名称<input value={draft.providerName} onChange={(event) => update('providerName', event.target.value)} autoComplete="organization" /></label>
-          <label>协议<select value={draft.protocol} onChange={(event) => update('protocol', event.target.value as AiProviderConfig['protocol'])}>
-            <option value="deepseek">DeepSeek</option>
-            <option value="openai-compatible">OpenAI Chat Completions 兼容</option>
-          </select></label>
           <label className={styles.wide}>完整端点<input value={draft.endpoint} onChange={(event) => update('endpoint', event.target.value)} inputMode="url" placeholder="https://example.com/v1/chat/completions" /></label>
           <label>模型<input value={draft.model} onChange={(event) => update('model', event.target.value)} placeholder="模型 ID" /></label>
           <label>思考强度<select value={draft.reasoningEffort} onChange={(event) => update('reasoningEffort', event.target.value as AiProviderConfig['reasoningEffort'])}>
-            <option value="low">low</option><option value="high">high</option><option value="max">max</option>
+            <option value="none">none</option><option value="low">low</option><option value="high">high</option><option value="max">max</option>
           </select></label>
           <label className={styles.wide}>API Key<span className={styles.keyField}>
             <input type={showKey ? 'text' : 'password'} value={draft.apiKey} onChange={(event) => update('apiKey', event.target.value)} autoComplete="off" />
             <button type="button" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? '隐藏 API Key' : '显示 API Key'}>{showKey ? <EyeOff /> : <Eye />}</button>
           </span></label>
           <p className={styles.disclosure}><ShieldCheck />API Key 以明文仅保存在此浏览器的当前站点存储中。</p>
-          {(validationError || connection.status === 'error') && <p className={styles.error} role="alert">{validationError ?? connection.message}</p>}
-          {connection.status === 'success' && <p className={styles.success} role="status">{connection.message}</p>}
+          {validationError && <p className={styles.error} role="alert">{validationError}</p>}
           <footer className={styles.actions}>
-            <button className={styles.secondary} type="button" disabled={connection.status === 'testing'} onClick={() => {
-              try {
-                validate();
-                setValidationError(null);
-                void onTest(draft);
-              } catch (error) {
-                setValidationError(error instanceof Error ? error.message : '设置不合法');
-              }
-            }}><FlaskConical />{connection.status === 'testing' ? '测试中' : '测试连接'}</button>
             <button className={styles.primary} type="submit"><Save />保存设置</button>
           </footer>
         </form>

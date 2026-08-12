@@ -1,10 +1,11 @@
-import { Archive, Bot, Gavel, Info, List, ScrollText, Sparkles, Users, X } from 'lucide-react';
+import { Archive, Gavel, Info, List, ScrollText, Sparkles, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import type { AiCommandError } from '../../ai/types';
 import type { GameSpeed } from '../../app/useGameController';
 import { roleDescriptions, roleNames } from '../../domain/catalog/roles';
 import { witchSkillDefinitions } from '../../domain/catalog/witchSkills';
 import type { GameObservation, PlayerId, SubmittedDecision } from '../../domain/model';
+import brandMark from '../../assets/icon.ico';
 import { DecisionPanel } from './DecisionPanel';
 import { GameControls } from './GameControls';
 import { PlayerRoster } from './PlayerRoster';
@@ -49,9 +50,8 @@ export function GameView(props: GameViewProps) {
 
   return <main className={styles.game}>
     <header className={styles.topbar}>
-      <div className={styles.brand}><span>MW</span><div><small>MAJO WOLF</small><strong>魔女狼人杀</strong></div></div>
+      <div className={styles.brand}><img src={brandMark} alt="魔女狼人杀" /></div>
       <div className={styles.phase}><small>{observation.day === 0 ? 'FIRST NIGHT' : `DAY ${String(observation.day).padStart(2, '0')}`}</small><strong>{phaseNames[observation.phase]}</strong></div>
-      <div className={styles.mode}><Bot /><span>{observation.mode === 'spectator' ? '全自动观战' : '玩家参与'} · {observation.automationMode === 'local' ? '本地策略' : '远程 AI'}</span></div>
     </header>
 
     <nav className={styles.mobileTabs} aria-label="游戏视图">

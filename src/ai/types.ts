@@ -1,11 +1,8 @@
 import type { GameObservation, PendingDecision, SubmittedDecision } from '../domain/model';
 
-export type AiProtocol = 'openai-compatible' | 'deepseek';
-export type ReasoningEffort = 'low' | 'high' | 'max';
+export type ReasoningEffort = 'none' | 'low' | 'high' | 'max';
 
 export interface AiProviderConfig {
-  providerName: string;
-  protocol: AiProtocol;
   endpoint: string;
   apiKey: string;
   model: string;
@@ -33,9 +30,7 @@ export class AiCommandError extends Error {
 }
 
 export const defaultAiConfig: AiProviderConfig = {
-  providerName: 'DeepSeek',
-  protocol: 'deepseek',
-  endpoint: 'https://api.deepseek.com/v1/chat/completions',
+  endpoint: '',
   apiKey: '',
   model: '',
   reasoningEffort: 'low',

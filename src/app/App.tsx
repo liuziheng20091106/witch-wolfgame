@@ -10,7 +10,6 @@ export function App() {
       settings={controller.settings}
       setup={controller.setup}
       savedGame={controller.savedGame}
-      connection={controller.connection}
       storageError={controller.storageError}
       onUpdateSetup={controller.updateSetup}
       onOpenSettings={() => controller.setSettingsOpen(true)}
@@ -37,10 +36,8 @@ export function App() {
     <AiSettingsDrawer
       open={controller.settingsOpen}
       config={controller.settings}
-      connection={controller.connection}
       onClose={() => controller.setSettingsOpen(false)}
       onSave={controller.saveAiSettings}
-      onTest={controller.testConnection}
     />
   </>;
 }

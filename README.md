@@ -7,8 +7,8 @@
 - 全自动 AI 观战，以及用户加入一个席位的参与模式
 - 狼人密议与袭击、预言家查验、女巫解药/毒药、公开顺序投票和一次平票重投
 - 14 项完整魔女技：魔女杀手、死亡回溯、洗脑、操控液体、力气大、漂浮、治愈、千里眼、视线诱导、灵魂交换、看到内心、点火、声音模仿、魔女因子回收
-- OpenAI Chat Completions 兼容协议与 DeepSeek 协议，所有决策使用经过 Zod 校验的 JSON
-- 用户自行填写服务商、完整 `/chat/completions` 端点、模型、API Key 和思考强度；默认 `low`
+- 所有 AI 请求固定使用 OpenAI Chat Completions JSON 格式
+- 用户填写完整 `/chat/completions` 端点、模型、API Key 和思考强度；`none` 不发送 `reasoning_effort`，默认 `low`
 - 设置、准备区选择和可恢复游戏进度保存在浏览器 `localStorage`
 - 桌面三栏、平板双栏、手机标签页与底部行动面板
 
@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-开发服务器默认使用 `http://127.0.0.1:5173/`。首次使用时在准备区打开“AI 设置”，填写服务商配置后开始游戏。
+开发服务器默认使用 `http://127.0.0.1:5173/`。首次使用时在准备区打开“AI 设置”，填写 Chat Completions 端点、模型和 API Key 后开始游戏。
 
 ## 构建与部署
 
@@ -34,18 +34,10 @@ npm run preview
 
 浏览器会直接请求用户填写的 AI 端点，因此端点必须允许部署站点的 CORS。项目不包含隐藏代理，也不会把 API Key 写入构建产物。API Key 会以明文保存在当前 origin 的 `majo-wolf.settings.v1`；不要在共享或不受信任的浏览器中保存真实密钥。
 
-## 测试
-
-```bash
-npm test
-npm run test:e2e
-```
-
-单元测试覆盖领域规则、14 项技能、信息隔离、AI JSON 协议和浏览器存档。浏览器测试覆盖观战、玩家参与、错误转本地策略、刷新恢复和响应式布局。
 
 ## 浏览器存储
 
-- `majo-wolf.settings.v1`：AI 服务配置和 API Key
+- `majo-wolf.settings.v1`：Chat Completions 端点、模型、API Key 与思考强度
 - `majo-wolf.setup.v1`：模式、玩家角色和随机种子
 - `majo-wolf.game.v1`：版本化完整游戏状态
 

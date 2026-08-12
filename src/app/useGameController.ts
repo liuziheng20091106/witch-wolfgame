@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fallbackDecision } from '../ai/fallback';
-import { requestDecision, testAiConnection } from '../ai/client';
+import { requestDecision } from '../ai/client';
 import { AiCommandError, defaultAiConfig, type AiProviderConfig } from '../ai/types';
 import { createGame } from '../domain/engine/createGame';
 import { reduceGame } from '../domain/engine/reducer';
@@ -20,11 +20,6 @@ import {
 
 export type GameSpeed = 0.5 | 1 | 2;
 export type AppView = 'setup' | 'game';
-export type ConnectionState =
-  | { status: 'untested'; message: string }
-  | { status: 'testing'; message: string }
-  | { status: 'success'; message: string }
-  | { status: 'error'; message: string };
 
 export interface GameController {
   view: AppView;
@@ -36,7 +31,6 @@ export interface GameController {
   storageError: string | null;
   aiError: AiCommandError | null;
   decisionError: string | null;
-  connection: ConnectionState;
   awaitingRetry: boolean;
   thinking: boolean;
   paused: boolean;
@@ -45,7 +39,6 @@ export interface GameController {
   setSettingsOpen(open: boolean): void;
   updateSetup(next: SetupPreferences): void;
   saveAiSettings(next: AiProviderConfig): void;
-  testConnection(next: AiProviderConfig): Promise<void>;
   startNewGame(): void;
   continueSavedGame(): void;
   returnToSetup(): void;
@@ -90,7 +83,6 @@ export function useGameController(): GameController {
   const [storageError, setStorageError] = useState<string | null>(initial.error);
   const [aiError, setAiError] = useState<AiCommandError | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
-  const [connection, setConnection] = useState<ConnectionState>({ status: 'untested', message: '尚未测试' });
   const [awaitingRetry, setAwaitingRetry] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -205,20 +197,7 @@ export function useGameController(): GameController {
   const saveAiSettings = useCallback((next: AiProviderConfig) => {
     saveSettings(next);
     setSettings(next);
-    setConnection({ status: 'untested', message: '设置已保存，尚未重新测试' });
     setSettingsOpen(false);
-  }, []);
-
-  const testConnection = useCallback(async (next: AiProviderConfig) => {
-    setConnection({ status: 'testing', message: '正在测试连接' });
-    const controller = new AbortController();
-    try {
-      await testAiConnection(next, controller.signal);
-      setConnection({ status: 'success', message: '连接成功，JSON 模式可用' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '连接测试失败';
-      setConnection({ status: 'error', message });
-    }
   }, []);
 
   const startNewGame = useCallback(() => {
@@ -283,9 +262,9 @@ export function useGameController(): GameController {
   }, [commit]);
 
   return {
-    view, game, observation, savedGame, settings, setup, storageError, aiError, decisionError, connection,
+    view, game, observation, savedGame, settings, setup, storageError, aiError, decisionError,
     awaitingRetry, thinking, paused, speed, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
-    testConnection, startNewGame, continueSavedGame, returnToSetup, discardSavedGame, submitHumanDecision,
+    startNewGame, continueSavedGame, returnToSetup, discardSavedGame, submitHumanDecision,
     retryAi, useLocalFallback, setPaused, setSpeed,
   };
 }

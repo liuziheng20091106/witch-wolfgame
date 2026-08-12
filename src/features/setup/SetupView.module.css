@@ -1,9 +1,7 @@
 .page { min-height: 100vh; background: var(--paper); color: var(--ink); }
-.masthead { min-height: 104px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; padding: 20px clamp(18px, 4vw, 64px); border-bottom: 4px solid var(--ink); }
-.brandMark { display: grid; width: 58px; height: 58px; place-items: center; background: var(--ink); color: var(--paper-bright); font-family: var(--sans); font-size: 27px; font-weight: 900; }
-.brandMark span { color: var(--verdict-light); }
-.kicker, .intro span, .sectionHeading span, .confirmDialog > span { color: var(--verdict); font-family: var(--sans); font-size: 11px; font-weight: 900; }
-.masthead h1 { margin: 1px 0 0; font-size: 29px; line-height: 1.1; }
+.masthead { min-height: 104px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 18px; padding: 20px clamp(18px, 4vw, 64px); border-bottom: 4px solid var(--ink); }
+.brandMark { width: 58px; height: 58px; object-fit: contain; }
+.intro span, .sectionHeading span, .confirmDialog > span { color: var(--verdict); font-family: var(--sans); font-size: 11px; font-weight: 900; }
 .settingsButton { min-height: 46px; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; border: 1px solid var(--ink); background: transparent; font-family: var(--sans); font-weight: 800; }
 .settingsButton svg { width: 19px; }
 .commandBand { display: grid; grid-template-columns: minmax(220px, .85fr) minmax(360px, 1.4fr) minmax(150px, .45fr); gap: 26px; align-items: end; padding: 34px clamp(18px, 4vw, 64px); background: var(--ink); color: var(--paper-bright); }

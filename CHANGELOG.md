@@ -11,7 +11,7 @@
 - React、TypeScript 与 Vite 构建的静态网页游戏，适配桌面、平板和手机
 - 全自动观战与玩家加入一个席位两种模式
 - 14 项可迁移魔女技的完整阶段、次数、信息范围和冲突结算
-- 用户自填 OpenAI 兼容/DeepSeek 服务商配置、JSON 响应校验与默认 `low` 思考强度
+- 用户填写固定 Chat Completions 端点、模型、API Key、`none | low | high | max` 思考强度与 JSON 响应校验
 - 浏览器设置、准备区与可恢复游戏进度存储
 - AI 错误重试、整局确定性本地策略和刷新防重复请求
 

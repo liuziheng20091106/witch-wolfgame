@@ -38,13 +38,11 @@ const skillIdSchema = z.enum([
   'clairvoyance', 'gaze-guidance', 'soul-exchange', 'mind-reading', 'ignition', 'voice-mimic', 'witch-factor-recovery',
 ] satisfies WitchSkillId[]);
 
-const settingsSchema = z.strictObject({
-  providerName: z.string(),
-  protocol: z.enum(['openai-compatible', 'deepseek']),
+const settingsSchema = z.object({
   endpoint: z.string(),
   apiKey: z.string(),
   model: z.string(),
-  reasoningEffort: z.enum(['low', 'high', 'max']),
+  reasoningEffort: z.enum(['none', 'low', 'high', 'max']),
 });
 const setupSchema = z.strictObject({
   mode: z.enum(['spectator', 'player']),

@@ -28,8 +28,8 @@ export function validateAiEndpoint(endpoint: string): void {
 
 function validateConfig(config: AiProviderConfig): void {
   validateAiEndpoint(config.endpoint);
-  if (!config.providerName.trim() || !config.apiKey.trim() || !config.model.trim()) {
-    throw new AiCommandError('config', '服务商名称、API Key 和模型均不能为空');
+  if (!config.apiKey.trim() || !config.model.trim()) {
+    throw new AiCommandError('config', 'API Key 和模型不能为空');
   }
 }
 
@@ -39,9 +39,7 @@ function buildPayload(config: AiProviderConfig, messages: PromptMessage[]): Reco
     messages,
     response_format: { type: 'json_object' },
   };
-  if (config.protocol === 'deepseek') {
-    payload.thinking = { type: 'enabled' };
-  } else {
+  if (config.reasoningEffort !== 'none') {
     payload.reasoning_effort = config.reasoningEffort;
   }
   return payload;
@@ -106,20 +104,4 @@ export async function requestDecision<T extends SubmittedDecision>(
     throw new AiCommandError('json', 'AI 内容不是合法 JSON 对象');
   }
   return parseDecision(request.pendingDecision, value) as T;
-}
-
-export async function testAiConnection(config: AiProviderConfig, signal: AbortSignal): Promise<void> {
-  const content = await requestContent([
-    { role: 'system', content: '只返回 JSON 对象，不要解释。' },
-    { role: 'user', content: '返回 {"ok":true}' },
-  ], config, signal);
-  let value: unknown;
-  try {
-    value = JSON.parse(content);
-  } catch {
-    throw new AiCommandError('json', '连接测试内容不是合法 JSON');
-  }
-  if (!z.strictObject({ ok: z.literal(true) }).safeParse(value).success) {
-    throw new AiCommandError('schema', '连接测试未返回 {"ok":true}');
-  }
 }

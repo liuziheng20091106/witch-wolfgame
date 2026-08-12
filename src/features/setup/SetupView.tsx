@@ -1,17 +1,16 @@
 import { Bot, Check, ChevronRight, Eye, Play, Settings, Trash2, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import type { AiProviderConfig } from '../../ai/types';
-import type { ConnectionState } from '../../app/useGameController';
 import { characters } from '../../domain/catalog/characters';
 import type { CharacterId } from '../../domain/model';
 import type { SavedGameEnvelope, SetupPreferences } from '../../storage/browserStorage';
+import brandMark from '../../assets/icon.ico';
 import styles from './SetupView.module.css';
 
 interface SetupViewProps {
   settings: AiProviderConfig;
   setup: SetupPreferences;
   savedGame: SavedGameEnvelope | null;
-  connection: ConnectionState;
   storageError: string | null;
   onUpdateSetup(setup: SetupPreferences): void;
   onOpenSettings(): void;
@@ -21,7 +20,7 @@ interface SetupViewProps {
 }
 
 function hasUsableSettings(settings: AiProviderConfig): boolean {
-  if (!settings.providerName.trim() || !settings.endpoint.trim() || !settings.apiKey.trim() || !settings.model.trim()) return false;
+  if (!settings.endpoint.trim() || !settings.apiKey.trim() || !settings.model.trim()) return false;
   try {
     const url = new URL(settings.endpoint);
     return url.pathname.endsWith('/chat/completions')
@@ -31,7 +30,7 @@ function hasUsableSettings(settings: AiProviderConfig): boolean {
   }
 }
 
-export function SetupView({ settings, setup, savedGame, connection, storageError, onUpdateSetup, onOpenSettings, onContinue, onStart, onDiscard }: SetupViewProps) {
+export function SetupView({ settings, setup, savedGame, storageError, onUpdateSetup, onOpenSettings, onContinue, onStart, onDiscard }: SetupViewProps) {
   const [confirming, setConfirming] = useState(false);
   const ready = hasUsableSettings(settings) && (setup.mode === 'spectator' || setup.humanCharacterId !== null);
   const savedLabel = savedGame
@@ -44,8 +43,7 @@ export function SetupView({ settings, setup, savedGame, connection, storageError
   return (
     <main className={styles.page}>
       <header className={styles.masthead}>
-        <div className={styles.brandMark}>M<span>W</span></div>
-        <div><span className={styles.kicker}>MAJO WOLF / CASE 06</span><h1>魔女狼人杀</h1></div>
+        <img className={styles.brandMark} src={brandMark} alt="魔女狼人杀" />
         <button className={styles.settingsButton} type="button" onClick={onOpenSettings}><Settings />AI 设置</button>
       </header>
 
@@ -80,8 +78,8 @@ export function SetupView({ settings, setup, savedGame, connection, storageError
       <section className={styles.launchBand}>
         <div className={styles.aiStatus}>
           <Bot />
-          <div><strong>{settings.providerName || '未配置 AI 服务'}</strong><span>{settings.model || '请填写模型'} · {connection.message}</span></div>
-          <button type="button" onClick={onOpenSettings}>检查设置<ChevronRight /></button>
+          <div><strong>Chat Completions</strong><span>{settings.model || '请填写模型'}</span></div>
+          <button type="button" onClick={onOpenSettings}>打开设置<ChevronRight /></button>
         </div>
         {storageError && <p className={styles.storageError} role="alert">{storageError}</p>}
         <div className={styles.launchActions}>
