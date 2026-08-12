@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-开发服务器默认使用 `http://127.0.0.1:5173/`。公益服务默认请求同源 `/api/ai/chat/completions`；开发时可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
+开发服务器默认使用 `http://127.0.0.1:5173/`。公益服务默认请求独立入口 `https://freeapi.majowolf.tkcloud.online/api/ai/chat/completions`；开发时可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
 
 ## 构建与部署
 
@@ -30,7 +30,7 @@ npm run build
 npm run preview
 ```
 
-生产文件输出到 `dist/`。Vite 使用相对资源路径，可部署到静态站点或子路径。公益服务需要将同源 `/api/ai/chat/completions` 反向代理到主后端；也可在构建时设置 `VITE_MAIN_BACKEND_ENDPOINT` 为公开主后端完整地址。
+生产文件输出到 `dist/`。Vite 使用相对资源路径，可部署到静态站点或子路径。公益服务使用独立 API 域名，避免 Cloudflare 静态 Worker 对同域 `POST /api/*` 返回 405；也可在构建时通过 `VITE_MAIN_BACKEND_ENDPOINT` 覆盖完整入口。
 
 ## 主后端与代理服务
 

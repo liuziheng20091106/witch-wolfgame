@@ -17,7 +17,7 @@ export interface CustomAiProviderConfig {
 
 export type AiProviderConfig = FreeAiProviderConfig | CustomAiProviderConfig;
 
-export const FREE_PROVIDER_ENDPOINT = import.meta.env.VITE_MAIN_BACKEND_ENDPOINT?.trim() || '/api/ai/chat/completions';
+export const FREE_PROVIDER_ENDPOINT = import.meta.env.VITE_MAIN_BACKEND_ENDPOINT?.trim() || 'https://freeapi.majowolf.tkcloud.online/api/ai/chat/completions';
 export const FREE_PROVIDER_CLIENT_NAME = 'majo-wolf';
 
 export interface AiDecisionRequest<T extends SubmittedDecision = SubmittedDecision> {
