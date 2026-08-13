@@ -5,6 +5,7 @@ import type { AiProviderConfig } from '../ai/types';
 export const SETTINGS_KEY = 'majo-wolf.settings.v1';
 export const GAME_KEY = 'majo-wolf.game.v1';
 export const SETUP_KEY = 'majo-wolf.setup.v1';
+export const SESSION_KEY = 'majo-wolf.session.v1';
 
 export interface SetupPreferences {
   mode: GameMode;
@@ -40,6 +41,7 @@ const skillIdSchema = z.enum([
 
 const freeSettingsSchema = z.object({
   provider: z.literal('free'),
+  retryCount: z.number().int().min(0).max(5).default(2),
 });
 const customSettingsSchema = z.object({
   provider: z.literal('custom'),
@@ -47,6 +49,8 @@ const customSettingsSchema = z.object({
   apiKey: z.string(),
   model: z.string(),
   reasoningEffort: z.enum(['none', 'low', 'high', 'max']),
+  retryCount: z.number().int().min(0).max(5).default(2),
+  jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
 });
 const settingsSchema = z.discriminatedUnion('provider', [freeSettingsSchema, customSettingsSchema]);
 const legacySettingsSchema = z.object({
@@ -132,7 +136,7 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
   const legacy = legacySettingsSchema.safeParse(value);
   if (legacy.success) {
     if (!legacy.data.endpoint.trim() || !legacy.data.apiKey.trim() || !legacy.data.model.trim()) {
-      return { ok: true, value: { provider: 'free' } };
+      return { ok: true, value: { provider: 'free', retryCount: 2 } };
     }
     return {
       ok: true,
@@ -142,6 +146,8 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
         apiKey: legacy.data.apiKey,
         model: legacy.data.model,
         reasoningEffort: legacy.data.reasoningEffort,
+        retryCount: 2,
+        jsonOutputMode: 'auto',
       },
     };
   }
@@ -150,6 +156,14 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
 
 export function saveSettings(config: AiProviderConfig): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsSchema.parse(config)));
+}
+
+export function loadSessionId(): string {
+  const existing = localStorage.getItem(SESSION_KEY);
+  if (existing && /^[A-Za-z0-9_-]{22,128}$/.test(existing)) return existing;
+  const next = crypto.randomUUID().replaceAll('-', '');
+  localStorage.setItem(SESSION_KEY, next);
+  return next;
 }
 
 export function loadSetup(): StorageResult<SetupPreferences> {

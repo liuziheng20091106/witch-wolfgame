@@ -6,7 +6,8 @@
       "endpoint": "https://api.deepseek.com/v1/chat/completions",
       "model": "deepseek-chat",
       "apiKeysEnv": "DEEPSEEK_API_KEYS",
-      "reasoningEffort": "none"
+      "reasoningEffort": "none",
+      "jsonOutputMode": "auto"
     },
     {
       "name": "openai-compatible-backup",
@@ -14,7 +15,8 @@
       "endpoint": "https://api.example.com/v1/chat/completions",
       "model": "example-model",
       "apiKeysEnv": "BACKUP_API_KEYS",
-      "reasoningEffort": "low"
+      "reasoningEffort": "low",
+      "jsonOutputMode": "disabled"
     }
   ]
 }

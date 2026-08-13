@@ -76,7 +76,7 @@ export function AiSettingsDrawer({ open, config, onClose, onSave }: AiSettingsDr
     updateCustom({ reasoningEffort });
   };
   const chooseProvider = (provider: AiProviderConfig['provider']) => {
-    setDraft(provider === 'free' ? { provider: 'free' } : customDraft);
+    setDraft(provider === 'free' ? { provider: 'free', retryCount: config.provider === 'free' ? config.retryCount : 2 } : customDraft);
     setValidationError(null);
   };
   const validate = () => {
@@ -125,7 +125,8 @@ export function AiSettingsDrawer({ open, config, onClose, onSave }: AiSettingsDr
             <label>模型<input value={customDraft.model} onChange={(event) => updateCustom({ model: event.target.value })} placeholder="模型 ID" /></label>
             <label>API Key<span className={styles.keyField}><input type={showKey ? 'text' : 'password'} value={customDraft.apiKey} onChange={(event) => updateCustom({ apiKey: event.target.value })} autoComplete="off" /><button type="button" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? '隐藏 API Key' : '显示 API Key'}>{showKey ? <EyeOff /> : <Eye />}</button></span></label>
           </>}
-          {draft.provider === 'custom' && <><label className={styles.reasoning}>思考强度<select value={customDraft.reasoningEffort} onChange={(event) => updateReasoningEffort(event.target.value as CustomAiProviderConfig['reasoningEffort'])}><option value="none">none</option><option value="low">low</option><option value="high">high</option><option value="max">max</option></select></label><p className={styles.disclosure}><ShieldCheck />API Key 以明文仅保存在此浏览器的当前站点存储中。</p></>}
+          {draft.provider === 'custom' && <><label className={styles.reasoning}>思考强度<select value={customDraft.reasoningEffort} onChange={(event) => updateReasoningEffort(event.target.value as CustomAiProviderConfig['reasoningEffort'])}><option value="none">none</option><option value="low">low</option><option value="high">high</option><option value="max">max</option></select></label><label className={styles.retry}>模型错误重试次数<input type="number" min="0" max="5" value={customDraft.retryCount} onChange={(event) => updateCustom({ retryCount: Math.min(5, Math.max(0, Number(event.target.value) || 0)) })} /></label><label className={styles.jsonMode}>JSON Output<select value={customDraft.jsonOutputMode} onChange={(event) => updateCustom({ jsonOutputMode: event.target.value as CustomAiProviderConfig['jsonOutputMode'] })}><option value="auto">自动</option><option value="force">强制</option><option value="disabled">禁用</option></select></label><p className={styles.disclosure}><ShieldCheck />自动模式在格式错误后仅对当前浏览器会话关闭 JSON Output。</p></>}
+          {draft.provider === 'free' && <label className={styles.retry}>模型错误重试次数<input type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ provider: 'free', retryCount: Math.min(5, Math.max(0, Number(event.target.value) || 0)) })} /></label>}
           {validationError && <p className={styles.error} role="alert">{validationError}</p>}
           <footer className={styles.actions}><button className={styles.primary} type="submit"><Save />保存设置</button></footer>
         </form>

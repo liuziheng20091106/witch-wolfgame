@@ -52,17 +52,19 @@ export function sha256(body) {
   return createHash('sha256').update(body).digest('hex');
 }
 
-export function createSignedHeaders(password, method, path, body) {
+export function createSignedHeaders(password, method, path, body, sessionId = '') {
   const timestamp = Date.now().toString();
   const nonce = randomBytes(18).toString('base64url');
   const bodyHash = sha256(body);
-  const canonical = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
-  return {
+  const canonical = `${method}\n${path}\n${sessionId}\n${timestamp}\n${nonce}\n${bodyHash}`;
+  const headers = {
     'X-Majo-Timestamp': timestamp,
     'X-Majo-Nonce': nonce,
     'X-Majo-Body-SHA256': bodyHash,
     'X-Majo-Signature': createHmac('sha256', password).update(canonical).digest('hex'),
   };
+  if (sessionId) headers['X-Majo-Wolf-Session'] = sessionId;
+  return headers;
 }
 
 export function verifySignedRequest(password, request, path, body, nonceStore, maxClockSkewMs = 30_000) {
@@ -70,13 +72,15 @@ export function verifySignedRequest(password, request, path, body, nonceStore, m
   const nonce = request.headers['x-majo-nonce'];
   const claimedHash = request.headers['x-majo-body-sha256'];
   const signature = request.headers['x-majo-signature'];
+  const sessionId = request.headers['x-majo-wolf-session'] ?? '';
   if (![timestamp, nonce, claimedHash, signature].every((value) => typeof value === 'string')) return false;
+  if (sessionId && !/^[A-Za-z0-9_-]{22,128}$/.test(sessionId)) return false;
   const requestTime = Number(timestamp);
   if (!Number.isFinite(requestTime) || Math.abs(Date.now() - requestTime) > maxClockSkewMs) return false;
   if (nonceStore.has(nonce)) return false;
   const bodyHash = sha256(body);
   if (claimedHash !== bodyHash) return false;
-  const canonical = `${request.method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
+  const canonical = `${request.method}\n${path}\n${sessionId}\n${timestamp}\n${nonce}\n${bodyHash}`;
   const expected = Buffer.from(createHmac('sha256', password).update(canonical).digest('hex'));
   const actual = Buffer.from(signature);
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return false;

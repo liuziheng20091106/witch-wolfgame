@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import https from 'node:https';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -58,7 +59,7 @@ function validPayload() {
 async function postMain(port, payload, ip) {
   return fetch(`http://127.0.0.1:${port}/api/ai/chat/completions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: origin, 'CF-Connecting-IP': ip },
+    headers: { 'Content-Type': 'application/json', Origin: origin, 'CF-Connecting-IP': ip, 'X-Majo-Wolf-Session': randomUUID() },
     body: JSON.stringify(payload),
   });
 }
@@ -98,13 +99,17 @@ try {
     readFile(join(certs, 'main-client.crt')),
     readFile(join(certs, 'main-client.key')),
   ]);
+  let upstreamMode = 'json-content';
   const upstreamRequests = [];
   upstream = http.createServer(async (request, response) => {
     let body = '';
     for await (const chunk of request) body += chunk;
     upstreamRequests.push({ authorization: request.headers.authorization, body: JSON.parse(body) });
+    if (upstreamMode === 'non-json') { response.writeHead(200, { 'Content-Type': 'text/plain' }); response.end('UPSTREAM_NON_JSON'); return; }
+    if (upstreamMode === 'http-500') { response.writeHead(500, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ error: 'UPSTREAM_500', message: 'upstream body retained' })); return; }
+    const content = upstreamMode === 'plain-content' ? 'plain provider text' : '{"targetPlayerId":1}';
     response.writeHead(200, { 'Content-Type': 'application/json' });
-    response.end(JSON.stringify({ choices: [{ message: { content: '{"targetPlayerId":1}' } }] }));
+    response.end(JSON.stringify({ choices: [{ message: { content } }] }));
   });
   const upstreamPort = await listen(upstream);
   const providersFile = join(work, 'providers.json');
@@ -112,7 +117,7 @@ try {
   const mainConfig = join(work, 'main.json');
   await writeFile(providersFile, JSON.stringify({ providers: [{
     name: 'smoke-provider', protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/v1/chat/completions`,
-    model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'low',
+    model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'low', jsonOutputMode: 'disabled',
   }] }));
   await writeFile(proxyConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 },
@@ -144,42 +149,66 @@ try {
   assert.equal(valid.status, 200);
   assert.deepEqual(await valid.json(), { choices: [{ message: { content: '{"targetPlayerId":1}' } }] });
   assert.equal(upstreamRequests.length, 2);
-  assert.equal(upstreamRequests[1].authorization, 'Bearer key-two');
+  assert.equal(upstreamRequests.at(-1).authorization, 'Bearer key-two');
   assert.equal(upstreamRequests[0].body.model, 'smoke-model');
   assert.equal(upstreamRequests[0].body.reasoning_effort, 'low');
   assert.equal(upstreamRequests[0].body.client, undefined);
 
+  upstreamMode = 'plain-content';
+  const plain = await postMain(mainPort, validPayload(), '203.0.113.15');
+  assert.equal(plain.status, 200);
+  assert.deepEqual(await plain.json(), { choices: [{ message: { content: 'plain provider text' } }] });
+  const afterPlain = upstreamRequests.length;
+  upstreamMode = 'non-json';
+  const nonJson = await postMain(mainPort, validPayload(), '203.0.113.16');
+  assert.equal(nonJson.status, 502);
+  assert.equal((await nonJson.json()).rawOutput, 'UPSTREAM_NON_JSON');
+  assert.ok(upstreamRequests.length > afterPlain);
+  const afterNonJson = upstreamRequests.length;
+  upstreamMode = 'http-500';
+  const failed = await postMain(mainPort, validPayload(), '203.0.113.17');
+  assert.equal(failed.status, 502);
+  const failedBody = await failed.json();
+  assert.equal(failedBody.error, 'proxy_unavailable');
+  assert.match(failedBody.rawOutput, /UPSTREAM_500/);
+  assert.ok(upstreamRequests.length > afterNonJson);
+
   const invalidPayload = validPayload();
   invalidPayload.messages[0].content = '你是通用助手';
+  const beforeInvalid = upstreamRequests.length;
   const invalid = await postMain(mainPort, invalidPayload, '203.0.113.10');
   assert.equal(invalid.status, 400);
-  assert.equal(upstreamRequests.length, 2);
+  assert.equal(upstreamRequests.length, beforeInvalid);
   const missingTraitPayload = validPayload();
   const missingTraitPrompt = JSON.parse(missingTraitPayload.messages[1].content);
   delete missingTraitPrompt.actor.decisionTraits.aggressive;
   missingTraitPayload.messages[1].content = JSON.stringify(missingTraitPrompt);
+  const beforeMissingTrait = upstreamRequests.length;
   assert.equal((await postMain(mainPort, missingTraitPayload, '203.0.113.12')).status, 400);
-  assert.equal(upstreamRequests.length, 2);
+  assert.equal(upstreamRequests.length, beforeMissingTrait);
   const unknownTraitsPayload = validPayload();
   const unknownTraitsPrompt = JSON.parse(unknownTraitsPayload.messages[1].content);
   unknownTraitsPrompt.actor.decisionTraits = { foo: 0.1, bar: 0.2, baz: 0.3 };
   unknownTraitsPayload.messages[1].content = JSON.stringify(unknownTraitsPrompt);
+  const beforeUnknownTraits = upstreamRequests.length;
   assert.equal((await postMain(mainPort, unknownTraitsPayload, '203.0.113.13')).status, 400);
-  assert.equal(upstreamRequests.length, 2);
+  assert.equal(upstreamRequests.length, beforeUnknownTraits);
 
   const replacedTraitPayload = validPayload();
   const replacedTraitPrompt = JSON.parse(replacedTraitPayload.messages[1].content);
   delete replacedTraitPrompt.actor.decisionTraits.aggressive;
   replacedTraitPrompt.actor.decisionTraits.unknown = 0.3;
   replacedTraitPayload.messages[1].content = JSON.stringify(replacedTraitPrompt);
+  const beforeReplacedTrait = upstreamRequests.length;
   assert.equal((await postMain(mainPort, replacedTraitPayload, '203.0.113.14')).status, 400);
-  assert.equal(upstreamRequests.length, 2);
+  assert.equal(upstreamRequests.length, beforeReplacedTrait);
 
+  upstreamMode = 'json-content';
+  const rateStart = upstreamRequests.length;
   assert.equal((await postMain(mainPort, validPayload(), '203.0.113.11')).status, 200);
   assert.equal((await postMain(mainPort, validPayload(), '203.0.113.11')).status, 200);
   assert.equal((await postMain(mainPort, validPayload(), '203.0.113.11')).status, 429);
-  assert.equal(upstreamRequests[2].authorization, 'Bearer key-one');
-  assert.equal(upstreamRequests[3].authorization, 'Bearer key-two');
+  assert.equal(upstreamRequests.length, rateStart + 2);
 
   console.log('后端烟测通过：mTLS、HMAC、共享协议校验、密钥轮换与 CF-Connecting-IP 限流均已验证。');
 } finally {
