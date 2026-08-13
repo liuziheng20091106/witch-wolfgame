@@ -23,13 +23,11 @@ export function App() {
       thinking={controller.thinking}
       decisionError={controller.decisionError}
       paused={controller.paused}
-      speed={controller.speed}
       onSubmit={controller.submitHumanDecision}
       onRetry={controller.retryAi}
       onLocal={controller.useLocalFallback}
       onSettings={() => controller.setSettingsOpen(true)}
       onPaused={controller.setPaused}
-      onSpeed={controller.setSpeed}
       onRestart={controller.startNewGame}
       onExit={controller.returnToSetup}
     />}

@@ -19,7 +19,6 @@ import {
   type SetupPreferences,
 } from '../storage/browserStorage';
 
-export type GameSpeed = 0.5 | 1 | 2;
 export type AppView = 'setup' | 'game';
 
 export interface GameController {
@@ -35,7 +34,6 @@ export interface GameController {
   awaitingRetry: boolean;
   thinking: boolean;
   paused: boolean;
-  speed: GameSpeed;
   settingsOpen: boolean;
   setSettingsOpen(open: boolean): void;
   updateSetup(next: SetupPreferences): void;
@@ -48,7 +46,6 @@ export interface GameController {
   retryAi(): void;
   useLocalFallback(): void;
   setPaused(paused: boolean): void;
-  setSpeed(speed: GameSpeed): void;
 }
 
 interface InitialBrowserState {
@@ -87,7 +84,6 @@ export function useGameController(): GameController {
   const [awaitingRetry, setAwaitingRetry] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [speed, setSpeed] = useState<GameSpeed>(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const sessionIdRef = useRef(loadSessionId());
   const activeRequestRef = useRef<string | null>(null);
@@ -125,8 +121,7 @@ export function useGameController(): GameController {
     if (view !== 'game' || !game || game.phase === 'ended' || paused || aiError || awaitingRetry) return;
     const pending = game.pendingDecision;
     if (!pending) {
-      const delay = speed === 2 ? 180 : speed === 0.5 ? 900 : 460;
-      const timer = window.setTimeout(() => dispatch({ type: 'advance' }), delay);
+      const timer = window.setTimeout(() => dispatch({ type: 'advance' }), 460);
       return () => window.clearTimeout(timer);
     }
     if (game.mode === 'player' && pending.actorId === game.humanPlayerId) return;
@@ -138,7 +133,6 @@ export function useGameController(): GameController {
     activeRequestRef.current = requestKey;
 
     if (game.automationMode === 'local') {
-      const delay = speed === 2 ? 220 : speed === 0.5 ? 1_100 : 580;
       const timer = window.setTimeout(() => {
         const current = gameRef.current;
         if (!current || current.pendingDecision?.id !== pending.id) return;
@@ -152,7 +146,7 @@ export function useGameController(): GameController {
         } finally {
           activeRequestRef.current = null;
         }
-      }, delay);
+      }, 580);
       return () => {
         disposed = true;
         window.clearTimeout(timer);
@@ -167,15 +161,8 @@ export function useGameController(): GameController {
         if (disposed) return;
         const current = gameRef.current;
         if (!current || current.pendingDecision?.id !== pending.id) return;
-        const marked = settings.provider === 'free'
-          ? reduceGame(current, { type: 'mark-free-provider-used' })
-          : current;
-        commit(reduceGame(marked, {
-          type: 'submit-decision',
-          pendingDecisionId: pending.id,
-          actorId: pending.actorId,
-          decision,
-        }));
+        const marked = settings.provider === 'free' ? reduceGame(current, { type: 'mark-free-provider-used' }) : current;
+        commit(reduceGame(marked, { type: 'submit-decision', pendingDecisionId: pending.id, actorId: pending.actorId, decision }));
       })
       .catch((error: unknown) => {
         if (disposed || controller.signal.aborted) return;
@@ -194,7 +181,7 @@ export function useGameController(): GameController {
       setThinking(false);
       if (activeRequestRef.current === requestKey) activeRequestRef.current = null;
     };
-  }, [aiError, awaitingRetry, commit, dispatch, game, paused, settings, speed, view]);
+  }, [aiError, awaitingRetry, commit, dispatch, game, paused, settings, view]);
 
   const updateSetup = useCallback((next: SetupPreferences) => {
     setSetup(next);
@@ -275,8 +262,8 @@ export function useGameController(): GameController {
 
   return {
     view, game, observation, savedGame, settings, setup, storageError, aiError, decisionError,
-    awaitingRetry, thinking, paused, speed, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
+    awaitingRetry, thinking, paused, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
     startNewGame, continueSavedGame, returnToSetup, discardSavedGame, submitHumanDecision,
-    retryAi, useLocalFallback, setPaused, setSpeed,
+    retryAi, useLocalFallback, setPaused,
   };
 }
