@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GameObservation, TimelineEvent } from '../../domain/model';
 import styles from './Transcript.module.css';
 
-interface TranscriptProps { observation: GameObservation; }
+interface TranscriptProps { observation: GameObservation; phaseLabel: string; }
 
 function EventIcon({ event }: { event: TimelineEvent }) {
   if (event.kind === 'speech') return <MessageSquareText />;
@@ -16,7 +16,7 @@ function EventIcon({ event }: { event: TimelineEvent }) {
   return <ScrollText />;
 }
 
-export function Transcript({ observation }: TranscriptProps) {
+export function Transcript({ observation, phaseLabel }: TranscriptProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
   const playerById = new Map(observation.players.map((player) => [player.id, player]));
@@ -27,7 +27,7 @@ export function Transcript({ observation }: TranscriptProps) {
   }, [following, observation.publicEvents.length]);
 
   return <section className={styles.transcript} aria-labelledby="transcript-title">
-    <header><div><span>LIVE RECORD</span><h2 id="transcript-title">实时庭审记录</h2></div><strong>DAY {String(observation.day).padStart(2, '0')}</strong></header>
+    <header><h2 id="transcript-title"><span>DAY {String(observation.day).padStart(2, '0')}</span><i aria-hidden="true">·</i><span>{phaseLabel}</span><i aria-hidden="true">·</i><strong>实时庭审记录</strong></h2></header>
     <div ref={viewportRef} className={styles.viewport} tabIndex={0} onScroll={(event) => {
       const element = event.currentTarget;
       setFollowing(element.scrollHeight - element.scrollTop - element.clientHeight < 72);

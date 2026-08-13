@@ -1,4 +1,4 @@
-import { Archive, ChevronDown, Gavel, Info, List, ScrollText, Sparkles, Users, X } from 'lucide-react';
+import { Archive, Bot, ChevronDown, Gavel, Info, List, LoaderCircle, ScrollText, Sparkles, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { AiCommandError } from '../../ai/types';
 import type { GameSpeed } from '../../app/useGameController';
@@ -50,7 +50,8 @@ export function GameView(props: GameViewProps) {
   const selectedPlayer = selectedPlayerId === null ? null : observation.players.find((player) => player.id === selectedPlayerId) ?? null;
   const activeActorId = observation.pendingDecision?.actorId ?? null;
   const privateEvents = observation.privateEvents.slice(-10).reverse();
-  const canAutoHide = observation.pendingDecision?.actorId !== observation.viewerPlayerId && !observation.result;
+  const humanDecisionPending = observation.pendingDecision?.actorId === observation.viewerPlayerId;
+  const canAutoHide = !humanDecisionPending && !observation.result;
   const revealMobileChrome = () => {
     setMobileChromeHidden(false);
     if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
@@ -60,55 +61,44 @@ export function GameView(props: GameViewProps) {
     if (!canAutoHide) { setMobileChromeHidden(false); return; }
     revealMobileChrome();
     return () => { if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current); };
-  }, [canAutoHide, observation.phase, observation.pendingDecision?.id]);
+  }, [canAutoHide]);
   const handleTouchStart = (event: React.TouchEvent<HTMLElement>) => { touchStartYRef.current = event.touches[0]?.clientY ?? null; };
   const handleTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
     const startY = touchStartYRef.current;
     const endY = event.changedTouches[0]?.clientY ?? startY ?? 0;
     touchStartYRef.current = null;
-    if (startY !== null && startY - endY > 42 && canAutoHide) { if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current); setMobileChromeHidden(true); }
-    else revealMobileChrome();
+    if (startY !== null && startY - endY > 42 && canAutoHide) {
+      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+      setMobileChromeHidden(true);
+    } else if (startY !== null && endY - startY > 42) {
+      revealMobileChrome();
+    }
   };
   const chromeClass = mobileChromeHidden ? styles.mobileChromeHidden : '';
 
-  return <main className={`${styles.game} ${mobileChromeHidden ? styles.gameChromeHidden : ''}`} onClick={revealMobileChrome}>
+  return <main className={`${styles.game} ${mobileChromeHidden ? styles.gameChromeHidden : ''}`}>
     <header className={`${styles.topbar} ${chromeClass}`}>
       <div className={styles.brand}><img src={brandMark} alt="魔女狼人杀" /></div>
       <div className={styles.phase}><small>{observation.day === 0 ? 'FIRST NIGHT' : `DAY ${String(observation.day).padStart(2, '0')}`}</small><strong>{phaseNames[observation.phase]}</strong></div>
     </header>
-
     <nav className={`${styles.mobileTabs} ${chromeClass}`} aria-label="游戏视图">
-      <button type="button" className={mobileTab === 'live' ? styles.activeTab : ''} onClick={() => setMobileTab('live')}><ScrollText />实况</button>
-      <button type="button" className={mobileTab === 'players' ? styles.activeTab : ''} onClick={() => setMobileTab('players')}><Users />角色</button>
-      <button type="button" className={mobileTab === 'history' ? styles.activeTab : ''} onClick={() => setMobileTab('history')}><List />记录</button>
+      <button type="button" className={mobileTab === 'live' ? styles.activeTab : ''} onClick={() => { revealMobileChrome(); setMobileTab('live'); }}><ScrollText />实况</button>
+      <button type="button" className={mobileTab === 'players' ? styles.activeTab : ''} onClick={() => { revealMobileChrome(); setMobileTab('players'); }}><Users />角色</button>
+      <button type="button" className={mobileTab === 'history' ? styles.activeTab : ''} onClick={() => { revealMobileChrome(); setMobileTab('history'); }}><List />记录</button>
     </nav>
-
     <div className={styles.workspace} data-mobile-tab={mobileTab} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <div className={`${styles.rosterPane} ${chromeClass}`}><PlayerRoster observation={observation} currentActorId={activeActorId} onSelect={setSelectedPlayerId} /></div>
-      <div className={styles.livePane}><Transcript observation={observation} /></div>
+      <div className={styles.livePane}><Transcript observation={observation} phaseLabel={phaseNames[observation.phase]} /></div>
       <aside className={`${styles.sidePane} ${chromeClass}`}>
         <GameControls paused={props.paused} speed={props.speed} onPaused={props.onPaused} onSpeed={props.onSpeed} onSettings={props.onSettings} onRestart={() => setConfirmRestart(true)} onExit={props.onExit} />
         <DecisionPanel observation={observation} aiError={props.aiError} awaitingRetry={props.awaitingRetry} thinking={props.thinking} decisionError={props.decisionError} onSubmit={props.onSubmit} onRetry={props.onRetry} onLocal={props.onLocal} onSettings={props.onSettings} />
         <section className={styles.intel} aria-labelledby="intel-title"><header><Info /><h2 id="intel-title">私密情报</h2></header><div>{privateEvents.length > 0 ? privateEvents.map((event) => <p key={event.id}>{event.text}</p>) : <p>尚未获得私密情报。</p>}</div></section>
       </aside>
-
-      <section className={styles.historyPane} aria-labelledby="history-title">
-        <header><Archive /><div><span>CASE ARCHIVE</span><h2 id="history-title">完整记录</h2></div></header>
-        <div className={styles.historyBody}>
-          <h3>私密行动</h3>{observation.privateEvents.map((event) => <p key={event.id}>{event.text}</p>)}
-          {observation.omniscient && observation.archivedTimelines.map((archive) => <div key={archive.id} className={styles.archive}><h3>被回溯时间线 · 第 {archive.rewoundAtDay} 天</h3>{archive.publicEvents.map((event) => <p key={event.id}>{event.text}</p>)}</div>)}
-          {observation.privateEvents.length === 0 && observation.archivedTimelines.length === 0 && <p>暂无额外记录。</p>}
-        </div>
-      </section>
+      <section className={styles.historyPane} aria-labelledby="history-title"><header><Archive /><div><span>CASE ARCHIVE</span><h2 id="history-title">完整记录</h2></div></header><div className={styles.historyBody}><h3>私密行动</h3>{observation.privateEvents.map((event) => <p key={event.id}>{event.text}</p>)}{observation.omniscient && observation.archivedTimelines.map((archive) => <div key={archive.id} className={styles.archive}><h3>被回溯时间线 · 第 {archive.rewoundAtDay} 天</h3>{archive.publicEvents.map((event) => <p key={event.id}>{event.text}</p>)}</div>)}{observation.privateEvents.length === 0 && observation.archivedTimelines.length === 0 && <p>暂无额外记录。</p>}</div></section>
     </div>
-
+    {!humanDecisionPending && <div className={styles.automationBar} aria-live="polite"><Bot /><div><span>{observation.automationMode === 'local' ? 'LOCAL STRATEGY' : 'AI AUTOMATION'}</span><strong>{observation.pendingDecision ? `${observation.players.find((player) => player.id === observation.pendingDecision?.actorId)?.name ?? `${observation.pendingDecision.actorId + 1}号`} 正在${observation.pendingDecision.title}` : observation.result ? '审判已结束' : '审判正在推进'}</strong></div>{props.thinking && <LoaderCircle className={styles.automationSpin} />}</div>}
     {mobileChromeHidden && <button className={styles.mobileReveal} type="button" onClick={(event) => { event.stopPropagation(); revealMobileChrome(); }} aria-label="显示游戏控制"><ChevronDown />显示控制</button>}
-    {selectedPlayer && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedPlayerId(null)}><section className={styles.playerDialog} role="dialog" aria-modal="true" aria-labelledby="player-detail-title">
-      <button className={styles.close} type="button" onClick={() => setSelectedPlayerId(null)} aria-label="关闭角色详情"><X /></button>
-      <img src={selectedPlayer.avatarUrl} alt="" /><div><span>{selectedPlayer.id + 1}号席位</span><h2 id="player-detail-title">{selectedPlayer.name}</h2><p>{selectedPlayer.alive ? '存活' : '已死亡'}</p>
-        <dl><dt>基础职业</dt><dd>{selectedPlayer.roleId ? `${roleNames[selectedPlayer.roleId]} · ${roleDescriptions[selectedPlayer.roleId]}` : '尚未公开'}</dd><dt>魔女技</dt><dd>{selectedPlayer.skillId ? `${witchSkillDefinitions[selectedPlayer.skillId].name} · ${witchSkillDefinitions[selectedPlayer.skillId].description}` : '尚未公开'}</dd></dl>
-      </div>
-    </section></div>}
+    {selectedPlayer && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedPlayerId(null)}><section className={styles.playerDialog} role="dialog" aria-modal="true" aria-labelledby="player-detail-title"><button className={styles.close} type="button" onClick={() => setSelectedPlayerId(null)} aria-label="关闭角色详情"><X /></button><img src={selectedPlayer.avatarUrl} alt="" /><div><span>{selectedPlayer.id + 1}号席位</span><h2 id="player-detail-title">{selectedPlayer.name}</h2><p>{selectedPlayer.alive ? '存活' : '已死亡'}</p><dl><dt>基础职业</dt><dd>{selectedPlayer.roleId ? `${roleNames[selectedPlayer.roleId]} · ${roleDescriptions[selectedPlayer.roleId]}` : '尚未公开'}</dd><dt>魔女技</dt><dd>{selectedPlayer.skillId ? `${witchSkillDefinitions[selectedPlayer.skillId].name} · ${witchSkillDefinitions[selectedPlayer.skillId].description}` : '尚未公开'}</dd></dl></div></section></div>}
     {observation.result && <section className={styles.result} aria-live="assertive"><Gavel /><div><span>FINAL VERDICT</span><h2>{observation.result.winner === 'wolf' ? '狼人阵营获胜' : '好人阵营获胜'}</h2><p>{observation.mode === 'player' && observation.viewerPlayerId !== null ? `你的阵营${observation.players.find((player) => player.id === observation.viewerPlayerId)?.roleId === 'wolf' ? observation.result.winner === 'wolf' ? '获胜' : '失败' : observation.result.winner === 'good' ? '获胜' : '失败'}。` : '所有职业、技能与伪造来源已揭晓。'}</p></div><button type="button" onClick={() => setConfirmRestart(true)}>再来一局</button></section>}
     {confirmRestart && <div className={styles.modalBackdrop} role="presentation"><section className={styles.confirm} role="alertdialog" aria-modal="true" aria-labelledby="restart-title"><Sparkles /><span>NEW CASE</span><h2 id="restart-title">开始同配置新局？</h2><p>当前存档将被覆盖，随机种子与模式保持不变。</p><div><button type="button" onClick={() => setConfirmRestart(false)}>取消</button><button type="button" className={styles.danger} onClick={() => { setConfirmRestart(false); props.onRestart(); }}>覆盖并重开</button></div></section></div>}
   </main>;

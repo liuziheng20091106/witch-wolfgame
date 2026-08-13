@@ -1,4 +1,4 @@
-import { AlertTriangle, Bot, Clipboard, LoaderCircle, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
+import { AlertTriangle, Clipboard, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { AiCommandError } from '../../ai/types';
 import type { GameObservation, PendingDecision, SubmittedDecision } from '../../domain/model';
@@ -63,13 +63,7 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
     </section>;
   }
 
-  if (!humanDecision || !pending) {
-    const actor = pending ? candidateNames.get(pending.actorId) : null;
-    return <section className={styles.panel} aria-live="polite">
-      <div className={styles.aiProgress}>{thinking ? <LoaderCircle className={styles.spin} /> : <Bot />}<div><span>{observation.automationMode === 'local' ? 'LOCAL STRATEGY' : 'AI AUTOMATION'}</span><h2>{pending ? `${actor ?? `${pending.actorId + 1}号`} 正在${pending.title}` : '审判正在推进'}</h2></div></div>
-      <p>{thinking ? '等待结构化 JSON 决策返回。' : '当前没有需要你提交的行动。'}</p>
-    </section>;
-  }
+  if (!humanDecision || !pending) return null;
 
   const targetControl = (allowEmpty: boolean) => <fieldset className={styles.candidates}>
     <legend>目标</legend>

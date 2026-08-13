@@ -33,4 +33,4 @@
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
-@media (max-width: 719px) { .panel { max-height: min(54vh, 460px); padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); border-top-color: var(--verdict); box-shadow: 0 -12px 32px rgb(0 0 0 / 18%); } .panel h2 { font-size: 19px; } .body { max-height: 270px; } }
+@media (max-width: 719px) { .panel { max-height: min(38vh, 300px); padding: 9px 12px calc(8px + env(safe-area-inset-bottom)); border-top-width: 2px; box-shadow: 0 -8px 22px rgb(0 0 0 / 14%); } .panel h2 { font-size: 17px; } .panel p { margin: 4px 0; font-size: 12px; } .body { max-height: 190px; margin-top: 6px; gap: 8px; } .submit { min-height: 42px; margin-top: 8px; } }

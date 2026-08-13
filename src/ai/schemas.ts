@@ -64,8 +64,20 @@ const schemaByKey = {
   ignition: ignitionDecisionSchema,
 } as const;
 
+function normalizeMinimalSkillOptOut(pending: PendingDecision, value: unknown): unknown {
+  if (pending.schemaKey === 'ignition' || value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  if (record.use !== false || Object.keys(record).length !== 1) return value;
+  if (pending.schemaKey === 'optional-target') return { use: false, targetPlayerId: null };
+  if (pending.schemaKey === 'liquid-control') return { use: false, mode: null, targetPlayerId: null, factId: null };
+  if (pending.schemaKey === 'levitation') return { use: false, mode: null, targetPlayerId: null };
+  if (pending.schemaKey === 'voice-mimic') return { use: false, targetPlayerId: null, forgedSpeech: null };
+  return value;
+}
+
 export function parseDecision(pending: PendingDecision, value: unknown): SubmittedDecision {
-  const result = schemaByKey[pending.schemaKey].safeParse(value);
+  const normalizedValue = normalizeMinimalSkillOptOut(pending, value);
+  const result = schemaByKey[pending.schemaKey].safeParse(normalizedValue);
   if (!result.success) {
     throw new AiCommandError('schema', `AI JSON 不符合 ${pending.schemaKey} 契约：${result.error.issues[0]?.message ?? '未知结构错误'}`);
   }
