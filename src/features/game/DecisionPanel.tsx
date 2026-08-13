@@ -1,4 +1,4 @@
-import { AlertTriangle, Bot, LoaderCircle, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
+import { AlertTriangle, Bot, Clipboard, LoaderCircle, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { AiCommandError } from '../../ai/types';
 import type { GameObservation, PendingDecision, SubmittedDecision } from '../../domain/model';
@@ -17,6 +17,12 @@ interface DecisionPanelProps {
 }
 
 export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, decisionError, onSubmit, onRetry, onLocal, onSettings }: DecisionPanelProps) {
+  const [copied, setCopied] = useState(false);
+  const copyRawOutput = async () => {
+    if (!aiError?.rawOutput) return;
+    try { await navigator.clipboard.writeText(aiError.rawOutput); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
+    catch { setCopied(false); }
+  };
   const pending = observation.pendingDecision;
   const humanDecision = pending !== null && observation.viewerPlayerId === pending.actorId;
   const [useSkill, setUseSkill] = useState(true);
@@ -48,6 +54,7 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
     return <section className={styles.panel} aria-live="polite">
       <div className={styles.errorHead}><AlertTriangle /><div><span>AI COMMAND PAUSED</span><h2>{aiError ? 'AI 决策失败' : '已恢复待处理决策'}</h2></div></div>
       <p>{aiError?.message ?? '为避免刷新后自动重复产生费用，本次 AI 请求等待你的确认。'}</p>
+      {aiError?.rawOutput && <button type="button" className={styles.copyOutput} onClick={copyRawOutput}><Clipboard />{copied ? '已复制模型原始输出' : '复制模型原始输出'}</button>}
       <div className={styles.errorActions}>
         <button type="button" onClick={onRetry}><RefreshCcw />重试</button>
         <button type="button" onClick={onLocal}><WifiOff />本局改用本地策略</button>

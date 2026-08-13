@@ -9,6 +9,7 @@ import type { GameEvent, GameObservation, GameState, SubmittedDecision } from '.
 import {
   clearSavedGame,
   loadGame,
+  loadSessionId,
   loadSettings,
   loadSetup,
   saveGame,
@@ -88,6 +89,7 @@ export function useGameController(): GameController {
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState<GameSpeed>(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const sessionIdRef = useRef(loadSessionId());
   const activeRequestRef = useRef<string | null>(null);
 
   const commit = useCallback((next: GameState) => {
@@ -160,7 +162,7 @@ export function useGameController(): GameController {
 
     setThinking(true);
     const actorObservation = selectObservation(game, { kind: 'player', playerId: pending.actorId });
-    void requestDecision({ observation: actorObservation, pendingDecision: pending }, settings, controller.signal)
+    void requestDecision({ observation: actorObservation, pendingDecision: pending, sessionId: sessionIdRef.current }, settings, controller.signal)
       .then((decision) => {
         if (disposed) return;
         const current = gameRef.current;

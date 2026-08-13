@@ -90,16 +90,20 @@ export function validatePublicPayload(payload, acceptedVersions) {
   if (!hasOnlyKeys(payload.client, new Set(['name', 'version', 'protocol']))) return '客户端协议包含不允许的字段';
   if (payload.client.name !== 'majo-wolf' || payload.client.protocol !== 'majo-wolf-free-v1') return '客户端协议不受支持';
   if (!acceptedVersions.has(payload.client.version)) return '客户端版本不受支持';
-  if (!isObject(payload.response_format) || Object.keys(payload.response_format).length !== 1 || payload.response_format.type !== 'json_object') return '必须请求 JSON 对象响应';
+  if (payload.response_format !== undefined && (!isObject(payload.response_format) || Object.keys(payload.response_format).length !== 1 || payload.response_format.type !== 'json_object')) return 'response_format 必须是 JSON 对象格式';
   return validateGamePrompt(payload.messages) ? null : '提示词不是当前程序生成的合法游戏请求';
 }
 
-export function validateProviderResponse(value) {
+export function validateChatCompletionsResponse(value) {
   if (!isObject(value) || !Array.isArray(value.choices) || value.choices.length < 1 || value.choices.length > 16) return false;
   const first = value.choices[0];
-  if (!isObject(first) || !isObject(first.message) || typeof first.message.content !== 'string' || !first.message.content.trim()) return false;
+  return isObject(first) && isObject(first.message) && typeof first.message.content === 'string' && Boolean(first.message.content.trim());
+}
+
+export function validateProviderResponse(value) {
+  if (!validateChatCompletionsResponse(value)) return false;
   try {
-    const content = JSON.parse(first.message.content);
+    const content = JSON.parse(value.choices[0].message.content);
     return isObject(content);
   } catch {
     return false;
