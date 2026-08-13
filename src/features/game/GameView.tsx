@@ -48,6 +48,7 @@ export function GameView(props: GameViewProps) {
   const selectedPlayer = selectedPlayerId === null ? null : observation.players.find((player) => player.id === selectedPlayerId) ?? null;
   const activeActorId = observation.pendingDecision?.actorId ?? null;
   const privateEvents = observation.privateEvents.slice(-10).reverse();
+  const hasResult = observation.result !== null;
   const humanDecisionPending = observation.pendingDecision?.actorId === observation.viewerPlayerId;
   const canAutoHide = !humanDecisionPending && !observation.result;
   const revealMobileChrome = () => {
@@ -61,11 +62,11 @@ export function GameView(props: GameViewProps) {
     return () => { if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current); };
   }, [canAutoHide]);
   useEffect(() => {
-    if (!observation.result) { setResultFaded(false); return; }
+    if (!hasResult) { setResultFaded(false); return; }
     setResultFaded(false);
     const timer = window.setTimeout(() => setResultFaded(true), 4000);
     return () => window.clearTimeout(timer);
-  }, [observation.result]);
+  }, [hasResult]);
   const handleTouchStart = (event: React.TouchEvent<HTMLElement>) => { touchStartYRef.current = event.touches[0]?.clientY ?? null; };
   const handleTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
     const startY = touchStartYRef.current;

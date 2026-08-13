@@ -28,7 +28,6 @@
 .automationSpin { margin-left: auto; width: 18px; color: var(--intel-dark); animation: automationSpin 1s linear infinite; }
 @keyframes automationSpin { to { transform: rotate(360deg); } }
 .result { bottom: 78px; transition: opacity .7s ease, transform .7s ease; }
-.resultFaded { opacity: 0; transform: translate(-50%, 12px); pointer-events: none; }
 .mobileRestart { display: none; min-height: 34px; margin-left: auto; padding: 0 10px; border: 1px solid var(--intel-dark); background: transparent; color: var(--intel-dark); font-family: var(--sans); font-size: 11px; font-weight: 800; }
 .desktopRestart { display: inline-flex; }
 .modalBackdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 18px; background: rgb(23 22 26 / 72%); }
@@ -69,6 +68,6 @@
   .automationBar .mobileRestart { display: inline-flex; }
   .automationBar .automationSpin { margin-left: 0; }
   .result { bottom: calc(68px + env(safe-area-inset-bottom)); transition-duration: .7s; }
-  .resultFaded { transform: translate(-50%, 12px); }
+  .resultFaded { opacity: 0; transform: translate(-50%, 12px); pointer-events: none; }
   .result .desktopRestart { display: none; }
 }
