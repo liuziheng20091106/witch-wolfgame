@@ -5,6 +5,12 @@ const appVersion = process.env.npm_package_version ?? '2.1.0';
 export default defineConfig({
   base: './',
   plugins: [react()],
+  server: {
+    watch: {
+      usePolling: true,
+      interval: 300,
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
   },
