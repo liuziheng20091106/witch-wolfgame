@@ -11,6 +11,7 @@ export interface SetupPreferences {
   mode: GameMode;
   humanCharacterId: CharacterId | null;
   seed: number;
+  randomSeed: boolean;
 }
 
 export interface SavedGameEnvelope {
@@ -63,6 +64,7 @@ const setupSchema = z.strictObject({
   mode: z.enum(['spectator', 'player']),
   humanCharacterId: z.enum(characterIds).nullable(),
   seed: z.number().int().min(0).max(0xffff_ffff),
+  randomSeed: z.boolean().default(true),
 });
 const stateSchema = z.object({
   schemaVersion: z.literal(1),

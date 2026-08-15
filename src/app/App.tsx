@@ -28,6 +28,7 @@ export function App() {
       onLocal={controller.useLocalFallback}
       onSettings={() => controller.setSettingsOpen(true)}
       onPaused={controller.setPaused}
+      randomSeed={controller.randomSeed}
       onRestart={controller.startNewGame}
       onExit={controller.returnToSetup}
     />}

@@ -1,5 +1,6 @@
-import { Bot, Check, ChevronRight, Eye, Play, Settings, Trash2, UserRound } from 'lucide-react';
+import { Bot, Check, ChevronRight, Dices, Eye, Play, Settings, Trash2, UserRound } from 'lucide-react';
 import { useState } from 'react';
+import { rollSeed } from '../../app/useGameController';
 import type { AiProviderConfig } from '../../ai/types';
 import { characters } from '../../domain/catalog/characters';
 import type { CharacterId } from '../../domain/model';
@@ -57,7 +58,19 @@ export function SetupView({ settings, setup, savedGame, storageError, onUpdateSe
           <button type="button" className={setup.mode === 'spectator' ? styles.activeMode : ''} onClick={() => onUpdateSetup({ ...setup, mode: 'spectator', humanCharacterId: null })}><Eye />全自动观战</button>
           <button type="button" className={setup.mode === 'player' ? styles.activeMode : ''} onClick={() => onUpdateSetup({ ...setup, mode: 'player' })}><UserRound />加入一个席位</button>
         </div>
-        <label className={styles.seedField}>随机种子<input type="number" min="0" max="4294967295" value={setup.seed} onChange={(event) => onUpdateSetup({ ...setup, seed: Math.max(0, Math.min(0xffff_ffff, Number(event.target.value) || 0)) })} /></label>
+        <div className={styles.seedField}>
+          <span>随机种子</span>
+          <div className={styles.seedControls}>
+            <input type="number" min="0" max="4294967295" placeholder="随机" value={setup.randomSeed ? '' : setup.seed} onChange={(event) => {
+              if (event.target.value === '') {
+                onUpdateSetup({ ...setup, randomSeed: true });
+                return;
+              }
+              onUpdateSetup({ ...setup, seed: Math.max(0, Math.min(0xffff_ffff, Number(event.target.value) || 0)), randomSeed: false });
+            }} />
+            <button type="button" className={setup.randomSeed ? styles.seedRandomButtonActive : styles.seedRandomButton} aria-pressed={setup.randomSeed} title="点击随机生成一个种子并填入输入框，可多次点击更换；清空输入框则回到开局时随机" onClick={() => onUpdateSetup({ ...setup, seed: rollSeed(), randomSeed: false })}><Dices />随机</button>
+          </div>
+        </div>
       </section>
 
       {setup.mode === 'player' && <section className={styles.characterSection} aria-labelledby="character-title">

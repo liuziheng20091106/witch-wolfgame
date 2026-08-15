@@ -13,6 +13,11 @@
 .modeSwitch svg { width: 20px; }
 .seedField { display: grid; gap: 7px; color: var(--paper-dim); font-family: var(--sans); font-size: 12px; font-weight: 800; }
 .seedField input { width: 100%; min-height: 48px; padding: 8px 12px; border: 1px solid rgb(255 255 255 / 35%); background: transparent; color: white; }
+.seedField input::placeholder { color: var(--paper-dim); opacity: 0.8; }
+.seedControls { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.seedRandomButton, .seedRandomButtonActive { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; border: 1px solid rgb(255 255 255 / 35%); background: transparent; color: var(--paper-bright); font-family: var(--sans); font-weight: 800; }
+.seedRandomButton svg, .seedRandomButtonActive svg { width: 16px; }
+.seedRandomButtonActive { border-color: var(--verdict); background: var(--verdict); color: white; }
 .characterSection { padding: 34px clamp(18px, 4vw, 64px) 42px; border-bottom: 1px solid var(--line); }
 .sectionHeading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
 .sectionHeading h2 { margin: 4px 0 0; font-size: 27px; }

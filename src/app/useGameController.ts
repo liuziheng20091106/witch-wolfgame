@@ -28,6 +28,7 @@ export interface GameController {
   savedGame: SavedGameEnvelope | null;
   settings: AiProviderConfig;
   setup: SetupPreferences;
+  randomSeed: boolean;
   storageError: string | null;
   aiError: AiCommandError | null;
   decisionError: string | null;
@@ -64,10 +65,16 @@ function readInitialBrowserState(): InitialBrowserState {
     .map((result) => result.ok ? '' : result.error);
   return {
     settings: settingsResult.ok && settingsResult.value ? settingsResult.value : defaultAiConfig,
-    setup: setupResult.ok && setupResult.value ? setupResult.value : { mode: 'spectator', humanCharacterId: null, seed: 1 },
+    setup: setupResult.ok && setupResult.value ? setupResult.value : { mode: 'spectator', humanCharacterId: null, seed: 1, randomSeed: true },
     savedGame: gameResult.ok ? gameResult.value : null,
     error: errors[0] ?? null,
   };
+}
+
+export function rollSeed(): number {
+  const buffer = new Uint32Array(1);
+  crypto.getRandomValues(buffer);
+  return buffer[0] ?? 0;
 }
 
 export function useGameController(): GameController {
@@ -199,8 +206,8 @@ export function useGameController(): GameController {
     setSettingsOpen(false);
   }, []);
 
-  const startNewGame = useCallback(() => {
-    const next = createGame(setup);
+  const beginGame = useCallback((seed: number) => {
+    const next = createGame({ ...setup, seed });
     commit(next);
     setAiError(null);
     setDecisionError(null);
@@ -208,6 +215,10 @@ export function useGameController(): GameController {
     setPaused(false);
     setView('game');
   }, [commit, setup]);
+
+  const startNewGame = useCallback(() => {
+    beginGame(setup.randomSeed ? rollSeed() : setup.seed);
+  }, [beginGame, setup]);
 
   const continueSavedGame = useCallback(() => {
     if (!savedGame) return;
@@ -263,6 +274,7 @@ export function useGameController(): GameController {
   return {
     view, game, observation, savedGame, settings, setup, storageError, aiError, decisionError,
     awaitingRetry, thinking, paused, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
+    randomSeed: setup.randomSeed,
     startNewGame, continueSavedGame, returnToSetup, discardSavedGame, submitHumanDecision,
     retryAi, useLocalFallback, setPaused,
   };
