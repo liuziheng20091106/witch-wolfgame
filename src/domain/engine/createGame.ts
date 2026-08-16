@@ -1,4 +1,4 @@
-import { characterById, characters } from '../catalog/characters';
+import { characters } from '../catalog/characters';
 import { defaultSkillByCharacterId, witchSkillDefinitions } from '../catalog/witchSkills';
 import type {
   CharacterId,
@@ -10,7 +10,7 @@ import type {
   RoleResources,
   WitchSkillInstance,
 } from '../model';
-import { addKnowledge, addPublicEvent } from './events';
+import { addPublicEvent } from './events';
 import { shuffleWithState } from './random';
 
 const playerIds: PlayerId[] = [0, 1, 2, 3, 4, 5];
@@ -111,14 +111,6 @@ export function createGame(setup: GameSetup): GameState {
     result: null,
   };
   const startEvent = addPublicEvent(state, 'system', '六名少女进入审判庭，首夜开始。');
-  const skillAnnouncement = addPublicEvent(state, 'knowledge', `魔女技公开：${playerIds.map((playerId) => {
-    const characterId = selectedCharacters[playerId];
-    const definitionId = skillInstances[playerId]?.definitionId;
-    if (!characterId || !definitionId) {
-      throw new Error(`座位 ${playerId} 缺少魔女技公开信息`);
-    }
-    return `${playerId + 1}号 ${characterById[characterId].name}（${witchSkillDefinitions[definitionId].name}）`;
-  }).join('、')}。`);
   for (const playerId of playerIds) {
     const roleId = roleAssignments[playerId]?.roleId;
     if (!roleId) {
@@ -132,13 +124,6 @@ export function createGame(setup: GameSetup): GameState {
       observedDay: 0,
       sourceEventId: startEvent.id,
     });
-    for (const subjectId of playerIds) {
-      const subjectSkill = skillInstances[subjectId];
-      if (!subjectSkill) {
-        throw new Error(`座位 ${subjectId} 缺少初始魔女技事实`);
-      }
-      addKnowledge(state, playerId, { subjectPlayerId: subjectId, kind: 'skill', value: subjectSkill.definitionId, observedDay: 0 }, skillAnnouncement.id);
-    }
   }
   state.morningCheckpoint = createRewindSnapshot(state);
   return state;

@@ -113,8 +113,8 @@ export interface WitchSkillInstance {
 export interface KnowledgeFact {
   id: string;
   subjectPlayerId: PlayerId;
-  kind: 'role' | 'alignment' | 'skill';
-  value: RoleId | Alignment | WitchSkillId;
+  kind: 'role' | 'alignment';
+  value: RoleId | Alignment;
   observedDay: number;
   sourceEventId: string;
 }

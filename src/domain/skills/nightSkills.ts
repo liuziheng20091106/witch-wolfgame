@@ -1,6 +1,5 @@
 import { characterById } from '../catalog/characters';
 import { roleAlignment, roleNames } from '../catalog/roles';
-import { witchSkillDefinitions } from '../catalog/witchSkills';
 import type {
   GameState,
   IgnitionDecision,
@@ -10,7 +9,6 @@ import type {
   PlayerId,
   SubmittedDecision,
   TargetDecision,
-  WitchSkillId,
 } from '../model';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events';
 import { chooseWithState } from '../engine/random';
@@ -134,12 +132,8 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
       if (!fact) {
         throw new Error('只能传播已经获得的事实');
       }
-      const valueText = fact.kind === 'role'
-        ? `是${roleNames[fact.value as keyof typeof roleNames]}`
-        : fact.kind === 'skill'
-          ? `的魔法技是${witchSkillDefinitions[fact.value as WitchSkillId].name}`
-          : fact.value === 'wolf' ? '是狼人阵营' : '是好人阵营';
-      addPublicEvent(state, 'knowledge', `${nameOf(state, skill.ownerPlayerId)} 公开事实：${nameOf(state, fact.subjectPlayerId)} ${valueText}。`, {
+      const value = fact.kind === 'role' ? roleNames[fact.value as keyof typeof roleNames] : fact.value === 'wolf' ? '狼人阵营' : '好人阵营';
+      addPublicEvent(state, 'knowledge', `${nameOf(state, skill.ownerPlayerId)} 公开事实：${nameOf(state, fact.subjectPlayerId)} 是${value}。`, {
         actorPlayerId: skill.ownerPlayerId,
         targetPlayerIds: [fact.subjectPlayerId],
         data: { factId: fact.id },

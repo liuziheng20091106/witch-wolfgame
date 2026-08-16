@@ -58,7 +58,7 @@ export function selectObservation(
       avatarUrl: character.avatarUrl,
       alive: player.alive,
       roleId: showPrivate ? assignment.roleId : null,
-      skillId: getSkillInstance(state, player.id)?.definitionId ?? null,
+      skillId: omniscient || player.id === viewerPlayerId ? getSkillInstance(state, player.id)?.definitionId ?? null : null,
       isSelf: player.id === viewerPlayerId,
     };
   });
