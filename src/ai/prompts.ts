@@ -34,12 +34,18 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
     .slice(-12)
     .map((event) => event.text);
   const recentPublic = observation.publicEvents.slice(-24).map((event) => event.text);
-  const privateKnowledge = observation.knowledge.map((fact) => ({
-    subjectPlayerId: fact.subjectPlayerId,
-    kind: fact.kind,
-    value: fact.value,
-    observedDay: fact.observedDay,
-  }));
+  const privateKnowledge = observation.knowledge
+    .filter((fact) => fact.kind === 'role' || fact.kind === 'alignment')
+    .map((fact) => ({
+      subjectPlayerId: fact.subjectPlayerId,
+      kind: fact.kind,
+      value: fact.value,
+      observedDay: fact.observedDay,
+    }));
+  const publicSkills = observation.players.flatMap((player) => {
+    if (player.skillId === null) return [];
+    return [{ playerId: player.id, name: player.name, skill: `${witchSkillDefinitions[player.skillId].name}：${witchSkillDefinitions[player.skillId].description}` }];
+  });
   const visibleRole = actor.roleId ? `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}` : '未公开';
   const visibleSkill = actor.skillId ? `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}` : '无可见技能';
   const legalCandidates = pendingDecision.candidates.map((playerId) => {
@@ -75,6 +81,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
         historicalSpeeches,
         recentPublic,
         privateKnowledge,
+        publicSkills,
         privateEvents: observation.privateEvents.slice(-12).map((event) => event.text),
       }),
     },
