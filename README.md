@@ -23,6 +23,17 @@ npm run dev
 
 开发服务器默认使用 `http://127.0.0.1:5173/`。开发时可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
 
+
+## 模型提供商验证工具
+
+`scripts/verify_provider.py` 是一个零依赖的 Tkinter 桌面工具，用于验证 OpenAI 兼容服务。填写 API 根地址、`/v1` 地址或完整 `/chat/completions` 端点，以及 API Key 和待测模型后，可拉取 `/models` 列表，并分别测试普通 Chat Completions 与 `response_format: {"type":"json_object"}` 的 JSON 对象输出。
+
+```bash
+py scripts\verify_provider.py
+```
+
+API Key 以遮蔽文本输入，仅在当前进程中通过 `Authorization: Bearer` 请求头发送；不会写入磁盘或日志。网络请求在后台线程执行，界面不会冻结。单元测试不访问外部服务：`py -m unittest scripts/test_verify_provider.py`。
+
 ## 构建与部署
 
 ```bash
