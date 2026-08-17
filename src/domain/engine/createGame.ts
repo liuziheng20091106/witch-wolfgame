@@ -12,7 +12,7 @@ import type {
   WitchSkillInstance,
 } from '../model';
 import { addKnowledge, addPublicEvent } from './events';
-import { shuffleWithState } from './random';
+import { chooseWithState, shuffleWithState } from './random';
 
 const playerIds: PlayerId[] = [0, 1, 2, 3, 4, 5];
 const rolePool: RoleId[] = ['wolf', 'wolf', 'seer', 'witch', 'villager', 'villager'];
@@ -34,15 +34,31 @@ export function createGame(setup: GameSetup): GameState {
   const seed = setup.seed >>> 0;
   let rngState = seed;
   let selectedCharacters: CharacterId[];
+  let humanPlayerId: PlayerId | null = null;
+  const humanCharacterId = setup.humanCharacterId;
 
   if (setup.mode === 'player') {
-    if (!setup.humanCharacterId) {
+    if (!humanCharacterId) {
       throw new Error('参与模式必须选择角色');
     }
-    const remaining = characters.map((character) => character.id).filter((id) => id !== setup.humanCharacterId);
+    const remaining = characters.map((character) => character.id).filter((id) => id !== humanCharacterId);
     const shuffled = shuffleWithState(remaining, rngState);
     rngState = shuffled.state;
-    selectedCharacters = [setup.humanCharacterId, ...shuffled.items.slice(0, 5)];
+    const humanSeat = chooseWithState(playerIds, rngState);
+    rngState = humanSeat.state;
+    humanPlayerId = humanSeat.item;
+    const others = shuffled.items.slice(0, 5);
+    selectedCharacters = playerIds.map((playerId) => {
+      if (playerId === humanSeat.item) {
+        return humanCharacterId;
+      }
+      const offset = playerId < humanSeat.item ? playerId : playerId - 1;
+      const characterId = others[offset];
+      if (!characterId) {
+        throw new Error(`座位 ${playerId} 缺少角色`);
+      }
+      return characterId;
+    });
   } else {
     const shuffled = shuffleWithState(characters.map((character) => character.id), rngState);
     rngState = shuffled.state;
@@ -102,7 +118,7 @@ export function createGame(setup: GameSetup): GameState {
     mode: setup.mode,
     automationMode: 'remote',
     usedFreeProvider: false,
-    humanPlayerId: setup.mode === 'player' ? 0 : null,
+    humanPlayerId,
     seed,
     rngState,
     day: 0,
