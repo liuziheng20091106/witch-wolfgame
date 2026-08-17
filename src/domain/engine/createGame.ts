@@ -1,4 +1,5 @@
 import { characterById, characters } from '../catalog/characters';
+import { roleNames } from '../catalog/roles';
 import { defaultSkillByCharacterId, witchSkillDefinitions } from '../catalog/witchSkills';
 import type {
   CharacterId,
@@ -15,6 +16,14 @@ import { shuffleWithState } from './random';
 
 const playerIds: PlayerId[] = [0, 1, 2, 3, 4, 5];
 const rolePool: RoleId[] = ['wolf', 'wolf', 'seer', 'witch', 'villager', 'villager'];
+
+export function describeBoard(pool: RoleId[]): string {
+  const counts = new Map<RoleId, number>();
+  for (const role of pool) {
+    counts.set(role, (counts.get(role) ?? 0) + 1);
+  }
+  return `${pool.length}人局：${[...counts.entries()].map(([role, count]) => `${roleNames[role]}×${count}`).join('、')}`;
+}
 
 export function createRewindSnapshot(state: GameState): RewindSnapshot {
   const { morningCheckpoint: _checkpoint, causalLocks: _locks, archivedTimelines: _archives, usedFreeProvider: _freeProvider, ...snapshot } = state;
@@ -44,6 +53,7 @@ export function createGame(setup: GameSetup): GameState {
   rngState = shuffledRoles.state;
   const shuffledSpeech = shuffleWithState(playerIds, rngState);
   rngState = shuffledSpeech.state;
+  const boardDescription = describeBoard(rolePool);
 
   const roleAssignments = playerIds.map((playerId) => {
     const roleId = shuffledRoles.items[playerId];
@@ -88,6 +98,7 @@ export function createGame(setup: GameSetup): GameState {
   const state: GameState = {
     schemaVersion: 1,
     gameId: `game-${seed}-${setup.mode}-${setup.humanCharacterId ?? 'auto'}`,
+    board: boardDescription,
     mode: setup.mode,
     automationMode: 'remote',
     usedFreeProvider: false,
@@ -110,7 +121,7 @@ export function createGame(setup: GameSetup): GameState {
     causalLocks: [],
     result: null,
   };
-  const startEvent = addPublicEvent(state, 'system', '六名少女进入审判庭，首夜开始。');
+  const startEvent = addPublicEvent(state, 'system', `本局版型：${boardDescription}。六名少女进入审判庭，首夜开始。`);
   const skillAnnouncement = addPublicEvent(state, 'knowledge', `魔女技公开：${playerIds.map((playerId) => {
     const characterId = selectedCharacters[playerId];
     const definitionId = skillInstances[playerId]?.definitionId;

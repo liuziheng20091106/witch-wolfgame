@@ -74,6 +74,7 @@ export function selectObservation(
     gameId: state.gameId,
     mode: state.mode,
     automationMode: state.automationMode,
+    board: state.board,
     usedFreeProvider: state.usedFreeProvider,
     day: state.day,
     phase: state.phase,

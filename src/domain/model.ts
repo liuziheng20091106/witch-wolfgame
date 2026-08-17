@@ -265,6 +265,7 @@ export interface GameResult {
 export interface GameState {
   schemaVersion: 1;
   gameId: string;
+  board: string;
   mode: GameMode;
   automationMode: AutomationMode;
   usedFreeProvider: boolean;
@@ -323,6 +324,7 @@ export interface GameObservation {
   gameId: string;
   mode: GameMode;
   automationMode: AutomationMode;
+  board: string;
   usedFreeProvider: boolean;
   day: number;
   phase: GamePhase;

@@ -31,7 +31,7 @@ function validPayload() {
     messages: [
       {
         role: 'system',
-        content: '你正在进行六人魔女狼人杀。只能依据提供的观察作决定，不得假设隐藏身份。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：{"targetPlayerId":2}',
+        content: '你正在进行六人魔女狼人杀。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：{"targetPlayerId":2}',
       },
       {
         role: 'user',
