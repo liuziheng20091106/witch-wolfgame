@@ -230,7 +230,7 @@ function advanceSpeeches(state: GameState): GameState {
     });
     return state;
   }
-  const speechDecision = makeRoleDecision(state, 'speech', actorId, `${nameOf(state, actorId)} 发言`, '公开发言不超过 100 字，也可以保持沉默。', [], true, 'speech');
+  const speechDecision = makeRoleDecision(state, 'speech', actorId, `${nameOf(state, actorId)} 发言`, '公开发言不超过 100 字。', [], true, 'speech');
   const guide = state.skillInstances.find(
     (skill) => skill.definitionId === 'gaze-guidance' && getPlayer(state, skill.ownerPlayerId).alive,
   );
