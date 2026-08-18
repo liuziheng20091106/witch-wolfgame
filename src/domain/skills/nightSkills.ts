@@ -181,10 +181,19 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
     getRoleAssignment(state, target.id).ownerPlayerId = target.id;
     const ownerRole = getRoleAssignment(state, owner.id).roleId;
     const targetRole = getRoleAssignment(state, target.id).roleId;
-    addPrivateEvent(state, [owner.id, target.id], 'role-exchange', `灵魂交换完成：${nameOf(state, owner.id)} 成为${roleNames[ownerRole]}，${nameOf(state, target.id)} 成为${roleNames[targetRole]}。`, {
+    // 私密播报：仅交换双方可见（观战视角全知可见），播报具体职业
+    const exchangeEvent = addPrivateEvent(state, [owner.id, target.id], 'role-exchange', `${nameOf(state, owner.id)}使用了灵魂交换：${nameOf(state, owner.id)}成为${roleNames[ownerRole]}，${nameOf(state, target.id)}成为${roleNames[targetRole]}。`, {
       actorPlayerId: owner.id,
       targetPlayerIds: [target.id],
     });
+    // 同步双方对自己的当前职业认知：移除过期的初始自我职业事实，写入交换后的当前职业
+    for (const swappedId of [owner.id, target.id] as PlayerId[]) {
+      state.knowledgeByPlayer[swappedId] = state.knowledgeByPlayer[swappedId].filter(
+        (fact) => !(fact.subjectPlayerId === swappedId && fact.kind === 'role'),
+      );
+    }
+    addKnowledge(state, owner.id, { subjectPlayerId: owner.id, kind: 'role', value: getRoleAssignment(state, owner.id).roleId, observedDay: state.day }, exchangeEvent.id);
+    addKnowledge(state, target.id, { subjectPlayerId: target.id, kind: 'role', value: getRoleAssignment(state, target.id).roleId, observedDay: state.day }, exchangeEvent.id);
     exhaustSkill(skill);
     return;
   }

@@ -33,3 +33,12 @@ export const defaultSkillByCharacterId: Record<CharacterId, WitchSkillId> = {
   'soul-12': 'mind-reading',
   'soul-13': 'clairvoyance',
 };
+
+/**
+ * 技能使用建议（可选）：拼接进 AI 提示词的 actor.skill 字段，仅影响 AI 决策。
+ * 不影响 PUBLIC_SKILLS 白名单与 UI 展示（技能描述本体保持不变）。
+ * 注意：技能名 + 描述 + 本条建议总长须 ≤ 240 字（后端 actor.skill 校验上限）。
+ */
+export const skillUsageHints: Partial<Record<WitchSkillId, string>> = {
+  'soul-exchange': '使用建议：如果你是狼人，建议优先换神职（风险较高）；如果你是好人，可换狼（风险较高）或换好人互发金水；交换后旧知识失效，按新阵营行动。',
+};
