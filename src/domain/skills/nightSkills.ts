@@ -186,14 +186,19 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
       actorPlayerId: owner.id,
       targetPlayerIds: [target.id],
     });
-    // 同步双方对自己的当前职业认知：移除过期的初始自我职业事实，写入交换后的当前职业
+    // 同步双方对自己的当前职业认知：原地改写已有的自我职业事实（不删不加），
+    // 保持知识数组长度与事实 ID 单调且唯一，避免新事实与技能事实 ID 撞车
+    // 导致操控液体·传播按 ID 查找时取错事实
     for (const swappedId of [owner.id, target.id] as PlayerId[]) {
-      state.knowledgeByPlayer[swappedId] = state.knowledgeByPlayer[swappedId].filter(
-        (fact) => !(fact.subjectPlayerId === swappedId && fact.kind === 'role'),
+      const selfFact = state.knowledgeByPlayer[swappedId].find(
+        (fact) => fact.subjectPlayerId === swappedId && fact.kind === 'role',
       );
+      if (selfFact) {
+        selfFact.value = getRoleAssignment(state, swappedId).roleId;
+        selfFact.observedDay = state.day;
+        selfFact.sourceEventId = exchangeEvent.id;
+      }
     }
-    addKnowledge(state, owner.id, { subjectPlayerId: owner.id, kind: 'role', value: getRoleAssignment(state, owner.id).roleId, observedDay: state.day }, exchangeEvent.id);
-    addKnowledge(state, target.id, { subjectPlayerId: target.id, kind: 'role', value: getRoleAssignment(state, target.id).roleId, observedDay: state.day }, exchangeEvent.id);
     exhaustSkill(skill);
     return;
   }
