@@ -1,5 +1,5 @@
 import { Archive, Bot, ChevronDown, Gavel, Info, List, LoaderCircle, RotateCcw, ScrollText, Sparkles, Users, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AiCommandError } from '../../ai/types';
 import { roleDescriptions, roleNames } from '../../domain/catalog/roles';
 import { witchSkillDefinitions } from '../../domain/catalog/witchSkills';
@@ -46,6 +46,8 @@ export function GameView(props: GameViewProps) {
   const [resultFaded, setResultFaded] = useState(false);
   const hideTimerRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
+  const gameRef = useRef<HTMLElement>(null);
+  const sidePaneRef = useRef<HTMLElement>(null);
   const selectedPlayer = selectedPlayerId === null ? null : observation.players.find((player) => player.id === selectedPlayerId) ?? null;
   const activeActorId = observation.pendingDecision?.actorId ?? null;
   const privateEvents = observation.privateEvents.slice(-10).reverse();
@@ -68,6 +70,21 @@ export function GameView(props: GameViewProps) {
     const timer = window.setTimeout(() => setResultFaded(true), 4000);
     return () => window.clearTimeout(timer);
   }, [hasResult]);
+  useLayoutEffect(() => {
+    const game = gameRef.current;
+    const sidePane = sidePaneRef.current;
+    if (!humanDecisionPending || !game || !sidePane) return;
+    const updateHeight = () => {
+      game.style.setProperty('--mobile-action-overlay-height', `${Math.ceil(sidePane.getBoundingClientRect().height)}px`);
+    };
+    updateHeight();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateHeight);
+    observer?.observe(sidePane);
+    return () => {
+      observer?.disconnect();
+      game.style.removeProperty('--mobile-action-overlay-height');
+    };
+  }, [humanDecisionPending]);
   const handleTouchStart = (event: React.TouchEvent<HTMLElement>) => { touchStartYRef.current = event.touches[0]?.clientY ?? null; };
   const handleTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
     const startY = touchStartYRef.current;
@@ -82,7 +99,7 @@ export function GameView(props: GameViewProps) {
   };
   const chromeClass = mobileChromeHidden ? styles.mobileChromeHidden : '';
 
-  return <main className={`${styles.game} ${mobileChromeHidden ? styles.gameChromeHidden : ''}`}>
+  return <main ref={gameRef} className={`${styles.game} ${mobileChromeHidden ? styles.gameChromeHidden : ''} ${humanDecisionPending ? styles.humanDecisionPending : ''}`}>
     <header className={`${styles.topbar} ${chromeClass}`}>
       <div className={styles.brand}><img src={brandMark} alt="魔女狼人杀" /></div>
       <div className={styles.phase}><small>{observation.day === 0 ? 'FIRST NIGHT' : `DAY ${String(observation.day).padStart(2, '0')}`}</small><strong>{phaseNames[observation.phase]}</strong></div>
@@ -95,7 +112,7 @@ export function GameView(props: GameViewProps) {
     <div className={styles.workspace} data-mobile-tab={mobileTab} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <div className={`${styles.rosterPane} ${chromeClass}`}><PlayerRoster observation={observation} currentActorId={activeActorId} onSelect={setSelectedPlayerId} /></div>
       <div className={styles.livePane}><Transcript observation={observation} phaseLabel={phaseNames[observation.phase]} /></div>
-      <aside className={`${styles.sidePane} ${chromeClass}`}>
+      <aside ref={sidePaneRef} className={`${styles.sidePane} ${chromeClass}`}>
         <GameControls paused={props.paused} onPaused={props.onPaused} onSettings={props.onSettings} onRestart={() => setConfirmRestart(true)} onExit={props.onExit} />
         <DecisionPanel observation={observation} aiError={props.aiError} awaitingRetry={props.awaitingRetry} thinking={props.thinking} decisionError={props.decisionError} onSubmit={props.onSubmit} onRetry={props.onRetry} onLocal={props.onLocal} onSettings={props.onSettings} />
         <section className={styles.intel} aria-labelledby="intel-title"><header><Info /><h2 id="intel-title">私密情报</h2></header><div>{privateEvents.length > 0 ? privateEvents.map((event) => <p key={event.id}>{event.text}</p>) : <p>尚未获得私密情报。</p>}</div></section>
