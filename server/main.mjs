@@ -183,5 +183,8 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
-  startMainServer().catch((error) => { console.error(error); process.exitCode = 1; });
+  startMainServer().catch(() => {
+    console.error('[main] 启动失败');
+    process.exitCode = 1;
+  });
 }
