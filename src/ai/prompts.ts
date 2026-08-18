@@ -1,6 +1,6 @@
 import { characterById } from '../domain/catalog/characters';
 import { roleDescriptions, roleNames } from '../domain/catalog/roles';
-import { witchSkillDefinitions } from '../domain/catalog/witchSkills';
+import { defaultSkillByCharacterId, witchSkillDefinitions } from '../domain/catalog/witchSkills';
 import type { AiDecisionRequest } from './types';
 
 export interface PromptMessage {
@@ -42,9 +42,11 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
       value: fact.value,
       observedDay: fact.observedDay,
     }));
-  const publicSkills = observation.players.flatMap((player) => {
-    if (player.skillId === null) return [];
-    return [{ playerId: player.id, name: player.name, skill: `${witchSkillDefinitions[player.skillId].name}：${witchSkillDefinitions[player.skillId].description}` }];
+  // 公开技能按角色默认技生成：与开局公开播报一致，始终恰好 6 项且唯一；
+  // 魔女因子回收等技能转移通过公开事件（factor-recovered）向 AI 呈现。
+  const publicSkills = observation.players.map((player) => {
+    const definition = witchSkillDefinitions[defaultSkillByCharacterId[player.characterId]];
+    return { playerId: player.id, name: player.name, skill: `${definition.name}：${definition.description}` };
   });
   const visibleRole = actor.roleId ? `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}` : '未公开';
   const visibleSkill = actor.skillId ? `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}` : '无可见技能';
