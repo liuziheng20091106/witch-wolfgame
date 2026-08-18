@@ -183,5 +183,10 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
-  startMainServer().catch((error) => { console.error(error); process.exitCode = 1; });
+  startMainServer().catch((error) => {
+    const message = error && typeof error.message === 'string' ? error.message : '服务启动失败';
+    const safeMessage = message.replace(/(password|secret|token|key)\s*[:=]\s*\S+/gi, '$1=[REDACTED]');
+    console.error(`[main] 启动失败: ${safeMessage}`);
+    process.exitCode = 1;
+  });
 }
