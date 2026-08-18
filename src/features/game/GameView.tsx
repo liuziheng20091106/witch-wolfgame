@@ -53,7 +53,7 @@ export function GameView(props: GameViewProps) {
   const privateEvents = observation.privateEvents.slice(-10).reverse();
   const hasResult = observation.result !== null;
   const humanDecisionPending = observation.pendingDecision?.actorId === observation.viewerPlayerId;
-  const canAutoHide = !humanDecisionPending && !observation.result;
+  const canAutoHide = mobileTab === 'live' && !humanDecisionPending && !hasResult;
   const revealMobileChrome = () => {
     setMobileChromeHidden(false);
     if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
