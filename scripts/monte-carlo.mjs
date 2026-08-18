@@ -5,7 +5,7 @@
  * 用「本地确定性策略」（src/ai/fallback.ts，即游戏里的 LOCAL STRATEGY）
  * 自动跑 N 局观战模式对局，统计好人/狼人胜率、对局长度与技能使用情况。
  *
- * 注意：本地策略与真实 AI 决策差距较大（女巫永不毒、狼人随机刀、投票随机等），
+ * 注意：本地策略与真实 AI 决策差距较大（女巫首夜必救、毒药可用时随机下毒、狼人随机刀、投票随机等），
  * 统计结果只适合作为「改技能/改规则后的相对回归信号」，不宜当作真实平衡数值。
  *
  * 用法：
@@ -71,7 +71,9 @@ function playOne(seed) {
   }
   const used = new Set(
     game.skillInstances
-      .filter((skill) => skill.status === 'exhausted' || skill.data.lastUsedNight !== undefined)
+      .filter(
+        (skill) => skill.status === 'exhausted' || skill.data.lastUsedNight !== undefined || game.causalLocks.includes(skill.id),
+      )
       .map((skill) => skill.definitionId),
   );
   const deadByRole = {};
