@@ -151,8 +151,7 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
   return server;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) startProxyServer().catch((error) => {
-  const safeMessage = error && typeof error.message === 'string' ? error.message : '启动失败';
-  console.error(`[proxy] startup failed: ${safeMessage}`);
+if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) startProxyServer().catch(() => {
+  console.error('[proxy] startup failed');
   process.exitCode = 1;
 });
