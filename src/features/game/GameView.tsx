@@ -40,6 +40,7 @@ type MobileTab = 'live' | 'players' | 'history';
 export function GameView(props: GameViewProps) {
   const { observation } = props;
   const [mobileTab, setMobileTab] = useState<MobileTab>('live');
+  const [followingLatestMessage, setFollowingLatestMessage] = useState(true);
   const [selectedPlayerId, setSelectedPlayerId] = useState<PlayerId | null>(null);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [mobileChromeHidden, setMobileChromeHidden] = useState(false);
@@ -53,7 +54,7 @@ export function GameView(props: GameViewProps) {
   const privateEvents = observation.privateEvents.slice(-10).reverse();
   const hasResult = observation.result !== null;
   const humanDecisionPending = observation.pendingDecision?.actorId === observation.viewerPlayerId;
-  const canAutoHide = mobileTab === 'live' && !humanDecisionPending && !hasResult;
+  const canAutoHide = mobileTab === 'live' && followingLatestMessage && !humanDecisionPending && !hasResult;
   const revealMobileChrome = () => {
     setMobileChromeHidden(false);
     if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
@@ -111,7 +112,7 @@ export function GameView(props: GameViewProps) {
     </nav>
     <div className={styles.workspace} data-mobile-tab={mobileTab} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <div className={`${styles.rosterPane} ${chromeClass}`}><PlayerRoster observation={observation} currentActorId={activeActorId} onSelect={setSelectedPlayerId} /></div>
-      <div className={styles.livePane}><Transcript observation={observation} phaseLabel={phaseNames[observation.phase]} /></div>
+      <div className={styles.livePane}><Transcript observation={observation} phaseLabel={phaseNames[observation.phase]} onFollowingChange={setFollowingLatestMessage} /></div>
       <aside ref={sidePaneRef} className={`${styles.sidePane} ${chromeClass}`}>
         <GameControls paused={props.paused} onPaused={props.onPaused} onSettings={props.onSettings} onRestart={() => setConfirmRestart(true)} onExit={props.onExit} />
         <DecisionPanel observation={observation} aiError={props.aiError} awaitingRetry={props.awaitingRetry} thinking={props.thinking} decisionError={props.decisionError} onSubmit={props.onSubmit} onRetry={props.onRetry} onLocal={props.onLocal} onSettings={props.onSettings} />

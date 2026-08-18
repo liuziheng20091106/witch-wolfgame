@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { GameObservation, TimelineEvent } from '../../domain/model';
 import styles from './Transcript.module.css';
 
-interface TranscriptProps { observation: GameObservation; phaseLabel: string; }
+interface TranscriptProps {
+  observation: GameObservation;
+  phaseLabel: string;
+  onFollowingChange?(following: boolean): void;
+}
 
 function EventIcon({ event }: { event: TimelineEvent }) {
   if (event.kind === 'speech') return <MessageSquareText />;
@@ -16,10 +20,14 @@ function EventIcon({ event }: { event: TimelineEvent }) {
   return <ScrollText />;
 }
 
-export function Transcript({ observation, phaseLabel }: TranscriptProps) {
+export function Transcript({ observation, phaseLabel, onFollowingChange }: TranscriptProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
   const playerById = new Map(observation.players.map((player) => [player.id, player]));
+  const updateFollowing = (nextFollowing: boolean) => {
+    setFollowing(nextFollowing);
+    onFollowingChange?.(nextFollowing);
+  };
 
   useEffect(() => {
     if (!following) return;
@@ -30,7 +38,7 @@ export function Transcript({ observation, phaseLabel }: TranscriptProps) {
     <header><h2 id="transcript-title"><span>DAY {String(observation.day).padStart(2, '0')}</span><i aria-hidden="true">·</i><span>{phaseLabel}</span><i aria-hidden="true">·</i><strong>实时庭审记录</strong></h2></header>
     <div ref={viewportRef} className={styles.viewport} tabIndex={0} onScroll={(event) => {
       const element = event.currentTarget;
-      setFollowing(element.scrollHeight - element.scrollTop - element.clientHeight < 72);
+      updateFollowing(element.scrollHeight - element.scrollTop - element.clientHeight < 72);
     }}>
       {observation.publicEvents.map((event) => {
         const speaker = event.kind === 'speech' && event.displayAuthorPlayerId !== null
@@ -47,6 +55,6 @@ export function Transcript({ observation, phaseLabel }: TranscriptProps) {
       })}
       {observation.publicEvents.length === 0 && <p className={styles.empty}>审判记录尚未开始。</p>}
     </div>
-    {!following && <button className={styles.latest} type="button" onClick={() => { setFollowing(true); viewportRef.current?.scrollTo({ top: viewportRef.current.scrollHeight, behavior: 'smooth' }); }}><ArrowDown />回到最新</button>}
+    {!following && <button className={styles.latest} type="button" onClick={() => { updateFollowing(true); viewportRef.current?.scrollTo({ top: viewportRef.current.scrollHeight, behavior: 'smooth' }); }}><ArrowDown />回到最新</button>}
   </section>;
 }
