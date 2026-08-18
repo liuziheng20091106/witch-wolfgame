@@ -29,6 +29,27 @@ function nameOf(state: GameState, playerId: PlayerId): string {
   return characterById[getPlayer(state, playerId).characterId].name;
 }
 
+function uniqueKnowledgeFactIds(state: GameState, playerId: PlayerId): string[] {
+  const factIds = state.knowledgeByPlayer[playerId].map((fact) => fact.id);
+  if (new Set(factIds).size !== factIds.length) {
+    throw new Error(`座位 ${playerId} 的知识事实 ID 冲突`);
+  }
+  return factIds;
+}
+
+function updateSelfRoleKnowledge(state: GameState, playerId: PlayerId, sourceEventId: string): void {
+  const expectedId = `${state.gameId}-fact-${playerId}-self`;
+  const fact = state.knowledgeByPlayer[playerId].find(
+    (entry) => entry.id === expectedId && entry.subjectPlayerId === playerId && entry.kind === 'role',
+  );
+  if (!fact) {
+    throw new Error(`座位 ${playerId} 缺少当前自身份事实`);
+  }
+  fact.value = getRoleAssignment(state, playerId).roleId;
+  fact.observedDay = state.day;
+  fact.sourceEventId = sourceEventId;
+}
+
 function candidatesForNightSkill(state: GameState, skillId: string, ownerId: PlayerId): PlayerId[] {
   if (skillId === 'witch-factor-recovery') {
     return state.players
@@ -58,7 +79,7 @@ export function getNextNightSkillDecision(state: GameState): PendingDecision | n
     }
     if (skill.definitionId === 'liquid-control') {
       return makeSkillDecision(state, skill, '操控液体', '抽取一名角色的职业，或公开一条你已知的事实。', targets, 'liquid-control', {
-        factIds: state.knowledgeByPlayer[skill.ownerPlayerId].map((fact) => fact.id),
+        factIds: uniqueKnowledgeFactIds(state, skill.ownerPlayerId),
       });
     }
     const titleBySkill: Record<string, string> = {
@@ -186,19 +207,9 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
       actorPlayerId: owner.id,
       targetPlayerIds: [target.id],
     });
-    // 同步双方对自己的当前职业认知：原地改写已有的自我职业事实（不删不加），
-    // 保持知识数组长度与事实 ID 单调且唯一，避免新事实与技能事实 ID 撞车
-    // 导致操控液体·传播按 ID 查找时取错事实
-    for (const swappedId of [owner.id, target.id] as PlayerId[]) {
-      const selfFact = state.knowledgeByPlayer[swappedId].find(
-        (fact) => fact.subjectPlayerId === swappedId && fact.kind === 'role',
-      );
-      if (selfFact) {
-        selfFact.value = getRoleAssignment(state, swappedId).roleId;
-        selfFact.observedDay = state.day;
-        selfFact.sourceEventId = exchangeEvent.id;
-      }
-    }
+    // 自身份事实使用稳定 ID；交换后只更新内容，避免删除后按数组长度重新编号。
+    updateSelfRoleKnowledge(state, owner.id, exchangeEvent.id);
+    updateSelfRoleKnowledge(state, target.id, exchangeEvent.id);
     exhaustSkill(skill);
     return;
   }

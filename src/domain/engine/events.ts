@@ -52,6 +52,18 @@ export function addPrivateEvent(
   return event;
 }
 
+function nextKnowledgeFactId(state: GameState, ownerPlayerId: PlayerId): string {
+  const facts = state.knowledgeByPlayer[ownerPlayerId];
+  const usedIds = new Set(facts.map((fact) => fact.id));
+  let serial = facts.length;
+  let id = `${state.gameId}-fact-${ownerPlayerId}-${serial}`;
+  while (usedIds.has(id)) {
+    serial += 1;
+    id = `${state.gameId}-fact-${ownerPlayerId}-${serial}`;
+  }
+  return id;
+}
+
 export function addKnowledge(
   state: GameState,
   ownerPlayerId: PlayerId,
@@ -66,7 +78,7 @@ export function addKnowledge(
   }
   const knowledge: KnowledgeFact = {
     ...fact,
-    id: `${state.gameId}-fact-${ownerPlayerId}-${state.knowledgeByPlayer[ownerPlayerId].length}`,
+    id: nextKnowledgeFactId(state, ownerPlayerId),
     sourceEventId,
   };
   state.knowledgeByPlayer[ownerPlayerId].push(knowledge);

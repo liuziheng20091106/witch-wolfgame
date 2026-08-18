@@ -11,6 +11,7 @@
     "server:proxy": "node proxy/server.mjs",
     "certs:generate": "node scripts/generate-certs.mjs certs",
     "test:backend": "node scripts/backend-smoke.mjs",
+    "test:domain": "node scripts/knowledge-fact-smoke.mjs",
     "sim": "node scripts/monte-carlo.mjs"
   },
   "dependencies": {
