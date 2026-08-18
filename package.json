@@ -10,7 +10,8 @@
     "server:main": "node server/main.mjs",
     "server:proxy": "node proxy/server.mjs",
     "certs:generate": "node scripts/generate-certs.mjs certs",
-    "test:backend": "node scripts/backend-smoke.mjs"
+    "test:backend": "node scripts/backend-smoke.mjs",
+    "sim": "node scripts/monte-carlo.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.31.0",

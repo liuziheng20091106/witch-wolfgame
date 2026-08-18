@@ -1,6 +1,6 @@
 import { characterById } from '../domain/catalog/characters';
 import { roleDescriptions, roleNames } from '../domain/catalog/roles';
-import { defaultSkillByCharacterId, witchSkillDefinitions } from '../domain/catalog/witchSkills';
+import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
 import type { AiDecisionRequest } from './types';
 
 export interface PromptMessage {
@@ -49,7 +49,9 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
     return { playerId: player.id, name: player.name, skill: `${definition.name}：${definition.description}` };
   });
   const visibleRole = actor.roleId ? `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}` : '未公开';
-  const visibleSkill = actor.skillId ? `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}` : '无可见技能';
+  const visibleSkill = actor.skillId
+    ? `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}${skillUsageHints[actor.skillId] ?? ''}`
+    : '无可见技能';
   const legalCandidates = pendingDecision.candidates.map((playerId) => {
     const player = observation.players.find((entry) => entry.id === playerId);
     return { playerId, name: player?.name ?? `${playerId + 1}号` };

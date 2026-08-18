@@ -50,7 +50,22 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
   }
   if (pending.schemaKey === 'witch') {
     const canSave = state.day === 0 && pending.options.canSave === true;
-    return { decision: { save: canSave, poisonTargetPlayerId: null }, rngState: state.rngState };
+    let rng = state.rngState;
+    let poisonTargetPlayerId: PlayerId | null = null;
+    if (pending.options.canPoison === true) {
+      // 毒药可用时随机下毒：候选已排除自己；若本夜救人，排除被救的袭击目标
+      let pool = pending.candidates;
+      const attacked = typeof pending.options.attackedPlayerId === 'number' ? pending.options.attackedPlayerId as PlayerId : null;
+      if (canSave && attacked !== null) {
+        pool = pool.filter((playerId) => playerId !== attacked);
+      }
+      if (pool.length > 0) {
+        const chosen = chooseWithState(pool, rng);
+        rng = chosen.state;
+        poisonTargetPlayerId = chosen.item;
+      }
+    }
+    return { decision: { save: canSave, poisonTargetPlayerId }, rngState: rng };
   }
   if (pending.schemaKey === 'ignition') {
     return { decision: { use: true }, rngState: state.rngState };
