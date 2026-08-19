@@ -50,9 +50,6 @@
 .startButton { min-width: 168px; min-height: 64px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; background: var(--verdict); color: white; font-weight: 900; }
 .startButton:disabled { background: var(--line-strong); color: var(--muted); cursor: not-allowed; }
 .startButton svg { width: 20px; }
-.replayButton { min-width: 168px; min-height: 64px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--verdict); background: var(--paper-bright); color: var(--verdict); font-weight: 900; }
-.replayButton:disabled { border-color: var(--line-strong); color: var(--muted); background: transparent; cursor: not-allowed; }
-.replayButton svg { width: 20px; }
 .storageError { grid-column: 1 / -1; margin: 0; padding: 10px 12px; background: var(--verdict-soft); color: var(--verdict-dark); }
 .storageErrorAction { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 10px 12px; background: var(--verdict-soft); color: var(--verdict-dark); }
 .storageErrorAction button { min-height: 36px; padding: 0 10px; border: 1px solid var(--verdict); background: transparent; color: var(--verdict); font-weight: 800; }

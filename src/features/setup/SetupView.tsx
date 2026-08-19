@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronRight, Copy, Eye, Play, Repeat, Settings, Trash2, UserRound } from 'lucide-react';
+import { Bot, Check, ChevronRight, Copy, Eye, Play, Settings, Trash2, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import type { AiProviderConfig } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
@@ -17,7 +17,6 @@ interface SetupViewProps {
   historyError: string | null;
   storageError: string | null;
   onUpdateSetup(setup: SetupPreferences): void;
-  onStartWithSeed(): void;
   onOpenSettings(): void;
   onContinue(): void;
   onStart(): void;
@@ -37,9 +36,8 @@ function hasUsableSettings(settings: AiProviderConfig): boolean {
   }
 }
 
-export function SetupView({ settings, setup, history, historyError, savedGame, storageError, onUpdateSetup, onStartWithSeed, onOpenSettings, onContinue, onStart, onClearHistory, onDiscard }: SetupViewProps) {
+export function SetupView({ settings, setup, history, historyError, savedGame, storageError, onUpdateSetup, onOpenSettings, onContinue, onStart, onClearHistory, onDiscard }: SetupViewProps) {
   const [confirming, setConfirming] = useState(false);
-  const [pendingKind, setPendingKind] = useState<'random' | 'seed'>('random');
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copiedSeed, setCopiedSeed] = useState<number | null>(null);
   const ready = hasUsableSettings(settings) && (setup.mode === 'spectator' || setup.humanCharacterId !== null);
@@ -59,13 +57,11 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
     }
     window.setTimeout(() => setCopiedSeed((current) => (current === seed ? null : current)), 1500);
   };
-  const launch = (kind: 'random' | 'seed') => { if (kind === 'seed') onStartWithSeed(); else onStart(); };
-  const requestStart = (kind: 'random' | 'seed') => {
+  const requestStart = () => {
     if (savedGame && savedGame.state.phase !== 'ended') {
-      setPendingKind(kind);
       setConfirming(true);
     } else {
-      launch(kind);
+      onStart();
     }
   };
 
@@ -126,13 +122,12 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
         {copyError && <p className={styles.storageError} role="status">{copyError}</p>}
         <div className={styles.launchActions}>
           {savedGame && <div className={styles.savedRun}><span>可恢复记录</span><strong>{savedLabel}</strong><button type="button" onClick={onContinue}><Play />继续上局</button><button type="button" className={styles.deleteButton} onClick={onDiscard} aria-label="删除存档"><Trash2 /></button></div>}
-          <button className={styles.startButton} type="button" disabled={!ready} onClick={() => requestStart('random')}><Play />开始新局</button>
-          <button className={styles.replayButton} type="button" disabled={!ready || setup.randomSeed} onClick={() => requestStart('seed')}><Repeat />{setup.randomSeed ? '使用种子复现对局' : `使用种子 ${setup.seed} 复现`}</button>
+          <button className={styles.startButton} type="button" disabled={!ready} onClick={requestStart}><Play />开始新局</button>
         </div>
       </section>
 
       {history.length > 0 && <section className={styles.historySection} aria-labelledby="seed-history-title">
-        <div className={styles.sectionHeading}><div><span>SEED ARCHIVE</span><h2 id="seed-history-title">对局历史</h2></div><p>复制种子分享给他人；对方把种子填入上方输入框后点「使用种子复现对局」即可复现同一阵容。</p></div>
+        <div className={styles.sectionHeading}><div><span>SEED ARCHIVE</span><h2 id="seed-history-title">对局历史</h2></div><p>复制种子分享给他人；对方把种子填入上方输入框后点「开始新局」即可复现同一阵容。</p></div>
         <div className={styles.historyList}>
           {history.map((entry) => (
             <div key={entry.gameId} className={styles.historyEntry}>
@@ -148,7 +143,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
       {confirming && <div className={styles.confirmBackdrop} role="presentation">
         <div className={styles.confirmDialog} role="alertdialog" aria-modal="true" aria-labelledby="replace-title">
           <span>REPLACE CASE</span><h2 id="replace-title">覆盖未结束存档？</h2><p>当前进行中的审判记录会被新局替换。</p>
-          <div><button type="button" onClick={() => setConfirming(false)}>取消</button><button type="button" className={styles.danger} onClick={() => { setConfirming(false); launch(pendingKind); }}>覆盖并开始</button></div>
+          <div><button type="button" onClick={() => setConfirming(false)}>取消</button><button type="button" className={styles.danger} onClick={() => { setConfirming(false); onStart(); }}>覆盖并开始</button></div>
         </div>
       </div>}
     </main>
