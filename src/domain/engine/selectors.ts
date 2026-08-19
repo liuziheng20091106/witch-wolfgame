@@ -75,6 +75,7 @@ export function selectObservation(
     mode: state.mode,
     automationMode: state.automationMode,
     board: state.board,
+    seed: state.seed,
     usedFreeProvider: state.usedFreeProvider,
     day: state.day,
     phase: state.phase,

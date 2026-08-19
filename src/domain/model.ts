@@ -325,6 +325,7 @@ export interface GameObservation {
   mode: GameMode;
   automationMode: AutomationMode;
   board: string;
+  seed: number;
   usedFreeProvider: boolean;
   day: number;
   phase: GamePhase;

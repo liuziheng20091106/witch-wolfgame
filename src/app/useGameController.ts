@@ -8,13 +8,17 @@ import { selectObservation } from '../domain/engine/selectors';
 import type { GameEvent, GameObservation, GameState, SubmittedDecision } from '../domain/model';
 import {
   clearSavedGame,
+  clearHistory as clearStoredHistory,
   loadGame,
+  loadHistory,
   loadSessionId,
   loadSettings,
   loadSetup,
   saveGame,
+  saveHistory,
   saveSettings,
   saveSetup,
+  type GameHistoryEntry,
   type SavedGameEnvelope,
   type SetupPreferences,
 } from '../storage/browserStorage';
@@ -26,10 +30,11 @@ export interface GameController {
   game: GameState | null;
   observation: GameObservation | null;
   savedGame: SavedGameEnvelope | null;
+  history: GameHistoryEntry[];
   settings: AiProviderConfig;
   setup: SetupPreferences;
-  randomSeed: boolean;
   storageError: string | null;
+  historyError: string | null;
   aiError: AiCommandError | null;
   decisionError: string | null;
   awaitingRetry: boolean;
@@ -43,6 +48,7 @@ export interface GameController {
   continueSavedGame(): void;
   returnToSetup(): void;
   discardSavedGame(): void;
+  clearHistory(): void;
   submitHumanDecision(decision: SubmittedDecision): void;
   retryAi(): void;
   useLocalFallback(): void;
@@ -53,6 +59,8 @@ interface InitialBrowserState {
   settings: AiProviderConfig;
   setup: SetupPreferences;
   savedGame: SavedGameEnvelope | null;
+  history: GameHistoryEntry[];
+  historyError: string | null;
   error: string | null;
 }
 
@@ -60,6 +68,7 @@ function readInitialBrowserState(): InitialBrowserState {
   const settingsResult = loadSettings();
   const setupResult = loadSetup();
   const gameResult = loadGame();
+  const historyResult = loadHistory();
   const errors = [settingsResult, setupResult, gameResult]
     .filter((result) => !result.ok)
     .map((result) => result.ok ? '' : result.error);
@@ -67,6 +76,8 @@ function readInitialBrowserState(): InitialBrowserState {
     settings: settingsResult.ok && settingsResult.value ? settingsResult.value : defaultAiConfig,
     setup: setupResult.ok && setupResult.value ? setupResult.value : { mode: 'spectator', humanCharacterId: null, seed: 1, randomSeed: true },
     savedGame: gameResult.ok ? gameResult.value : null,
+    history: historyResult.ok && historyResult.value ? historyResult.value : [],
+    historyError: historyResult.ok ? null : historyResult.error,
     error: errors[0] ?? null,
   };
 }
@@ -92,10 +103,14 @@ export function useGameController(): GameController {
   const [thinking, setThinking] = useState(false);
   const [paused, setPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(initial.historyError);
+  const [history, setHistory] = useState<GameHistoryEntry[]>(initial.history);
+  const historyRef = useRef<GameHistoryEntry[]>(initial.history);
   const sessionIdRef = useRef(loadSessionId());
   const activeRequestRef = useRef<string | null>(null);
 
   const commit = useCallback((next: GameState) => {
+    const prev = gameRef.current;
     gameRef.current = next;
     setGame(next);
     try {
@@ -103,6 +118,25 @@ export function useGameController(): GameController {
       setStorageError(null);
     } catch (error) {
       setStorageError(error instanceof Error ? error.message : '保存游戏失败');
+    }
+    // 对局结束（phase 首次变为 ended）时记入对局历史，按 gameId 去重，最多保留 50 条
+    if (prev?.phase !== 'ended' && next.phase === 'ended' && next.result) {
+      const entry: GameHistoryEntry = {
+        gameId: next.gameId,
+        seed: next.seed,
+        finishedDay: next.result.finishedDay,
+        winner: next.result.winner,
+        finishedAt: new Date().toISOString(),
+      };
+      const updated = [entry, ...historyRef.current.filter((item) => item.gameId !== entry.gameId)].slice(0, 50);
+      historyRef.current = updated;
+      setHistory(updated);
+      try {
+        saveHistory(updated);
+        setHistoryError(null);
+      } catch (error) {
+        setHistoryError(error instanceof Error ? `对局历史保存失败：${error.message}` : '对局历史保存失败');
+      }
     }
   }, []);
 
@@ -216,6 +250,7 @@ export function useGameController(): GameController {
     setView('game');
   }, [commit, setup]);
 
+  // 输入框有固定种子时复现该种子，否则生成随机种子
   const startNewGame = useCallback(() => {
     beginGame(setup.randomSeed ? rollSeed() : setup.seed);
   }, [beginGame, setup]);
@@ -248,6 +283,16 @@ export function useGameController(): GameController {
     gameRef.current = null;
     setGame(null);
   }, []);
+  const clearHistory = useCallback(() => {
+    try {
+      clearStoredHistory();
+      historyRef.current = [];
+      setHistory([]);
+      setHistoryError(null);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? `清除对局历史失败：${error.message}` : '清除对局历史失败');
+    }
+  }, []);
 
   const submitHumanDecision = useCallback((decision: SubmittedDecision) => {
     const current = gameRef.current;
@@ -272,10 +317,9 @@ export function useGameController(): GameController {
   }, [commit]);
 
   return {
-    view, game, observation, savedGame, settings, setup, storageError, aiError, decisionError,
+    view, game, observation, savedGame, history, historyError, settings, setup, storageError, aiError, decisionError,
     awaitingRetry, thinking, paused, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
-    randomSeed: setup.randomSeed,
-    startNewGame, continueSavedGame, returnToSetup, discardSavedGame, submitHumanDecision,
+    startNewGame, continueSavedGame, returnToSetup, discardSavedGame, clearHistory, submitHumanDecision,
     retryAi, useLocalFallback, setPaused,
   };
 }

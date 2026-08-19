@@ -9,12 +9,15 @@ export function App() {
     {controller.view === 'setup' || !controller.observation ? <SetupView
       settings={controller.settings}
       setup={controller.setup}
+      history={controller.history}
+      historyError={controller.historyError}
       savedGame={controller.savedGame}
       storageError={controller.storageError}
       onUpdateSetup={controller.updateSetup}
       onOpenSettings={() => controller.setSettingsOpen(true)}
       onContinue={controller.continueSavedGame}
       onStart={controller.startNewGame}
+      onClearHistory={controller.clearHistory}
       onDiscard={controller.discardSavedGame}
     /> : <GameView
       observation={controller.observation}
@@ -28,7 +31,6 @@ export function App() {
       onLocal={controller.useLocalFallback}
       onSettings={() => controller.setSettingsOpen(true)}
       onPaused={controller.setPaused}
-      randomSeed={controller.randomSeed}
       onRestart={controller.startNewGame}
       onExit={controller.returnToSetup}
     />}
