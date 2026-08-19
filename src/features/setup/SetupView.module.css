@@ -50,6 +50,9 @@
 .startButton { min-width: 168px; min-height: 64px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; background: var(--verdict); color: white; font-weight: 900; }
 .startButton:disabled { background: var(--line-strong); color: var(--muted); cursor: not-allowed; }
 .startButton svg { width: 20px; }
+.replayButton { min-width: 168px; min-height: 64px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--verdict); background: var(--paper-bright); color: var(--verdict); font-weight: 900; }
+.replayButton:disabled { border-color: var(--line-strong); color: var(--muted); background: transparent; cursor: not-allowed; }
+.replayButton svg { width: 20px; }
 .storageError { grid-column: 1 / -1; margin: 0; padding: 10px 12px; background: var(--verdict-soft); color: var(--verdict-dark); }
 .confirmBackdrop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 18px; background: rgb(23 22 26 / 70%); }
 .confirmDialog { width: min(440px, 100%); padding: 28px; border-top: 6px solid var(--verdict); background: var(--paper-bright); box-shadow: 0 22px 60px rgb(0 0 0 / 36%); }

@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronRight, Dices, Eye, Play, Settings, Trash2, UserRound } from 'lucide-react';
+import { Bot, Check, ChevronRight, Dices, Eye, Play, Repeat, Settings, Trash2, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { rollSeed } from '../../app/useGameController';
 import type { AiProviderConfig } from '../../ai/types';
@@ -14,6 +14,7 @@ interface SetupViewProps {
   savedGame: SavedGameEnvelope | null;
   storageError: string | null;
   onUpdateSetup(setup: SetupPreferences): void;
+  onStartWithSeed(): void;
   onOpenSettings(): void;
   onContinue(): void;
   onStart(): void;
@@ -32,15 +33,24 @@ function hasUsableSettings(settings: AiProviderConfig): boolean {
   }
 }
 
-export function SetupView({ settings, setup, savedGame, storageError, onUpdateSetup, onOpenSettings, onContinue, onStart, onDiscard }: SetupViewProps) {
+export function SetupView({ settings, setup, savedGame, storageError, onUpdateSetup, onStartWithSeed, onOpenSettings, onContinue, onStart, onDiscard }: SetupViewProps) {
   const [confirming, setConfirming] = useState(false);
+  const [pendingKind, setPendingKind] = useState<'random' | 'seed'>('random');
   const ready = hasUsableSettings(settings) && (setup.mode === 'spectator' || setup.humanCharacterId !== null);
   const savedLabel = savedGame
     ? `${savedGame.state.day === 0 ? '首夜' : `第 ${savedGame.state.day} 天`} · ${savedGame.state.phase === 'ended' ? '已结束' : '进行中'}`
     : null;
 
   const chooseCharacter = (characterId: CharacterId) => onUpdateSetup({ ...setup, humanCharacterId: characterId });
-  const requestStart = () => savedGame && savedGame.state.phase !== 'ended' ? setConfirming(true) : onStart();
+  const launch = (kind: 'random' | 'seed') => { if (kind === 'seed') onStartWithSeed(); else onStart(); };
+  const requestStart = (kind: 'random' | 'seed') => {
+    if (savedGame && savedGame.state.phase !== 'ended') {
+      setPendingKind(kind);
+      setConfirming(true);
+    } else {
+      launch(kind);
+    }
+  };
 
   return (
     <main className={styles.page}>
@@ -68,7 +78,7 @@ export function SetupView({ settings, setup, savedGame, storageError, onUpdateSe
               }
               onUpdateSetup({ ...setup, seed: Math.max(0, Math.min(0xffff_ffff, Number(event.target.value) || 0)), randomSeed: false });
             }} />
-            <button type="button" className={setup.randomSeed ? styles.seedRandomButtonActive : styles.seedRandomButton} aria-pressed={setup.randomSeed} title="点击随机生成一个种子并填入输入框，可多次点击更换；清空输入框则回到开局时随机" onClick={() => onUpdateSetup({ ...setup, seed: rollSeed(), randomSeed: false })}><Dices />随机</button>
+            <button type="button" className={setup.randomSeed ? styles.seedRandomButtonActive : styles.seedRandomButton} aria-pressed={setup.randomSeed} title="生成一个种子候选填入输入框，再点「使用种子复现对局」即可复现该种子；开始新局始终使用随机种子" onClick={() => onUpdateSetup({ ...setup, seed: rollSeed(), randomSeed: false })}><Dices />随机</button>
           </div>
         </div>
       </section>
@@ -98,14 +108,15 @@ export function SetupView({ settings, setup, savedGame, storageError, onUpdateSe
         {storageError && <p className={styles.storageError} role="alert">{storageError}</p>}
         <div className={styles.launchActions}>
           {savedGame && <div className={styles.savedRun}><span>可恢复记录</span><strong>{savedLabel}</strong><button type="button" onClick={onContinue}><Play />继续上局</button><button type="button" className={styles.deleteButton} onClick={onDiscard} aria-label="删除存档"><Trash2 /></button></div>}
-          <button className={styles.startButton} type="button" disabled={!ready} onClick={requestStart}><Play />开始新局</button>
+          <button className={styles.startButton} type="button" disabled={!ready} onClick={() => requestStart('random')}><Play />开始新局</button>
+          <button className={styles.replayButton} type="button" disabled={!ready || setup.randomSeed} onClick={() => requestStart('seed')}><Repeat />{setup.randomSeed ? '使用种子复现对局' : `使用种子 ${setup.seed} 复现`}</button>
         </div>
       </section>
 
       {confirming && <div className={styles.confirmBackdrop} role="presentation">
         <div className={styles.confirmDialog} role="alertdialog" aria-modal="true" aria-labelledby="replace-title">
           <span>REPLACE CASE</span><h2 id="replace-title">覆盖未结束存档？</h2><p>当前进行中的审判记录会被新局替换。</p>
-          <div><button type="button" onClick={() => setConfirming(false)}>取消</button><button type="button" className={styles.danger} onClick={() => { setConfirming(false); onStart(); }}>覆盖并开始</button></div>
+          <div><button type="button" onClick={() => setConfirming(false)}>取消</button><button type="button" className={styles.danger} onClick={() => { setConfirming(false); launch(pendingKind); }}>覆盖并开始</button></div>
         </div>
       </div>}
     </main>

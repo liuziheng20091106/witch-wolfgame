@@ -28,7 +28,6 @@ export interface GameController {
   savedGame: SavedGameEnvelope | null;
   settings: AiProviderConfig;
   setup: SetupPreferences;
-  randomSeed: boolean;
   storageError: string | null;
   aiError: AiCommandError | null;
   decisionError: string | null;
@@ -38,6 +37,7 @@ export interface GameController {
   settingsOpen: boolean;
   setSettingsOpen(open: boolean): void;
   updateSetup(next: SetupPreferences): void;
+  startWithSeed(): void;
   saveAiSettings(next: AiProviderConfig): void;
   startNewGame(): void;
   continueSavedGame(): void;
@@ -216,7 +216,12 @@ export function useGameController(): GameController {
     setView('game');
   }, [commit, setup]);
 
+  // 「开始新局」始终使用随机种子；只有「使用种子复现对局」才用输入框中的固定种子
   const startNewGame = useCallback(() => {
+    beginGame(rollSeed());
+  }, [beginGame]);
+
+  const startWithSeed = useCallback(() => {
     beginGame(setup.randomSeed ? rollSeed() : setup.seed);
   }, [beginGame, setup]);
 
@@ -274,8 +279,7 @@ export function useGameController(): GameController {
   return {
     view, game, observation, savedGame, settings, setup, storageError, aiError, decisionError,
     awaitingRetry, thinking, paused, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
-    randomSeed: setup.randomSeed,
-    startNewGame, continueSavedGame, returnToSetup, discardSavedGame, submitHumanDecision,
+    startNewGame, startWithSeed, continueSavedGame, returnToSetup, discardSavedGame, submitHumanDecision,
     retryAi, useLocalFallback, setPaused,
   };
 }

@@ -12,6 +12,7 @@ export function App() {
       savedGame={controller.savedGame}
       storageError={controller.storageError}
       onUpdateSetup={controller.updateSetup}
+      onStartWithSeed={controller.startWithSeed}
       onOpenSettings={() => controller.setSettingsOpen(true)}
       onContinue={controller.continueSavedGame}
       onStart={controller.startNewGame}
@@ -28,7 +29,6 @@ export function App() {
       onLocal={controller.useLocalFallback}
       onSettings={() => controller.setSettingsOpen(true)}
       onPaused={controller.setPaused}
-      randomSeed={controller.randomSeed}
       onRestart={controller.startNewGame}
       onExit={controller.returnToSetup}
     />}
