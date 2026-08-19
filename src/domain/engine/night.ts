@@ -1,5 +1,5 @@
 import { characterById } from '../catalog/characters';
-import type { DeathIntent, GameState, PlayerId, WitchSkillInstance } from '../model';
+import type { DeathIntent, GameState, PlayerId, RoleAssignmentState, WitchSkillInstance } from '../model';
 import { addPublicEvent } from './events';
 import { createRewindSnapshot } from './createGame';
 import { getPlayer } from './selectors';
@@ -23,6 +23,7 @@ function rewindForDeath(state: GameState, deadPlayerIds: PlayerId[]): GameState 
   if (!trigger || !state.morningCheckpoint) {
     return null;
   }
+  const ownerId = trigger.ownerPlayerId;
   const checkpoint = structuredClone(state.morningCheckpoint);
   const archive = {
     id: `${state.gameId}-archive-${state.archivedTimelines.length}`,
@@ -30,6 +31,15 @@ function rewindForDeath(state: GameState, deadPlayerIds: PlayerId[]): GameState 
     publicEvents: structuredClone(state.publicEvents),
     privateEvents: structuredClone(state.privateEvents),
   };
+  // 死亡回溯：仅使用者保留回溯前的记忆（知识 + 其可见的私有事件）。
+  // 私有事件必须改为仅使用者可见（viewerPlayerIds 收敛为 [owner]），
+  // 否则狼队共享事件等会把"记忆"泄漏给其他角色。
+  const ownerMemoryKnowledge = structuredClone(state.knowledgeByPlayer[ownerId]);
+  const ownerMemoryEvents = structuredClone(
+    state.privateEvents
+      .filter((event) => event.viewerPlayerIds.includes(ownerId))
+      .map((event) => ({ ...event, viewerPlayerIds: [ownerId] })),
+  );
   const restored: GameState = {
     ...checkpoint,
     usedFreeProvider: state.usedFreeProvider,
@@ -37,7 +47,31 @@ function rewindForDeath(state: GameState, deadPlayerIds: PlayerId[]): GameState 
     morningCheckpoint: structuredClone(state.morningCheckpoint),
     causalLocks: [...state.causalLocks, trigger.id],
     archivedTimelines: [...state.archivedTimelines, archive],
+    knowledgeByPlayer: {
+      ...checkpoint.knowledgeByPlayer,
+      [ownerId]: ownerMemoryKnowledge,
+    },
+    privateEvents: [
+      ...checkpoint.privateEvents,
+      ...ownerMemoryEvents.filter((event) => !checkpoint.privateEvents.some((existing) => existing.id === event.id)),
+    ],
   };
+  // 若回溯前发生过灵魂交换，记忆中的自我职业可能与恢复后的职业不一致：
+  // 交换已被回溯撤销，以恢复后的职业为准修正使用者记忆中的"所有"自我职业事实
+  //（可能存在多条：初始事实 + 千里眼自我提及等），交换事件仍保留在记忆中
+  const ownerPlayer = restored.players[ownerId];
+  let restoredAssignment: RoleAssignmentState | undefined;
+  if (ownerPlayer) {
+    restoredAssignment = restored.roleAssignments.find((entry) => entry.id === ownerPlayer.roleAssignmentId);
+  }
+  if (restoredAssignment) {
+    for (const fact of restored.knowledgeByPlayer[ownerId]) {
+      if (fact.subjectPlayerId === ownerId && fact.kind === 'role') {
+        fact.value = restoredAssignment.roleId;
+        fact.observedDay = restored.day;
+      }
+    }
+  }
   addPublicEvent(restored, 'timeline-rewound', `${nameOf(state, trigger.ownerPlayerId)} 的死亡回溯发动，审判返回此前的晨间节点。`, {
     actorPlayerId: trigger.ownerPlayerId,
   });

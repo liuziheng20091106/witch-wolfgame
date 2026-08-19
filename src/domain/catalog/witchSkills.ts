@@ -41,4 +41,5 @@ export const defaultSkillByCharacterId: Record<CharacterId, WitchSkillId> = {
  */
 export const skillUsageHints: Partial<Record<WitchSkillId, string>> = {
   'soul-exchange': '使用建议：如果你是狼人，建议优先换神职（风险较高）；如果你是好人，可换狼（风险较高）或换好人互发金水；交换后旧知识失效，按新阵营行动。',
+  'death-rewind': '使用建议：你拥有死亡回溯前的记忆（仅你可感知），请利用这次机会改变发言或行动策略，例如调整投票、查验或袭击目标。',
 };
