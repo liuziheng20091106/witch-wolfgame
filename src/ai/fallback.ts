@@ -8,17 +8,8 @@ export interface FallbackResult {
   rngState: number;
 }
 
-function chooseCandidate(state: GameState, pending: PendingDecision, rngState: number): { playerId: PlayerId; rngState: number } {
-  let candidates = pending.candidates;
-  if (pending.kind === 'vote') {
-    const focus = state.skillInstances.find(
-      (skill) => skill.definitionId === 'brainwash' && skill.data.activeDay === state.day && typeof skill.data.targetPlayerId === 'number',
-    )?.data.targetPlayerId;
-    if (typeof focus === 'number' && candidates.includes(focus as PlayerId)) {
-      candidates = [...candidates, focus as PlayerId];
-    }
-  }
-  const selected = chooseWithState(candidates, rngState);
+function chooseCandidate(pending: PendingDecision, rngState: number): { playerId: PlayerId; rngState: number } {
+  const selected = chooseWithState(pending.candidates, rngState);
   return { playerId: selected.item, rngState: selected.state };
 }
 
@@ -37,15 +28,15 @@ function guidedSpeech(state: GameState, actorId: PlayerId, source: string): stri
   return `${source.slice(0, Math.max(0, 100 - suffix.length))}${suffix}`;
 }
 
-function fallbackSpeech(state: GameState, pending: PendingDecision, rngState: number): { speech: string; rngState: number } {
-  const character = characterById[getPlayer(state, pending.actorId).characterId];
+function fallbackSpeech(state: GameState, speakerId: PlayerId, pending: PendingDecision, rngState: number): { speech: string; rngState: number } {
+  const character = characterById[getPlayer(state, speakerId).characterId];
   const selected = chooseWithState(character.examplePhrases, rngState);
   return { speech: guidedSpeech(state, pending.actorId, selected.item), rngState: selected.state };
 }
 
 export function fallbackDecision(state: GameState, pending: PendingDecision): FallbackResult {
   if (pending.schemaKey === 'speech') {
-    const speech = fallbackSpeech(state, pending, state.rngState);
+    const speech = fallbackSpeech(state, pending.actorId, pending, state.rngState);
     return { decision: { speech: speech.speech }, rngState: speech.rngState };
   }
   if (pending.schemaKey === 'witch') {
@@ -77,7 +68,7 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
     if (pending.schemaKey === 'optional-target') return { decision: { use: false, targetPlayerId: null }, rngState: state.rngState };
     return { decision: { targetPlayerId: null }, rngState: state.rngState };
   }
-  const selected = chooseCandidate(state, pending, state.rngState);
+  const selected = chooseCandidate(pending, state.rngState);
   if (pending.schemaKey === 'liquid-control') {
     return { decision: { use: true, mode: 'extract', targetPlayerId: selected.playerId, factId: null }, rngState: selected.rngState };
   }
@@ -85,7 +76,8 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
     return { decision: { use: true, mode: 'move-last', targetPlayerId: selected.playerId }, rngState: selected.rngState };
   }
   if (pending.schemaKey === 'voice-mimic') {
-    const generated = fallbackSpeech(state, pending, selected.rngState);
+    // 伪造发言必须使用"被模仿者"的例句，而不是模仿者自己的
+    const generated = fallbackSpeech(state, selected.playerId, pending, selected.rngState);
     return {
       decision: { use: true, targetPlayerId: selected.playerId, forgedSpeech: generated.speech },
       rngState: generated.rngState,

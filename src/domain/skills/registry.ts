@@ -1,6 +1,7 @@
 export { getHealingDecision, getNextNightSkillDecision, applyNightSkillDecision } from './nightSkills';
 export {
   applySpeechSkillDecision,
+  attachBrainwashSuggestion,
   getAfterSpeechSkillDecision,
   getBeforeSpeechSkillDecision,
   getNextDayStartSkillDecision,
