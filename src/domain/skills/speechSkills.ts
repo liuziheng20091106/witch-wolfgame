@@ -70,12 +70,19 @@ export function getAfterSpeechSkillDecision(state: GameState, actorId: PlayerId)
   );
   const candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== actorId && !spoken.has(playerId));
   if (candidates.length === 0) return null;
-  const decision = makeSkillDecision(state, skill, '声音模仿', '选择一名尚未发言者，并伪造一段不超过 100 字的内容。', candidates, 'voice-mimic');
+  // 声音模仿必须"以被模仿者的声音"书写伪造内容：把候选者的说话风格交给 AI，并强制要求模仿目标本人的语气。
+  // speechStyle 截断到 300 字，避免 options 超过后端 8000 字节上限（角色数据未来可能变长）
+  const mimicVoices = candidates.map((playerId) => {
+    const player = getPlayer(state, playerId);
+    return { playerId, name: nameOf(state, playerId), speechStyle: characterById[player.characterId].speechStyle.slice(0, 300) };
+  });
+  const decision = makeSkillDecision(state, skill, '声音模仿', '选择一名尚未发言者，并伪造一段不超过 100 字的内容。伪造内容必须完全模仿所选目标本人的说话风格与语气，禁止使用你自己的说话风格。', candidates, 'voice-mimic', { mimicVoices });
   const guide = state.skillInstances.find(
     (entry) => entry.definitionId === 'gaze-guidance' && getPlayer(state, entry.ownerPlayerId).alive,
   );
   if (guide && guide.ownerPlayerId !== actorId) {
     decision.options = {
+      ...decision.options,
       requiredMention: nameOf(state, guide.ownerPlayerId),
       requiredSeatLabel: `${guide.ownerPlayerId + 1}号`,
     };
