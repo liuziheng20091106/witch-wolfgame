@@ -1,23 +1,27 @@
 import { Bot, Check, ChevronRight, Copy, Eye, Play, Repeat, Settings, Trash2, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import type { AiProviderConfig } from '../../ai/types';
+import { copyTextToClipboard } from '../../app/clipboard';
 import { characters } from '../../domain/catalog/characters';
 import type { CharacterId } from '../../domain/model';
 import type { GameHistoryEntry, SavedGameEnvelope, SetupPreferences } from '../../storage/browserStorage';
 import brandMark from '../../assets/icon.ico';
 import styles from './SetupView.module.css';
 
+
 interface SetupViewProps {
   settings: AiProviderConfig;
   setup: SetupPreferences;
   history: GameHistoryEntry[];
   savedGame: SavedGameEnvelope | null;
+  historyError: string | null;
   storageError: string | null;
   onUpdateSetup(setup: SetupPreferences): void;
   onStartWithSeed(): void;
   onOpenSettings(): void;
   onContinue(): void;
   onStart(): void;
+  onClearHistory(): void;
   onDiscard(): void;
 }
 
@@ -33,9 +37,10 @@ function hasUsableSettings(settings: AiProviderConfig): boolean {
   }
 }
 
-export function SetupView({ settings, setup, history, savedGame, storageError, onUpdateSetup, onStartWithSeed, onOpenSettings, onContinue, onStart, onDiscard }: SetupViewProps) {
+export function SetupView({ settings, setup, history, historyError, savedGame, storageError, onUpdateSetup, onStartWithSeed, onOpenSettings, onContinue, onStart, onClearHistory, onDiscard }: SetupViewProps) {
   const [confirming, setConfirming] = useState(false);
   const [pendingKind, setPendingKind] = useState<'random' | 'seed'>('random');
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [copiedSeed, setCopiedSeed] = useState<number | null>(null);
   const ready = hasUsableSettings(settings) && (setup.mode === 'spectator' || setup.humanCharacterId !== null);
   const savedLabel = savedGame
@@ -43,9 +48,15 @@ export function SetupView({ settings, setup, history, savedGame, storageError, o
     : null;
 
   const chooseCharacter = (characterId: CharacterId) => onUpdateSetup({ ...setup, humanCharacterId: characterId });
-  const copySeed = (seed: number) => {
-    void navigator.clipboard.writeText(String(seed));
-    setCopiedSeed(seed);
+  const copySeed = async (seed: number) => {
+    try {
+      await copyTextToClipboard(String(seed));
+      setCopiedSeed(seed);
+      setCopyError(null);
+    } catch (error) {
+      setCopiedSeed(null);
+      setCopyError(error instanceof Error ? `复制种子失败：${error.message}` : '复制种子失败，请手动复制');
+    }
     window.setTimeout(() => setCopiedSeed((current) => (current === seed ? null : current)), 1500);
   };
   const launch = (kind: 'random' | 'seed') => { if (kind === 'seed') onStartWithSeed(); else onStart(); };
@@ -111,6 +122,8 @@ export function SetupView({ settings, setup, history, savedGame, storageError, o
           <button type="button" onClick={onOpenSettings}>{settings.provider === 'free' ? '服务详情' : '打开设置'}<ChevronRight /></button>
         </div>
         {storageError && <p className={styles.storageError} role="alert">{storageError}</p>}
+        {historyError && <div className={styles.storageErrorAction} role="alert"><span>{historyError}</span><button type="button" onClick={onClearHistory}>清除损坏历史</button></div>}
+        {copyError && <p className={styles.storageError} role="status">{copyError}</p>}
         <div className={styles.launchActions}>
           {savedGame && <div className={styles.savedRun}><span>可恢复记录</span><strong>{savedLabel}</strong><button type="button" onClick={onContinue}><Play />继续上局</button><button type="button" className={styles.deleteButton} onClick={onDiscard} aria-label="删除存档"><Trash2 /></button></div>}
           <button className={styles.startButton} type="button" disabled={!ready} onClick={() => requestStart('random')}><Play />开始新局</button>

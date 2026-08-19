@@ -224,4 +224,8 @@ export function saveHistory(entries: GameHistoryEntry[]): void {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(historySchema.parse(entries.slice(0, 50))));
 }
 
+export function clearHistory(): void {
+  localStorage.removeItem(HISTORY_KEY);
+}
+
 export type { CharacterId, PlayerId };

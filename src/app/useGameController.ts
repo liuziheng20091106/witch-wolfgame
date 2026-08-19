@@ -8,6 +8,7 @@ import { selectObservation } from '../domain/engine/selectors';
 import type { GameEvent, GameObservation, GameState, SubmittedDecision } from '../domain/model';
 import {
   clearSavedGame,
+  clearHistory as clearStoredHistory,
   loadGame,
   loadHistory,
   loadSessionId,
@@ -33,6 +34,7 @@ export interface GameController {
   settings: AiProviderConfig;
   setup: SetupPreferences;
   storageError: string | null;
+  historyError: string | null;
   aiError: AiCommandError | null;
   decisionError: string | null;
   awaitingRetry: boolean;
@@ -47,6 +49,7 @@ export interface GameController {
   continueSavedGame(): void;
   returnToSetup(): void;
   discardSavedGame(): void;
+  clearHistory(): void;
   submitHumanDecision(decision: SubmittedDecision): void;
   retryAi(): void;
   useLocalFallback(): void;
@@ -58,6 +61,7 @@ interface InitialBrowserState {
   setup: SetupPreferences;
   savedGame: SavedGameEnvelope | null;
   history: GameHistoryEntry[];
+  historyError: string | null;
   error: string | null;
 }
 
@@ -66,7 +70,7 @@ function readInitialBrowserState(): InitialBrowserState {
   const setupResult = loadSetup();
   const gameResult = loadGame();
   const historyResult = loadHistory();
-  const errors = [settingsResult, setupResult, gameResult, historyResult]
+  const errors = [settingsResult, setupResult, gameResult]
     .filter((result) => !result.ok)
     .map((result) => result.ok ? '' : result.error);
   return {
@@ -74,6 +78,7 @@ function readInitialBrowserState(): InitialBrowserState {
     setup: setupResult.ok && setupResult.value ? setupResult.value : { mode: 'spectator', humanCharacterId: null, seed: 1, randomSeed: true },
     savedGame: gameResult.ok ? gameResult.value : null,
     history: historyResult.ok && historyResult.value ? historyResult.value : [],
+    historyError: historyResult.ok ? null : historyResult.error,
     error: errors[0] ?? null,
   };
 }
@@ -99,6 +104,7 @@ export function useGameController(): GameController {
   const [thinking, setThinking] = useState(false);
   const [paused, setPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(initial.historyError);
   const [history, setHistory] = useState<GameHistoryEntry[]>(initial.history);
   const historyRef = useRef<GameHistoryEntry[]>(initial.history);
   const sessionIdRef = useRef(loadSessionId());
@@ -128,8 +134,9 @@ export function useGameController(): GameController {
       setHistory(updated);
       try {
         saveHistory(updated);
-      } catch {
-        // 历史记录保存失败不影响对局
+        setHistoryError(null);
+      } catch (error) {
+        setHistoryError(error instanceof Error ? `对局历史保存失败：${error.message}` : '对局历史保存失败');
       }
     }
   }, []);
@@ -281,6 +288,16 @@ export function useGameController(): GameController {
     gameRef.current = null;
     setGame(null);
   }, []);
+  const clearHistory = useCallback(() => {
+    try {
+      clearStoredHistory();
+      historyRef.current = [];
+      setHistory([]);
+      setHistoryError(null);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? `清除对局历史失败：${error.message}` : '清除对局历史失败');
+    }
+  }, []);
 
   const submitHumanDecision = useCallback((decision: SubmittedDecision) => {
     const current = gameRef.current;
@@ -305,9 +322,9 @@ export function useGameController(): GameController {
   }, [commit]);
 
   return {
-    view, game, observation, savedGame, history, settings, setup, storageError, aiError, decisionError,
+    view, game, observation, savedGame, history, historyError, settings, setup, storageError, aiError, decisionError,
     awaitingRetry, thinking, paused, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
-    startNewGame, startWithSeed, continueSavedGame, returnToSetup, discardSavedGame, submitHumanDecision,
+    startNewGame, startWithSeed, continueSavedGame, returnToSetup, discardSavedGame, clearHistory, submitHumanDecision,
     retryAi, useLocalFallback, setPaused,
   };
 }

@@ -10,6 +10,7 @@ export function App() {
       settings={controller.settings}
       setup={controller.setup}
       history={controller.history}
+      historyError={controller.historyError}
       savedGame={controller.savedGame}
       storageError={controller.storageError}
       onUpdateSetup={controller.updateSetup}
@@ -17,6 +18,7 @@ export function App() {
       onOpenSettings={() => controller.setSettingsOpen(true)}
       onContinue={controller.continueSavedGame}
       onStart={controller.startNewGame}
+      onClearHistory={controller.clearHistory}
       onDiscard={controller.discardSavedGame}
     /> : <GameView
       observation={controller.observation}
