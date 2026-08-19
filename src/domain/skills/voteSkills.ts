@@ -2,6 +2,7 @@ import { characterById } from '../catalog/characters';
 import type { GameState, LevitationDecision, PendingDecision, PlayerId, SubmittedDecision } from '../model';
 import { addPrivateEvent, addPublicEvent } from '../engine/events';
 import { getAlivePlayerIds, getPlayer } from '../engine/selectors';
+import { attachBrainwashSuggestion } from './speechSkills';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
@@ -86,7 +87,7 @@ export function getTieBreaker(state: GameState, tiedPlayerIds: PlayerId[]): Pend
   if (!skill) {
     return null;
   }
-  return {
+  const decision: PendingDecision = {
     id: `${state.gameId}-decision-${state.day}-tie-break-${skill.ownerPlayerId}`,
     kind: 'tie-break',
     schemaKey: 'target',
@@ -98,4 +99,6 @@ export function getTieBreaker(state: GameState, tiedPlayerIds: PlayerId[]): Pend
     skillInstanceId: skill.id,
     options: {},
   };
+  attachBrainwashSuggestion(state, decision);
+  return decision;
 }

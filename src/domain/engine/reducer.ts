@@ -15,6 +15,7 @@ import {
   applyNightSkillDecision,
   applySpeechSkillDecision,
   applyVoteSkillDecision,
+  attachBrainwashSuggestion,
   getAfterSpeechSkillDecision,
   getBeforeSpeechSkillDecision,
   getHealingDecision,
@@ -55,7 +56,7 @@ function makeRoleDecision(
   allowAbstain: boolean,
   schemaKey: PendingDecision['schemaKey'] = 'target',
 ): PendingDecision {
-  return {
+  const decision: PendingDecision = {
     id: pendingId(state, kind, actorId),
     kind,
     schemaKey,
@@ -67,6 +68,8 @@ function makeRoleDecision(
     skillInstanceId: null,
     options: {},
   };
+  attachBrainwashSuggestion(state, decision);
+  return decision;
 }
 
 function livingWolves(state: GameState): PlayerId[] {
@@ -216,11 +219,7 @@ function advanceSpeeches(state: GameState): GameState {
     state.phase = 'vote-skills';
     return state;
   }
-  const beforeDecision = getBeforeSpeechSkillDecision(state, actorId);
-  if (beforeDecision) {
-    state.pendingDecision = beforeDecision;
-    return state;
-  }
+  // 禁言检查先于发言前技能：被"力气大"禁言者今天无法发言，不应被询问洗脑等发言前技能
   if (isRestrainedToday(state, actorId)) {
     addPublicEvent(state, 'restrained', `${nameOf(state, actorId)} 受到限制，无法发言。`, {
       actorPlayerId: actorId,
@@ -230,12 +229,18 @@ function advanceSpeeches(state: GameState): GameState {
     });
     return state;
   }
+  const beforeDecision = getBeforeSpeechSkillDecision(state, actorId);
+  if (beforeDecision) {
+    state.pendingDecision = beforeDecision;
+    return state;
+  }
   const speechDecision = makeRoleDecision(state, 'speech', actorId, `${nameOf(state, actorId)} 发言`, '公开发言不超过 100 字。', [], true, 'speech');
   const guide = state.skillInstances.find(
     (skill) => skill.definitionId === 'gaze-guidance' && getPlayer(state, skill.ownerPlayerId).alive,
   );
   if (guide && guide.ownerPlayerId !== actorId) {
     speechDecision.options = {
+      ...speechDecision.options,
       requiredMention: nameOf(state, guide.ownerPlayerId),
       requiredSeatLabel: `${guide.ownerPlayerId + 1}号`,
     };

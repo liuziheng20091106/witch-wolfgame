@@ -8,17 +8,8 @@ export interface FallbackResult {
   rngState: number;
 }
 
-function chooseCandidate(state: GameState, pending: PendingDecision, rngState: number): { playerId: PlayerId; rngState: number } {
-  let candidates = pending.candidates;
-  if (pending.kind === 'vote') {
-    const focus = state.skillInstances.find(
-      (skill) => skill.definitionId === 'brainwash' && skill.data.activeDay === state.day && typeof skill.data.targetPlayerId === 'number',
-    )?.data.targetPlayerId;
-    if (typeof focus === 'number' && candidates.includes(focus as PlayerId)) {
-      candidates = [...candidates, focus as PlayerId];
-    }
-  }
-  const selected = chooseWithState(candidates, rngState);
+function chooseCandidate(pending: PendingDecision, rngState: number): { playerId: PlayerId; rngState: number } {
+  const selected = chooseWithState(pending.candidates, rngState);
   return { playerId: selected.item, rngState: selected.state };
 }
 
@@ -77,7 +68,7 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
     if (pending.schemaKey === 'optional-target') return { decision: { use: false, targetPlayerId: null }, rngState: state.rngState };
     return { decision: { targetPlayerId: null }, rngState: state.rngState };
   }
-  const selected = chooseCandidate(state, pending, state.rngState);
+  const selected = chooseCandidate(pending, state.rngState);
   if (pending.schemaKey === 'liquid-control') {
     return { decision: { use: true, mode: 'extract', targetPlayerId: selected.playerId, factId: null }, rngState: selected.rngState };
   }
