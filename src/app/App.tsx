@@ -9,6 +9,7 @@ export function App() {
     {controller.view === 'setup' || !controller.observation ? <SetupView
       settings={controller.settings}
       setup={controller.setup}
+      history={controller.history}
       savedGame={controller.savedGame}
       storageError={controller.storageError}
       onUpdateSetup={controller.updateSetup}

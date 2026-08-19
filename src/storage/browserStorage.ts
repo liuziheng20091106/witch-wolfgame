@@ -198,4 +198,30 @@ export function clearCorruptedValue(key: typeof SETTINGS_KEY | typeof GAME_KEY |
   localStorage.removeItem(key);
 }
 
+export const HISTORY_KEY = 'majo-wolf.history.v1';
+
+export interface GameHistoryEntry {
+  gameId: string;
+  seed: number;
+  finishedDay: number;
+  winner: 'wolf' | 'good';
+  finishedAt: string;
+}
+
+const historySchema = z.array(z.strictObject({
+  gameId: z.string().min(1),
+  seed: z.number().int().min(0).max(0xffff_ffff),
+  finishedDay: z.number().int().min(0),
+  winner: z.enum(['wolf', 'good']),
+  finishedAt: z.iso.datetime(),
+})).max(50);
+
+export function loadHistory(): StorageResult<GameHistoryEntry[]> {
+  return readValue(HISTORY_KEY, historySchema);
+}
+
+export function saveHistory(entries: GameHistoryEntry[]): void {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(historySchema.parse(entries.slice(0, 50))));
+}
+
 export type { CharacterId, PlayerId };

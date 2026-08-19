@@ -61,5 +61,13 @@
 .confirmDialog div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 .confirmDialog button { min-height: 46px; padding: 0 18px; border: 1px solid var(--ink); background: transparent; font-weight: 800; }
 .confirmDialog .danger { border-color: var(--verdict); background: var(--verdict); color: white; }
+.historySection { padding: 26px clamp(18px, 4vw, 64px) 42px; border-bottom: 1px solid var(--line); }
+.historyList { display: grid; gap: 8px; margin-top: 16px; }
+.historyEntry { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 14px; padding: 10px 12px; border: 1px solid var(--line); }
+.historyEntry strong { font-size: 15px; }
+.historyEntry span { color: var(--muted); font-family: var(--sans); font-size: 12px; }
+.copyButton { min-height: 36px; display: inline-flex; align-items: center; gap: 5px; padding: 0 12px; border: 1px solid var(--verdict); background: transparent; color: var(--verdict); font-weight: 800; }
+.copyButton svg { width: 15px; }
+@media (max-width: 719px) { .historyEntry { grid-template-columns: 1fr auto; } .historyEntry span { grid-column: 1 / -1; } }
 @media (max-width: 1099px) { .characterGrid { grid-template-columns: repeat(4, minmax(110px, 1fr)); } .commandBand { grid-template-columns: 1fr 1.3fr; } .seedField { grid-column: 2; } .launchBand { grid-template-columns: 1fr; } .launchActions { justify-content: flex-end; } }
 @media (max-width: 719px) { .masthead { min-height: 82px; padding: 14px 16px; } .brandMark { width: 48px; height: 48px; } .masthead h1 { font-size: 22px; } .kicker { display: none; } .settingsButton { width: 44px; padding: 0; justify-content: center; font-size: 0; } .commandBand { grid-template-columns: 1fr; padding: 24px 16px; } .seedField { grid-column: auto; } .intro h2 { font-size: 25px; } .modeSwitch button { min-height: 56px; font-size: 13px; } .characterSection { padding: 26px 16px 32px; } .sectionHeading { align-items: flex-start; flex-direction: column; } .characterGrid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 10px; } .character, .selectedCharacter { flex: 0 0 142px; scroll-snap-align: start; } .launchBand { padding: 22px 16px 32px; } .aiStatus { grid-template-columns: 44px 1fr; } .aiStatus button { grid-column: 2; justify-self: start; padding: 0; } .launchActions { flex-direction: column; } .savedRun { width: 100%; } .startButton { width: 100%; } }

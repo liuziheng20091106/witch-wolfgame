@@ -6,6 +6,9 @@
 .phase { display: grid; min-width: 150px; padding: 7px 18px; border-right: 1px solid var(--line); border-left: 1px solid var(--line); text-align: center; }
 .phase small, .historyPane header span, .result span, .playerDialog span, .confirm > span { color: var(--verdict); font-family: var(--sans); font-size: 9px; font-weight: 900; }
 .phase strong { font-size: 21px; }
+.seedDisplay { justify-self: end; display: inline-flex; align-items: center; gap: 8px; font-family: var(--sans); font-size: 12px; font-weight: 800; color: var(--muted); }
+.seedDisplay button { display: inline-flex; width: 30px; height: 30px; align-items: center; justify-content: center; border: 1px solid var(--line); background: transparent; color: var(--ink); }
+.seedDisplay svg { width: 15px; }
 .workspace { min-height: 0; display: grid; grid-template-columns: 270px minmax(360px, 1fr) 360px; overflow: hidden; }
 .rosterPane, .livePane, .sidePane { min-width: 0; min-height: 0; }
 .sidePane { display: grid; grid-template-rows: auto minmax(250px, auto) 1fr; border-left: 1px solid var(--line); overflow: hidden; background: var(--paper-bright); }

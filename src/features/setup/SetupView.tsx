@@ -1,16 +1,16 @@
-import { Bot, Check, ChevronRight, Dices, Eye, Play, Repeat, Settings, Trash2, UserRound } from 'lucide-react';
+import { Bot, Check, ChevronRight, Copy, Eye, Play, Repeat, Settings, Trash2, UserRound } from 'lucide-react';
 import { useState } from 'react';
-import { rollSeed } from '../../app/useGameController';
 import type { AiProviderConfig } from '../../ai/types';
 import { characters } from '../../domain/catalog/characters';
 import type { CharacterId } from '../../domain/model';
-import type { SavedGameEnvelope, SetupPreferences } from '../../storage/browserStorage';
+import type { GameHistoryEntry, SavedGameEnvelope, SetupPreferences } from '../../storage/browserStorage';
 import brandMark from '../../assets/icon.ico';
 import styles from './SetupView.module.css';
 
 interface SetupViewProps {
   settings: AiProviderConfig;
   setup: SetupPreferences;
+  history: GameHistoryEntry[];
   savedGame: SavedGameEnvelope | null;
   storageError: string | null;
   onUpdateSetup(setup: SetupPreferences): void;
@@ -33,15 +33,21 @@ function hasUsableSettings(settings: AiProviderConfig): boolean {
   }
 }
 
-export function SetupView({ settings, setup, savedGame, storageError, onUpdateSetup, onStartWithSeed, onOpenSettings, onContinue, onStart, onDiscard }: SetupViewProps) {
+export function SetupView({ settings, setup, history, savedGame, storageError, onUpdateSetup, onStartWithSeed, onOpenSettings, onContinue, onStart, onDiscard }: SetupViewProps) {
   const [confirming, setConfirming] = useState(false);
   const [pendingKind, setPendingKind] = useState<'random' | 'seed'>('random');
+  const [copiedSeed, setCopiedSeed] = useState<number | null>(null);
   const ready = hasUsableSettings(settings) && (setup.mode === 'spectator' || setup.humanCharacterId !== null);
   const savedLabel = savedGame
     ? `${savedGame.state.day === 0 ? '首夜' : `第 ${savedGame.state.day} 天`} · ${savedGame.state.phase === 'ended' ? '已结束' : '进行中'}`
     : null;
 
   const chooseCharacter = (characterId: CharacterId) => onUpdateSetup({ ...setup, humanCharacterId: characterId });
+  const copySeed = (seed: number) => {
+    void navigator.clipboard.writeText(String(seed));
+    setCopiedSeed(seed);
+    window.setTimeout(() => setCopiedSeed((current) => (current === seed ? null : current)), 1500);
+  };
   const launch = (kind: 'random' | 'seed') => { if (kind === 'seed') onStartWithSeed(); else onStart(); };
   const requestStart = (kind: 'random' | 'seed') => {
     if (savedGame && savedGame.state.phase !== 'ended') {
@@ -71,14 +77,13 @@ export function SetupView({ settings, setup, savedGame, storageError, onUpdateSe
         <div className={styles.seedField}>
           <span>随机种子</span>
           <div className={styles.seedControls}>
-            <input type="number" min="0" max="4294967295" placeholder="随机" value={setup.randomSeed ? '' : setup.seed} onChange={(event) => {
+            <input type="number" min="0" max="4294967295" placeholder="留空以使用随机种子" value={setup.randomSeed ? '' : setup.seed} onChange={(event) => {
               if (event.target.value === '') {
                 onUpdateSetup({ ...setup, randomSeed: true });
                 return;
               }
               onUpdateSetup({ ...setup, seed: Math.max(0, Math.min(0xffff_ffff, Number(event.target.value) || 0)), randomSeed: false });
             }} />
-            <button type="button" className={setup.randomSeed ? styles.seedRandomButtonActive : styles.seedRandomButton} aria-pressed={setup.randomSeed} title="生成一个种子候选填入输入框，再点「使用种子复现对局」即可复现该种子；开始新局始终使用随机种子" onClick={() => onUpdateSetup({ ...setup, seed: rollSeed(), randomSeed: false })}><Dices />随机</button>
           </div>
         </div>
       </section>
@@ -112,6 +117,20 @@ export function SetupView({ settings, setup, savedGame, storageError, onUpdateSe
           <button className={styles.replayButton} type="button" disabled={!ready || setup.randomSeed} onClick={() => requestStart('seed')}><Repeat />{setup.randomSeed ? '使用种子复现对局' : `使用种子 ${setup.seed} 复现`}</button>
         </div>
       </section>
+
+      {history.length > 0 && <section className={styles.historySection} aria-labelledby="seed-history-title">
+        <div className={styles.sectionHeading}><div><span>SEED ARCHIVE</span><h2 id="seed-history-title">对局历史</h2></div><p>复制种子分享给他人；对方把种子填入上方输入框后点「使用种子复现对局」即可复现同一阵容。</p></div>
+        <div className={styles.historyList}>
+          {history.map((entry) => (
+            <div key={entry.gameId} className={styles.historyEntry}>
+              <strong>种子 {entry.seed}</strong>
+              <span>第 {entry.finishedDay} 天 · {entry.winner === 'wolf' ? '狼人胜' : '好人胜'}</span>
+              <span>{new Date(entry.finishedAt).toLocaleString()}</span>
+              <button type="button" className={styles.copyButton} onClick={() => copySeed(entry.seed)}><Copy />{copiedSeed === entry.seed ? '已复制' : '复制'}</button>
+            </div>
+          ))}
+        </div>
+      </section>}
 
       {confirming && <div className={styles.confirmBackdrop} role="presentation">
         <div className={styles.confirmDialog} role="alertdialog" aria-modal="true" aria-labelledby="replace-title">

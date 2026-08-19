@@ -1,4 +1,4 @@
-import { Archive, Bot, ChevronDown, Gavel, Info, List, LoaderCircle, RotateCcw, ScrollText, Sparkles, Users, X } from 'lucide-react';
+import { Archive, Bot, ChevronDown, Copy, Gavel, Info, List, LoaderCircle, RotateCcw, ScrollText, Sparkles, Users, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AiCommandError } from '../../ai/types';
 import { roleDescriptions, roleNames } from '../../domain/catalog/roles';
@@ -103,6 +103,7 @@ export function GameView(props: GameViewProps) {
     <header className={`${styles.topbar} ${chromeClass}`}>
       <div className={styles.brand}><img src={brandMark} alt="魔女狼人杀" /></div>
       <div className={styles.phase}><small>{observation.day === 0 ? 'FIRST NIGHT' : `DAY ${String(observation.day).padStart(2, '0')}`}</small><strong>{phaseNames[observation.phase]}</strong></div>
+      <div className={styles.seedDisplay}><span>种子 {observation.seed}</span><button type="button" title="复制本局种子" onClick={() => { void navigator.clipboard.writeText(String(observation.seed)); }}><Copy /></button></div>
     </header>
     <nav className={`${styles.mobileTabs} ${chromeClass}`} aria-label="游戏视图">
       <button type="button" className={mobileTab === 'live' ? styles.activeTab : ''} onClick={() => { revealMobileChrome(); setMobileTab('live'); }}><ScrollText />实况</button>
