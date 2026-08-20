@@ -9,5 +9,13 @@
   "acceptedClientVersions": ["2.3.1"],
   "providersFile": "./providers.json",
   "upstreamTimeoutMs": 60000,
-  "maxAttempts": 4
+  "maxAttempts": 4,
+  "update": {
+    "passEnv": "MAJO_UPDATE_PASS",
+    "source": "https://example.com/raw/{file}",
+    "files": ["server/gameProtocol.mjs", "proxy/server.mjs"],
+    "projectRoot": "/app",
+    "downloadTimeoutMs": 30000,
+    "restartOnSuccess": true
+  }
 }

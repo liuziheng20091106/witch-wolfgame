@@ -1,8 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import https from 'node:https';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { validateChatCompletionsResponse, validateProviderResponse, validatePublicPayload } from '../server/gameProtocol.mjs';
 import { INTERNAL_PATH, configPath, parseJsonBody, pruneNonces, readBody, readJsonFile, requireEnv, sendJson, verifySignedRequest } from '../server/shared.mjs';
+import { createUpdateHandler } from './update.mjs';
 
 const PROVIDER_PROTOCOLS = new Set(['openai', 'deepseek']);
 const REASONING_EFFORTS = new Set(['none', 'low', 'high', 'max']);
@@ -125,10 +126,17 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
   const nonceStore = new Map();
   const pruneTimer = setInterval(() => pruneNonces(nonceStore), 30_000);
   pruneTimer.unref();
+  // 自动更新处理器（未配置 update 时为 null，不启用）
+  // projectRoot 显式配置（docker 内代码在 /app；本地开发为项目根）
+  const updateProjectRoot = config.update?.projectRoot ?? '/app';
+  const updateHandler = createUpdateHandler(config.update, updateProjectRoot, configFile);
   const server = https.createServer({ ca, cert, key, requestCert: true, rejectUnauthorized: true, minVersion: 'TLSv1.3' }, async (request, response) => {
     if (!request.socket.authorized) return sendJson(response, 401, { error: 'unauthorized_client_certificate' });
     const url = new URL(request.url ?? '/', 'https://localhost');
     if (url.pathname === '/healthz') return sendJson(response, 200, { ok: true, service: 'majo-proxy' });
+    if (updateHandler && url.pathname === '/update') {
+      return updateHandler(request, response, url);
+    }
     if (url.pathname !== INTERNAL_PATH) return sendJson(response, 404, { error: 'not_found' });
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method_not_allowed' });
     try {
