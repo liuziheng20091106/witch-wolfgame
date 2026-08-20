@@ -2,6 +2,7 @@ export { getHealingDecision, getNextNightSkillDecision, applyNightSkillDecision 
 export {
   applySpeechSkillDecision,
   attachBrainwashSuggestion,
+  gazeRequiredMention,
   getAfterSpeechSkillDecision,
   getBeforeSpeechSkillDecision,
   getNextDayStartSkillDecision,

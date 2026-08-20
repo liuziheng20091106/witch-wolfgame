@@ -2,6 +2,7 @@ import { characterById } from '../domain/catalog/characters';
 import type { GameState, PendingDecision, PlayerId, SubmittedDecision } from '../domain/model';
 import { chooseWithState } from '../domain/engine/random';
 import { getPlayer } from '../domain/engine/selectors';
+import { gazeRequiredMention } from '../domain/skills/speechSkills';
 
 export interface FallbackResult {
   decision: SubmittedDecision;
@@ -14,15 +15,13 @@ function chooseCandidate(pending: PendingDecision, rngState: number): { playerId
 }
 
 function guidedSpeech(state: GameState, actorId: PlayerId, source: string): string {
-  const guide = state.skillInstances.find(
-    (skill) => skill.definitionId === 'gaze-guidance' && getPlayer(state, skill.ownerPlayerId).alive,
-  );
-  if (!guide || guide.ownerPlayerId === actorId) {
+  // 视线诱导为主动技：仅被诱导者的发言必须提及诱导对象（复用引擎侧的同一判定）
+  const mention = gazeRequiredMention(state, actorId);
+  if (!mention) {
     return source.slice(0, 100);
   }
-  const guideName = characterById[getPlayer(state, guide.ownerPlayerId).characterId].name;
-  const suffix = `${guideName}值得继续关注。`;
-  if (source.includes(guideName) || source.includes(`${guide.ownerPlayerId + 1}号`)) {
+  const suffix = `${mention.requiredMention}值得继续关注。`;
+  if (source.includes(mention.requiredMention) || source.includes(mention.requiredSeatLabel)) {
     return source.slice(0, 100);
   }
   return `${source.slice(0, Math.max(0, 100 - suffix.length))}${suffix}`;
@@ -60,6 +59,22 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
   }
   if (pending.schemaKey === 'ignition') {
     return { decision: { use: true }, rngState: state.rngState };
+  }
+  // 视线诱导（主动技，两步）：第一步选被诱导者（随机非自己）；第二步选诱导对象
+  if (pending.title === '视线诱导') {
+    if (pending.schemaKey === 'optional-target' && pending.candidates.length > 0) {
+      const selected = chooseCandidate(pending, state.rngState);
+      return { decision: { use: true, targetPlayerId: selected.playerId }, rngState: selected.rngState };
+    }
+    return { decision: { use: false, targetPlayerId: null }, rngState: state.rngState };
+  }
+  if (pending.title === '视线诱导-目标' && pending.candidates.length > 0) {
+    // 人设：内心渴望被人注视，本地策略倾向把诱导对象指向自己（若自己仍存活）
+    if (pending.candidates.includes(pending.actorId)) {
+      return { decision: { targetPlayerId: pending.actorId }, rngState: state.rngState };
+    }
+    const selected = chooseCandidate(pending, state.rngState);
+    return { decision: { targetPlayerId: selected.playerId }, rngState: selected.rngState };
   }
   if (pending.candidates.length === 0) {
     if (pending.schemaKey === 'liquid-control') return { decision: { use: false, mode: null, targetPlayerId: null, factId: null }, rngState: state.rngState };

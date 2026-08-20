@@ -8,7 +8,9 @@ import type {
   PlayerId,
   SpeechDecision,
   SubmittedDecision,
+  TargetDecision,
   VoiceMimicDecision,
+  WitchSkillInstance,
 } from '../model';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events';
 import { chooseWithState } from '../engine/random';
@@ -35,6 +37,27 @@ export function getNextDayStartSkillDecision(state: GameState): PendingDecision 
       return makeSkillDecision(state, skill, '点火', '公开随机一名其他存活者的阵营。', candidates, 'ignition');
     }
     return makeSkillDecision(state, skill, '力气大', '指定一名其他存活者，她今天无法发言。', candidates, 'optional-target');
+  }
+  // 视线诱导（主动技，每日一次）：先选被诱导者，再选诱导对象（可指向自己）。
+  const gaze = state.skillInstances.find(
+    (skill) => skill.definitionId === 'gaze-guidance'
+      && skill.status === 'ready'
+      && getPlayer(state, skill.ownerPlayerId).alive,
+  );
+  if (gaze) {
+    if (gaze.data.activeDay !== state.day && gaze.data.gazeAskedDay !== state.day) {
+      // 第一步：选择被诱导者（谁今天必须提及你指定的对象）
+      const candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== gaze.ownerPlayerId);
+      if (candidates.length > 0) {
+        return makeSkillDecision(state, gaze, '视线诱导', '选择一名被诱导者：她今天的发言必须提及你随后指定的对象。', candidates, 'optional-target');
+      }
+    } else if (typeof gaze.data.gazeSubjectId === 'number' && typeof gaze.data.gazeObjectId !== 'number' && gaze.data.gazeAskedDay === state.day) {
+      // 第一步已提交但尚未选对象：第二步选择诱导对象（可指向自己）
+      const candidates = getAlivePlayerIds(state);
+      if (candidates.length > 0) {
+        return makeSkillDecision(state, gaze, '视线诱导-目标', '选择诱导对象：被诱导者今天的发言必须提及她。你可以选择自己——你渴望被人注视。', candidates, 'target');
+      }
+    }
   }
   return null;
 }
@@ -81,16 +104,8 @@ export function getAfterSpeechSkillDecision(state: GameState, actorId: PlayerId)
     return { playerId, name: nameOf(state, playerId), speechStyle: characterById[player.characterId].speechStyle.slice(0, 300) };
   });
   const decision = makeSkillDecision(state, skill, '声音模仿', '选择一名尚未发言者，并伪造一段不超过 100 字的内容。伪造内容必须完全模仿所选目标本人的说话风格与语气，禁止使用你自己的说话风格。', candidates, 'voice-mimic', { mimicVoices });
-  const guide = state.skillInstances.find(
-    (entry) => entry.definitionId === 'gaze-guidance' && getPlayer(state, entry.ownerPlayerId).alive,
-  );
-  if (guide && guide.ownerPlayerId !== actorId) {
-    decision.options = {
-      ...decision.options,
-      requiredMention: nameOf(state, guide.ownerPlayerId),
-      requiredSeatLabel: `${guide.ownerPlayerId + 1}号`,
-    };
-  }
+  // 视线诱导为主动技（指定被诱导者），不再全局强制提及持有者；
+  // 伪造内容挂在被模仿者名下，若被模仿者是被诱导者，其约束在 applySpeechSkillDecision 中按目标校验。
   return decision;
 }
 
@@ -98,6 +113,10 @@ export function applySpeechSkillDecision(state: GameState, pending: PendingDecis
   const skill = state.skillInstances.find((entry) => entry.id === pending.skillInstanceId);
   if (!skill || skill.status === 'exhausted') {
     throw new Error('技能实例不可用');
+  }
+  if (skill.definitionId === 'gaze-guidance') {
+    applyGazeGuidanceDecision(state, skill, pending, decision);
+    return;
   }
   const timing = skill.definitionId === 'brainwash'
     ? `before-speech-${skill.ownerPlayerId}`
@@ -152,7 +171,8 @@ export function applySpeechSkillDecision(state: GameState, pending: PendingDecis
     if (forgedSpeech.length === 0 || forgedSpeech.length > 100) {
       throw new Error('伪造发言必须为 1–100 字');
     }
-    validateGuidedSpeech(state, skill.ownerPlayerId, forgedSpeech);
+    // 视线诱导约束只作用于被诱导者本人的真实发言（publishSpeech 校验）；
+    // 伪造内容由模仿者书写，无法预知被模仿者是否被诱导，不在此校验视线诱导。
     skill.data.forgedDay = state.day;
     skill.data.targetPlayerId = targetPlayerId;
     skill.data.forgedSpeech = forgedSpeech;
@@ -174,17 +194,83 @@ export function isRestrainedToday(state: GameState, playerId: PlayerId): boolean
 }
 
 export function validateGuidedSpeech(state: GameState, actorId: PlayerId, speech: string): void {
-  const guide = state.skillInstances.find(
-    (skill) => skill.definitionId === 'gaze-guidance' && getPlayer(state, skill.ownerPlayerId).alive,
-  );
-  if (!guide || guide.ownerPlayerId === actorId) {
+  const gaze = activeGazeGuidance(state);
+  if (!gaze || gaze.data.gazeSubjectId !== actorId) {
     return;
   }
-  const guideName = nameOf(state, guide.ownerPlayerId);
-  const seatLabel = `${guide.ownerPlayerId + 1}号`;
-  if (!speech.includes(guideName) && !speech.includes(seatLabel)) {
-    throw new Error(`发言必须提及 ${guideName} 或 ${seatLabel}`);
+  const objectId = gaze.data.gazeObjectId as PlayerId;
+  const objectName = nameOf(state, objectId);
+  const seatLabel = `${objectId + 1}号`;
+  if (!speech.includes(objectName) && !speech.includes(seatLabel)) {
+    throw new Error(`发言必须提及 ${objectName} 或 ${seatLabel}`);
   }
+}
+
+/**
+ * 视线诱导（主动技，每日一次）：返回当天生效的视线诱导实例。
+ * data.gazeSubjectId = 被诱导者（其发言必须提及对象）；data.gazeObjectId = 诱导对象（可指向自己）。
+ */
+function activeGazeGuidance(state: GameState): WitchSkillInstance | null {
+  return state.skillInstances.find(
+    (skill) => skill.definitionId === 'gaze-guidance'
+      && getPlayer(state, skill.ownerPlayerId).alive
+      && skill.data.activeDay === state.day
+      && typeof skill.data.gazeSubjectId === 'number'
+      && typeof skill.data.gazeObjectId === 'number'
+      // 防御性检查：被诱导者或诱导对象已死亡时，诱导不再生效（正常时序下候选池
+      // 均为存活者、死者不发言，不会触发，此检查防止未来时序改动引入不一致）
+      && getPlayer(state, skill.data.gazeSubjectId as PlayerId).alive
+      && getPlayer(state, skill.data.gazeObjectId as PlayerId).alive,
+  ) ?? null;
+}
+
+export function gazeRequiredMention(state: GameState, actorId: PlayerId): { requiredMention: string; requiredSeatLabel: string } | null {
+  const gaze = activeGazeGuidance(state);
+  if (!gaze || gaze.data.gazeSubjectId !== actorId) {
+    return null;
+  }
+  const objectId = gaze.data.gazeObjectId as PlayerId;
+  return {
+    requiredMention: nameOf(state, objectId),
+    requiredSeatLabel: `${objectId + 1}号`,
+  };
+}
+
+function applyGazeGuidanceDecision(state: GameState, skill: WitchSkillInstance, pending: PendingDecision, decision: SubmittedDecision): void {
+  // 第一步（day-start，optional-target）：选被诱导者
+  if (pending.schemaKey === 'optional-target') {
+    markOffered(skill, offerKey(state, `day-start-gaze-subject`));
+    const use = (decision as OptionalTargetDecision).use;
+    // 无论使用或保留，今天都不再询问第一步（避免重复询问）
+    skill.data.gazeAskedDay = state.day;
+    if (!use) {
+      addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
+      return;
+    }
+    const targetPlayerId = (decision as OptionalTargetDecision).targetPlayerId;
+    if (targetPlayerId === null || !pending.candidates.includes(targetPlayerId)) {
+      throw new Error('目标不在当前合法候选中');
+    }
+    skill.data.activeDay = state.day;
+    skill.data.gazeSubjectId = targetPlayerId;
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你选择 ${nameOf(state, targetPlayerId)} 作为被诱导者：她今天的发言必须提及你指定的对象。`, {
+      actorPlayerId: skill.ownerPlayerId,
+      targetPlayerIds: [targetPlayerId],
+    });
+    return;
+  }
+  // 第二步（target）：选诱导对象（可指向自己）
+  markOffered(skill, offerKey(state, `day-start-gaze-object`));
+  const targetPlayerId = (decision as TargetDecision).targetPlayerId;
+  if (targetPlayerId === null || !pending.candidates.includes(targetPlayerId)) {
+    throw new Error('目标不在当前合法候选中');
+  }
+  skill.data.gazeObjectId = targetPlayerId;
+  const subjectId = skill.data.gazeSubjectId as PlayerId;
+  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你指定诱导对象：${nameOf(state, subjectId)} 今天的发言必须提及 ${nameOf(state, targetPlayerId)}。`, {
+    actorPlayerId: skill.ownerPlayerId,
+    targetPlayerIds: [subjectId, targetPlayerId],
+  });
 }
 
 const BRAINWASH_INJECT_KINDS = new Set(['speech', 'vote', 'runoff', 'tie-break']);

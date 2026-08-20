@@ -346,5 +346,5 @@ export interface WitchSkillDefinition {
   name: string;
   description: string;
   timings: SkillTiming[];
-  usage: 'once' | 'nightly' | 'passive';
+  usage: 'once' | 'nightly' | 'daily' | 'passive';
 }
