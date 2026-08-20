@@ -26,14 +26,34 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
     throw new Error('观察视图缺少当前行动者');
   }
   const character = characterById[actor.characterId];
+  // 发言来源映射：每条发言必须标注"是谁说的"，否则 AI 只能靠内容猜发言者（曾导致把甲的发言安到乙头上）。
+  const nameById = new Map<number, string>(observation.players.map((player) => [player.id, player.name]));
+  const speechWithAuthor = (event: { displayAuthorPlayerId: number | null; actorPlayerId: number | null; text: string }): string => {
+    const authorId = event.displayAuthorPlayerId ?? event.actorPlayerId;
+    let authorName = '未知';
+    if (authorId !== null && authorId !== undefined) {
+      const known = nameById.get(authorId);
+      if (known !== undefined) {
+        authorName = known;
+      } else {
+        authorName = `${authorId + 1}号`;
+      }
+    }
+    return `发言来源：${authorName}。发言内容：${event.text}`;
+  };
   const currentDaySpeeches = observation.publicEvents
     .filter((event) => event.kind === 'speech' && event.day === observation.day)
-    .map((event) => event.text);
+    .map(speechWithAuthor);
   const historicalSpeeches = observation.publicEvents
     .filter((event) => event.kind === 'speech' && event.day < observation.day)
     .slice(-12)
-    .map((event) => event.text);
-  const recentPublic = observation.publicEvents.slice(-24).map((event) => event.text);
+    .map(speechWithAuthor);
+  const recentPublic = observation.publicEvents.slice(-24).map((event) => {
+    if (event.kind === 'speech') {
+      return speechWithAuthor(event);
+    }
+    return event.text;
+  });
   const privateKnowledge = observation.knowledge
     .filter((fact) => fact.kind === 'role' || fact.kind === 'alignment')
     .map((fact) => ({
