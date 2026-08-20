@@ -41,4 +41,5 @@
 .actions button { min-height: 46px; display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; border: 1px solid var(--ink); font-weight: 800; }
 .actions svg { width: 18px; }
 .primary { background: var(--ink); color: var(--paper-bright); }
+.version { margin: 14px 0 0; grid-column: 1 / -1; text-align: center; font-size: 12px; color: var(--muted); opacity: 0.7; }
 @media (max-width: 600px) { .form { grid-template-columns: 1fr; padding: 22px 18px; } .header { padding-inline: 18px; } .providerPicker { grid-template-columns: 1fr; } .support { grid-template-columns: 96px 1fr; } .qrFrame { width: 96px; height: 96px; } .actions { flex-direction: column-reverse; } .actions button { justify-content: center; } }

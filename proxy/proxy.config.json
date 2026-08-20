@@ -6,7 +6,7 @@
     "key": "../certs/proxy-server.key"
   },
   "connectionPasswordEnv": "MAJO_PROXY_PASSWORD_PRIMARY",
-  "acceptedClientVersions": ["2.3.0"],
+  "acceptedClientVersions": ["2.3.1"],
   "providersFile": "./providers.json",
   "upstreamTimeoutMs": 60000,
   "maxAttempts": 4

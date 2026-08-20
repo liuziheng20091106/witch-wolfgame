@@ -26,7 +26,7 @@ function close(server) {
 
 function validPayload() {
   return {
-    client: { name: 'majo-wolf', version: '2.3.0', protocol: 'majo-wolf-free-v1' },
+    client: { name: 'majo-wolf', version: '2.3.1', protocol: 'majo-wolf-free-v1' },
     response_format: { type: 'json_object' },
     messages: [
       {
@@ -129,7 +129,7 @@ try {
   await writeFile(proxyConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 },
     tls: { ca: join(certs, 'ca.crt'), cert: join(certs, 'proxy-server.crt'), key: join(certs, 'proxy-server.key') },
-    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.3.0'], providersFile,
+    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.3.1'], providersFile,
     upstreamTimeoutMs: 5000, maxAttempts: 2,
   }));
   process.env.MAJO_PROXY_PASSWORD_PRIMARY = 'backend-smoke-long-random-password';
@@ -139,7 +139,7 @@ try {
   await writeFile(mainConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 }, cors: { allowedOrigins: [origin] },
     proxies: [{ name: 'smoke-proxy', url: `https://127.0.0.1:${proxyPort}/internal/v1/chat/completions`, ca: join(certs, 'ca.crt'), clientCert: join(certs, 'main-client.crt'), clientKey: join(certs, 'main-client.key'), serverName: 'proxy.internal', connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', timeoutMs: 5000 }],
-    rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 }, acceptedClientVersions: ['2.3.0'],
+    rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 }, acceptedClientVersions: ['2.3.1'],
   }));
   main = await startMainServer(mainConfig);
   const mainPort = main.address().port;
