@@ -24,7 +24,7 @@
  * 建议把容器 restart 策略设为 always（或 on-failure + 本模块用非零退出）。
  */
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { readBody, sendJson } from '../server/shared.mjs';
 
@@ -55,20 +55,28 @@ async function downloadFile(url, timeoutMs) {
  * 创建更新处理器。
  * @param {object} update 配置段（config.update）
  * @param {string} projectRoot 项目根目录（app/ 的上级）
- * @param {object} configFile 配置文件路径（用于 resolve 相对路径，暂未用，保留签名）
  * @param {(msg: string) => void} log 日志函数
  */
-export function createUpdateHandler(update, projectRoot, configFile, log = console.log) {
+export function createUpdateHandler(update, projectRoot, log = console.log) {
   if (!update || typeof update !== 'object') {
     log('[update] 未配置 update 段，更新接口未启用');
     return null;
   }
   const passEnv = update.passEnv;
-  const pass = typeof passEnv === 'string' && passEnv ? process.env[passEnv] : null;
+  let pass = null;
+  if (typeof passEnv === 'string' && passEnv) {
+    pass = process.env[passEnv];
+  }
   const sourceTemplate = update.source;
-  const files = Array.isArray(update.files) && update.files.length > 0 ? update.files : [];
+  let files = [];
+  if (Array.isArray(update.files) && update.files.length > 0) {
+    files = update.files;
+  }
   const restartOnSuccess = update.restartOnSuccess !== false;
-  const downloadTimeoutMs = Number.isFinite(update.downloadTimeoutMs) ? update.downloadTimeoutMs : 30_000;
+  let downloadTimeoutMs = 30_000;
+  if (Number.isFinite(update.downloadTimeoutMs)) {
+    downloadTimeoutMs = update.downloadTimeoutMs;
+  }
 
   // 配置校验：任一必需项缺失则返回 null（接口不启用）
   if (!pass || typeof sourceTemplate !== 'string' || !sourceTemplate.includes('{file}') || files.length === 0) {
@@ -124,7 +132,11 @@ export function createUpdateHandler(update, projectRoot, configFile, log = conso
         // 给响应留出发送时间再退出；docker restart: on-failure 需非零退出码
         setTimeout(() => {
           log('[update] 进程退出，等待 docker 重启');
-          process.exit(restartOnSuccess === 'code0' ? 0 : 1);
+          if (restartOnSuccess === 'code0') {
+            process.exit(0);
+          } else {
+            process.exit(1);
+          }
         }, 500);
       }
     } catch (error) {
@@ -137,5 +149,3 @@ export function createUpdateHandler(update, projectRoot, configFile, log = conso
     }
   };
 }
-
-export { readFile };

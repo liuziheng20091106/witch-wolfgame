@@ -38,7 +38,7 @@ const update = {
   files: ['server/gameProtocol.mjs', 'proxy/server.mjs'],
   restartOnSuccess: false, // 测试不真退出
 };
-const handler = createUpdateHandler(update, root, join(root, 'proxy.config.json'));
+const handler = createUpdateHandler(update, root);
 const baseRes = () => {
   const r = { _status: 0, _body: '', writeHead(s) { this._status = s; }, end(b) { this._body = b.toString(); } };
   return r;
@@ -76,12 +76,21 @@ console.log('GET 状态:', res3._status);
     files: ['server/gameProtocol.mjs', 'proxy/missing.mjs'],
     restartOnSuccess: false,
   };
-  const handler2 = createUpdateHandler(update2, root2, join(root2, 'proxy.config.json'));
+  const handler2 = createUpdateHandler(update2, root2);
   const res4 = baseRes();
   await handler2({ method: 'POST', url: '/update?pass=test-secret-123' }, res4, new URL('http://x/update?pass=test-secret-123'));
   const g1 = await readFile(join(root2, 'server/gameProtocol.mjs'), 'utf8');
   const partialOk = res4._status === 502 && g1 === '// 旧协议 v1';
-  console.log('部分失败 状态:', res4._status, '| gameProtocol 未被替换:', g1 === '// 旧协议 v1' ? '✓ 保持旧版' : `✗ 被改了: ${g1}`);
+  let partialLabel = '✗ 被改了';
+  if (g1 === '// 旧协议 v1') {
+    partialLabel = '✓ 保持旧版';
+  }
+  console.log('部分失败 状态:', res4._status, '| gameProtocol 未被替换:', partialLabel);
   await new Promise((resolve) => fileServer.close(resolve));
-  process.exit(res._status === 200 && res2._status === 401 && res3._status === 405 && partialOk ? 0 : 1);
+  const allOk = res._status === 200 && res2._status === 401 && res3._status === 405 && partialOk;
+  if (allOk) {
+    process.exit(0);
+  } else {
+    process.exit(1);
+  }
 }

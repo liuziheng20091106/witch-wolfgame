@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import https from 'node:https';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { validateChatCompletionsResponse, validateProviderResponse, validatePublicPayload } from '../server/gameProtocol.mjs';
 import { INTERNAL_PATH, configPath, parseJsonBody, pruneNonces, readBody, readJsonFile, requireEnv, sendJson, verifySignedRequest } from '../server/shared.mjs';
 import { createUpdateHandler } from './update.mjs';
@@ -129,7 +129,7 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
   // 自动更新处理器（未配置 update 时为 null，不启用）
   // projectRoot 显式配置（docker 内代码在 /app；本地开发为项目根）
   const updateProjectRoot = config.update?.projectRoot ?? '/app';
-  const updateHandler = createUpdateHandler(config.update, updateProjectRoot, configFile);
+  const updateHandler = createUpdateHandler(config.update, updateProjectRoot);
   const server = https.createServer({ ca, cert, key, requestCert: true, rejectUnauthorized: true, minVersion: 'TLSv1.3' }, async (request, response) => {
     if (!request.socket.authorized) return sendJson(response, 401, { error: 'unauthorized_client_certificate' });
     const url = new URL(request.url ?? '/', 'https://localhost');
