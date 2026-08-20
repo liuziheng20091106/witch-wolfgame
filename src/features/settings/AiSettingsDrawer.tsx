@@ -129,6 +129,7 @@ export function AiSettingsDrawer({ open, config, onClose, onSave }: AiSettingsDr
           {draft.provider === 'free' && <label className={styles.retry}>模型错误重试次数<input type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ provider: 'free', retryCount: Math.min(5, Math.max(0, Number(event.target.value) || 0)) })} /></label>}
           {validationError && <p className={styles.error} role="alert">{validationError}</p>}
           <footer className={styles.actions}><button className={styles.primary} type="submit"><Save />保存设置</button></footer>
+          <p className={styles.version}>v{APP_VERSION}</p>
         </form>
       </div>
     </div>

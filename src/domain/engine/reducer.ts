@@ -16,6 +16,7 @@ import {
   applySpeechSkillDecision,
   applyVoteSkillDecision,
   attachBrainwashSuggestion,
+  gazeRequiredMention,
   getAfterSpeechSkillDecision,
   getBeforeSpeechSkillDecision,
   getHealingDecision,
@@ -235,14 +236,12 @@ function advanceSpeeches(state: GameState): GameState {
     return state;
   }
   const speechDecision = makeRoleDecision(state, 'speech', actorId, `${nameOf(state, actorId)} 发言`, '公开发言不超过 100 字。', [], true, 'speech');
-  const guide = state.skillInstances.find(
-    (skill) => skill.definitionId === 'gaze-guidance' && getPlayer(state, skill.ownerPlayerId).alive,
-  );
-  if (guide && guide.ownerPlayerId !== actorId) {
+  const gazeMention = gazeRequiredMention(state, actorId);
+  if (gazeMention) {
     speechDecision.options = {
       ...speechDecision.options,
-      requiredMention: nameOf(state, guide.ownerPlayerId),
-      requiredSeatLabel: `${guide.ownerPlayerId + 1}号`,
+      requiredMention: gazeMention.requiredMention,
+      requiredSeatLabel: gazeMention.requiredSeatLabel,
     };
   }
   state.pendingDecision = speechDecision;
@@ -490,7 +489,7 @@ function applyDecision(state: GameState, event: Extract<GameEvent, { type: 'subm
     }
     if (skill.definitionId === 'levitation') {
       applyVoteSkillDecision(state, pending, event.decision);
-    } else if (skill.definitionId === 'speech-restrain' || skill.definitionId === 'ignition' || skill.definitionId === 'brainwash' || skill.definitionId === 'voice-mimic') {
+    } else if (skill.definitionId === 'speech-restrain' || skill.definitionId === 'ignition' || skill.definitionId === 'brainwash' || skill.definitionId === 'voice-mimic' || skill.definitionId === 'gaze-guidance') {
       applySpeechSkillDecision(state, pending, event.decision);
     } else {
       applyNightSkillDecision(state, pending, event.decision);
