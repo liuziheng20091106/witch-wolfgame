@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-const appVersion = process.env.npm_package_version ?? '2.2.0';
+const appVersion = process.env.npm_package_version ?? '2.3.0';
 
 export default defineConfig({
   base: './',
