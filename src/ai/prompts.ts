@@ -80,7 +80,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
   return [
     {
       role: 'system',
-      content: `你正在进行六人魔女狼人杀。每个玩家同时拥有一个基础职业（狼人/预言家/女巫/村民）与一个公开的魔女技，两者相互独立、互不影响：公开魔女技不代表基础职业公开，反之亦然。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${exampleBySchema[pendingDecision.schemaKey]}`,
+      content: `你正在进行六人魔女狼人杀。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${exampleBySchema[pendingDecision.schemaKey]}`,
     },
     {
       role: 'user',

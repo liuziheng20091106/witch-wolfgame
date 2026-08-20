@@ -4,7 +4,7 @@
  *
  * 背景：实测 AI 曾把「基础职业」与「魔女技」当成同一套系统（希罗跳预言家被
  * 奈叶香以"你的魔女技是死亡回溯，并非查验"反驳）。修复方式：system 提示词
- * 明确「两者相互独立、互不影响，公开魔女技不代表基础职业公开」。
+ * 明确「职业与魔女技是两套独立信息，默认公开技能不能推断职业，当前状态以观察为准」。
  *
  * 本测试跑一局完整对局（本地策略），对【每次决策】验证：
  * 1. system 提示词包含规则句（职业与魔女技独立）——回归 P2-1
@@ -29,20 +29,11 @@ try {
   // 保持 server 打开直到对局结束
 }
 
-const RULE_SENTENCE = '每个玩家同时拥有一个基础职业（狼人/预言家/女巫/村民）与一个公开的魔女技，两者相互独立、互不影响：公开魔女技不代表基础职业公开，反之亦然。';
+const RULE_SENTENCE = '基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。';
 
-let failures = 0;
 let decisions = 0;
 const schemaSeen = new Set();
 
-function check(label, ok, detail = '') {
-  if (ok) {
-    console.log(`  ✓ ${label}`);
-  } else {
-    failures += 1;
-    console.log(`  ✗ ${label}${detail ? ` —— ${detail}` : ''}`);
-  }
-}
 
 let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 20260820 >>> 0 });
 let iterations = 0;
@@ -101,11 +92,18 @@ for (const [key, count] of [...schemaCount.entries()].sort()) {
 }
 console.log(`prompt 异常: ${promptErrors} | 规则句缺失: ${ruleFailures} | 协议校验失败: ${protocolFailures}`);
 
-if (failures === 0 && schemaSeen.size >= 3) {
-  console.log('\n✓ 全部通过：规则句每次决策都在，且所有决策均通过后端协议校验');
+const completed = game.phase === 'ended';
+const hasCoverage = schemaSeen.size >= 3;
+const passed = completed
+  && hasCoverage
+  && promptErrors === 0
+  && ruleFailures === 0
+  && protocolFailures === 0;
+if (passed) {
+  console.log('\n✓ 全部通过：对局完整结束，规则句每次决策都在，且所有决策均通过后端协议校验');
   await server.close();
   process.exit(0);
 }
-console.log(`\n!!! 失败：${failures} 项（规则句缺失 ${ruleFailures}，协议失败 ${protocolFailures}，prompt 异常 ${promptErrors}）`);
+console.log(`\n!!! 失败：对局结束=${completed}，schema 覆盖达标=${hasCoverage}，规则句缺失 ${ruleFailures}，协议失败 ${protocolFailures}，prompt 异常 ${promptErrors}`);
 await server.close();
 process.exit(1);
