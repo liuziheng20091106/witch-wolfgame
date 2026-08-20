@@ -60,7 +60,13 @@ function candidatesForNightSkill(state: GameState, skillId: string, ownerId: Pla
       })
       .map((player) => player.id);
   }
-  return getAlivePlayerIds(state).filter((playerId) => playerId !== ownerId);
+  const aliveOthers = getAlivePlayerIds(state).filter((playerId) => playerId !== ownerId);
+  if (skillId === 'witch-killer' && getPlayerAlignment(state, ownerId) === 'wolf') {
+    // 狼人持有魔女杀手时，禁止标记狼队友为精准击杀（此前候选含全部存活者，
+    // AI 或本地策略可能刀到狼队友；灵魂交换后阵营随新职业，此处按当前阵营过滤）。
+    return aliveOthers.filter((playerId) => getPlayerAlignment(state, playerId) !== 'wolf');
+  }
+  return aliveOthers;
 }
 
 export function getNextNightSkillDecision(state: GameState): PendingDecision | null {
