@@ -9,18 +9,22 @@ import type { GameEvent, GameObservation, GameState, SubmittedDecision } from '.
 import {
   clearSavedGame,
   clearHistory as clearStoredHistory,
+  defaultThemeSettings,
   loadGame,
   loadHistory,
   loadSessionId,
   loadSettings,
   loadSetup,
+  loadThemeSettings,
   saveGame,
   saveHistory,
   saveSettings,
   saveSetup,
+  saveThemeSettings,
   type GameHistoryEntry,
   type SavedGameEnvelope,
   type SetupPreferences,
+  type ThemeSettings,
 } from '../storage/browserStorage';
 
 export type AppView = 'setup' | 'game';
@@ -32,6 +36,7 @@ export interface GameController {
   savedGame: SavedGameEnvelope | null;
   history: GameHistoryEntry[];
   settings: AiProviderConfig;
+  theme: ThemeSettings;
   setup: SetupPreferences;
   storageError: string | null;
   historyError: string | null;
@@ -43,7 +48,7 @@ export interface GameController {
   settingsOpen: boolean;
   setSettingsOpen(open: boolean): void;
   updateSetup(next: SetupPreferences): void;
-  saveAiSettings(next: AiProviderConfig): void;
+  saveAiSettings(next: AiProviderConfig, nextTheme: ThemeSettings): void;
   startNewGame(): void;
   continueSavedGame(): void;
   returnToSetup(): void;
@@ -57,6 +62,7 @@ export interface GameController {
 
 interface InitialBrowserState {
   settings: AiProviderConfig;
+  theme: ThemeSettings;
   setup: SetupPreferences;
   savedGame: SavedGameEnvelope | null;
   history: GameHistoryEntry[];
@@ -66,6 +72,7 @@ interface InitialBrowserState {
 
 function readInitialBrowserState(): InitialBrowserState {
   const settingsResult = loadSettings();
+  const themeResult = loadThemeSettings();
   const setupResult = loadSetup();
   const gameResult = loadGame();
   const historyResult = loadHistory();
@@ -74,6 +81,7 @@ function readInitialBrowserState(): InitialBrowserState {
     .map((result) => result.ok ? '' : result.error);
   return {
     settings: settingsResult.ok && settingsResult.value ? settingsResult.value : defaultAiConfig,
+    theme: themeResult.ok && themeResult.value ? themeResult.value : defaultThemeSettings,
     setup: setupResult.ok && setupResult.value ? setupResult.value : { mode: 'spectator', humanCharacterId: null, seed: 1, randomSeed: true },
     savedGame: gameResult.ok ? gameResult.value : null,
     history: historyResult.ok && historyResult.value ? historyResult.value : [],
@@ -95,6 +103,7 @@ export function useGameController(): GameController {
   const gameRef = useRef<GameState | null>(null);
   const [savedGame, setSavedGame] = useState<SavedGameEnvelope | null>(initial.savedGame);
   const [settings, setSettings] = useState(initial.settings);
+  const [theme, setTheme] = useState(initial.theme);
   const [setup, setSetup] = useState(initial.setup);
   const [storageError, setStorageError] = useState<string | null>(initial.error);
   const [aiError, setAiError] = useState<AiCommandError | null>(null);
@@ -234,9 +243,11 @@ export function useGameController(): GameController {
     }
   }, []);
 
-  const saveAiSettings = useCallback((next: AiProviderConfig) => {
+  const saveAiSettings = useCallback((next: AiProviderConfig, nextTheme: ThemeSettings) => {
     saveSettings(next);
+    saveThemeSettings(nextTheme);
     setSettings(next);
+    setTheme(nextTheme);
     setSettingsOpen(false);
   }, []);
 
@@ -317,7 +328,7 @@ export function useGameController(): GameController {
   }, [commit]);
 
   return {
-    view, game, observation, savedGame, history, historyError, settings, setup, storageError, aiError, decisionError,
+    view, game, observation, savedGame, history, historyError, settings, theme, setup, storageError, aiError, decisionError,
     awaitingRetry, thinking, paused, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
     startNewGame, continueSavedGame, returnToSetup, discardSavedGame, clearHistory, submitHumanDecision,
     retryAi, useLocalFallback, setPaused,
