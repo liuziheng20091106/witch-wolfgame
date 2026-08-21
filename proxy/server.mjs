@@ -51,12 +51,13 @@ function loadProviders(value) {
   return providers;
 }
 
-function buildUpstreamPayload(input, provider, jsonOutput) {
+export function buildUpstreamPayload(input, provider, jsonOutput) {
   const payload = { model: provider.model, messages: input.messages, stream: true };
   if (jsonOutput) payload.response_format = { type: 'json_object' };
-  if (provider.reasoningEffort !== 'none') {
-    if (provider.protocol === 'deepseek') payload.thinking = { type: 'enabled' };
-    else payload.reasoning_effort = provider.reasoningEffort;
+  if (provider.protocol === 'deepseek') {
+    payload.thinking = { type: provider.reasoningEffort === 'none' ? 'disabled' : 'enabled' };
+  } else {
+    payload.reasoning_effort = provider.reasoningEffort;
   }
   return payload;
 }
