@@ -8,8 +8,6 @@
   "connectionPasswordEnv": "MAJO_PROXY_PASSWORD_PRIMARY",
   "acceptedClientVersions": ["2.3.1"],
   "providersFile": "./providers.json",
-  "upstreamTimeoutMs": 60000,
-  "maxAttempts": 4,
   "update": {
     "passEnv": "MAJO_UPDATE_PASS",
     "source": "https://raw.githubusercontent.com/liuziheng20091106/witch-wolfgame/main/{file}",

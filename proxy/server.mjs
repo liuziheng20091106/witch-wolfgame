@@ -2,11 +2,21 @@ import { readFile } from 'node:fs/promises';
 import https from 'node:https';
 import { resolve } from 'node:path';
 import { validateChatCompletionsResponse, validateProviderResponse, validatePublicPayload } from '../server/gameProtocol.mjs';
-import { INTERNAL_PATH, configPath, parseJsonBody, pruneNonces, readBody, readJsonFile, requireEnv, sendJson, verifySignedRequest, watchRestartSignal } from '../server/shared.mjs';
+import { INTERNAL_PATH, configPath, logEvent, parseJsonBody, pruneNonces, readBody, readJsonFile, requireEnv, sendJson, verifySignedRequest, watchRestartSignal } from '../server/shared.mjs';
 import { createUpdateHandler } from './update.mjs';
 
 const PROVIDER_PROTOCOLS = new Set(['openai', 'deepseek']);
 const REASONING_EFFORTS = new Set(['none', 'low', 'high', 'max']);
+const MAX_UPSTREAM_RESPONSE_BYTES = 2 * 1024 * 1024;
+const MAX_PROVIDER_TIMEOUT_MS = 120_000;
+
+function requireBoundedInteger(value, minimum, maximum, label) {
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${label} 必须是 ${minimum}~${maximum} 的整数`);
+  }
+  return value;
+}
+
 
 function validateEndpoint(value) {
   const url = new URL(value);
@@ -18,21 +28,31 @@ function validateEndpoint(value) {
 
 function loadProviders(value) {
   if (!value || !Array.isArray(value.providers) || value.providers.length === 0) throw new Error('providers.json 至少需要一个服务商');
-  return value.providers.map((provider, index) => {
+  const names = new Set();
+  const providers = value.providers.map((provider, index) => {
     if (!provider || typeof provider !== 'object') throw new Error(`服务商 ${index} 配置无效`);
     if (typeof provider.name !== 'string' || !provider.name.trim()) throw new Error(`服务商 ${index} 缺少名称`);
+    if (names.has(provider.name)) throw new Error(`服务商名称重复: ${provider.name}`);
+    names.add(provider.name);
+    if (typeof provider.enabled !== 'boolean') throw new Error(`服务商 ${provider.name} enabled 必须是布尔值`);
+    if (!provider.enabled) return null;
     if (!PROVIDER_PROTOCOLS.has(provider.protocol)) throw new Error(`服务商 ${provider.name} 协议无效`);
     if (typeof provider.model !== 'string' || !provider.model.trim()) throw new Error(`服务商 ${provider.name} 缺少模型`);
     if (!REASONING_EFFORTS.has(provider.reasoningEffort)) throw new Error(`服务商 ${provider.name} 思考强度无效`);
     if (!['auto', 'force', 'disabled'].includes(provider.jsonOutputMode)) throw new Error(`服务商 ${provider.name} JSON Output 模式无效`);
+    const totalTimeoutMs = requireBoundedInteger(provider.totalTimeoutMs, 100, MAX_PROVIDER_TIMEOUT_MS, `服务商 ${provider.name} totalTimeoutMs`);
+    const firstByteTimeoutMs = requireBoundedInteger(provider.firstByteTimeoutMs, 50, totalTimeoutMs, `服务商 ${provider.name} firstByteTimeoutMs`);
+    const retryCount = requireBoundedInteger(provider.retryCount, 0, 9, `服务商 ${provider.name} retryCount`);
     const keys = requireEnv(provider.apiKeysEnv).split(',').map((key) => key.trim()).filter(Boolean);
     if (keys.length === 0) throw new Error(`服务商 ${provider.name} 没有可用 API Key`);
-    return { ...provider, endpoint: validateEndpoint(provider.endpoint), keys };
-  });
+    return { ...provider, endpoint: validateEndpoint(provider.endpoint), totalTimeoutMs, firstByteTimeoutMs, retryCount, keys };
+  }).filter(Boolean);
+  if (providers.length === 0) throw new Error('providers.json 至少需要一个已启用服务商');
+  return providers;
 }
 
 function buildUpstreamPayload(input, provider, jsonOutput) {
-  const payload = { model: provider.model, messages: input.messages };
+  const payload = { model: provider.model, messages: input.messages, stream: true };
   if (jsonOutput) payload.response_format = { type: 'json_object' };
   if (provider.reasoningEffort !== 'none') {
     if (provider.protocol === 'deepseek') payload.thinking = { type: 'enabled' };
@@ -64,49 +84,192 @@ function parseUpstreamResponse(text, provider, jsonOutput) {
   return value;
 }
 
-async function callProvider(provider, apiKey, input, timeoutMs, jsonOutput) {
+function parseSseResponse(text, provider, jsonOutput) {
+  let content = '';
+  let id;
+  let created;
+  let model;
+  let finishReason = null;
+  let usage;
+  let parsedChunks = 0;
+  const events = text.replaceAll('\r\n', '\n').split(/\n\n+/);
+  for (const event of events) {
+    const data = event.split('\n')
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart())
+      .join('\n')
+      .trim();
+    if (!data || data === '[DONE]') continue;
+    let chunk;
+    try { chunk = JSON.parse(data); } catch {
+      const error = new Error(`服务商 ${provider.name} 返回无效 SSE 数据`);
+      error.rawOutput = text;
+      throw error;
+    }
+    parsedChunks += 1;
+    id ??= typeof chunk.id === 'string' ? chunk.id : undefined;
+    created ??= Number.isFinite(chunk.created) ? chunk.created : undefined;
+    model ??= typeof chunk.model === 'string' ? chunk.model : undefined;
+    usage = chunk.usage ?? usage;
+    const choice = chunk.choices?.[0];
+    const fragment = choice?.delta?.content ?? choice?.message?.content;
+    if (typeof fragment === 'string') content += fragment;
+    if (choice?.finish_reason != null) finishReason = choice.finish_reason;
+  }
+  if (parsedChunks === 0) {
+    const error = new Error(`服务商 ${provider.name} 未返回有效 SSE 数据`);
+    error.rawOutput = text;
+    throw error;
+  }
+  const value = {
+    ...(id ? { id } : {}),
+    object: 'chat.completion',
+    ...(created !== undefined ? { created } : {}),
+    model: model ?? provider.model,
+    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finishReason }],
+    ...(usage ? { usage } : {}),
+  };
+  if (!validateChatCompletionsResponse(value)) {
+    const error = new Error(`服务商 ${provider.name} 的流式响应缺少有效内容`);
+    error.rawOutput = text;
+    throw error;
+  }
+  if (jsonOutput && !validateProviderResponse(value)) {
+    const error = new Error(`服务商 ${provider.name} 的模型输出不是合法 JSON`);
+    error.responseFormatError = true;
+    error.rawOutput = text;
+    throw error;
+  }
+  return value;
+}
+
+async function readUpstreamText(response, provider, controller, onFirstByte) {
+  if (!response.body) {
+    const error = new Error(`服务商 ${provider.name} 返回空响应体`);
+    error.retryable = true;
+    throw error;
+  }
+  const chunks = [];
+  let size = 0;
+  let received = false;
+  for await (const chunk of response.body) {
+    if (!received) {
+      received = true;
+      onFirstByte();
+    }
+    size += chunk.byteLength;
+    if (size > MAX_UPSTREAM_RESPONSE_BYTES) {
+      controller.abort();
+      const error = new Error(`服务商 ${provider.name} 响应超过 ${MAX_UPSTREAM_RESPONSE_BYTES} 字节`);
+      error.retryable = false;
+      throw error;
+    }
+    chunks.push(Buffer.from(chunk));
+  }
+  if (!received) {
+    const error = new Error(`服务商 ${provider.name} 返回空响应体`);
+    error.retryable = true;
+    throw error;
+  }
+  return Buffer.concat(chunks, size).toString('utf8');
+}
+
+async function callProvider(provider, apiKey, input, jsonOutput) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let timeoutType = null;
+  const totalTimer = setTimeout(() => {
+    timeoutType = 'total';
+    controller.abort();
+  }, provider.totalTimeoutMs);
+  const firstByteTimer = setTimeout(() => {
+    timeoutType = 'first_byte';
+    controller.abort();
+  }, provider.firstByteTimeoutMs);
+  const clearFirstByteTimer = () => clearTimeout(firstByteTimer);
   try {
-    const response = await fetch(provider.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(buildUpstreamPayload(input, provider, jsonOutput)), signal: controller.signal });
-    const text = await response.text();
+    const response = await fetch(provider.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(buildUpstreamPayload(input, provider, jsonOutput)),
+      signal: controller.signal,
+    });
+    const text = await readUpstreamText(response, provider, controller, clearFirstByteTimer);
     if (!response.ok) {
       const error = new Error(`服务商 ${provider.name} 返回 HTTP ${response.status}`);
       error.retryable = response.status === 408 || response.status === 429 || response.status >= 500;
       error.rawOutput = text;
       throw error;
     }
-    return parseUpstreamResponse(text, provider, jsonOutput);
-  } finally { clearTimeout(timeout); }
+    const contentType = response.headers.get('content-type') ?? '';
+    return contentType.includes('text/event-stream') || text.trimStart().startsWith('data:')
+      ? parseSseResponse(text, provider, jsonOutput)
+      : parseUpstreamResponse(text, provider, jsonOutput);
+  } catch (error) {
+    if (timeoutType) {
+      const timeoutError = new Error(timeoutType === 'first_byte'
+        ? `服务商 ${provider.name} 首字节超时（${provider.firstByteTimeoutMs}ms）`
+        : `服务商 ${provider.name} 总请求超时（${provider.totalTimeoutMs}ms）`);
+      timeoutError.retryable = true;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(firstByteTimer);
+    clearTimeout(totalTimer);
+  }
 }
 
 class ProviderPool {
-  constructor(providers, timeoutMs, maxAttempts) {
-    this.slots = providers.flatMap((provider) => provider.keys.map((key) => ({ provider, key })));
-    this.timeoutMs = timeoutMs;
-    this.maxAttempts = Math.min(Math.max(1, maxAttempts), this.slots.length);
+  constructor(providers) {
+    this.providers = providers;
     this.cursor = 0;
+    this.keyCursors = new Map(providers.map((provider) => [provider.name, 0]));
     this.sessionFallback = new Map();
   }
+
+  nextKey(provider) {
+    const cursor = this.keyCursors.get(provider.name) ?? 0;
+    this.keyCursors.set(provider.name, cursor + 1);
+    return provider.keys[cursor % provider.keys.length];
+  }
+
   async request(input, sessionId) {
-    const start = this.cursor++ % this.slots.length;
+    const start = this.cursor++ % this.providers.length;
     let lastError = new Error('没有可用服务商');
-    for (let attempt = 0; attempt < this.maxAttempts; attempt += 1) {
-      const slot = this.slots[(start + attempt) % this.slots.length];
-      const fallbackKey = `${sessionId}:${slot.provider.name}`;
+    for (let providerOffset = 0; providerOffset < this.providers.length; providerOffset += 1) {
+      const provider = this.providers[(start + providerOffset) % this.providers.length];
+      const maxAttempts = provider.retryCount + 1;
+      const fallbackKey = `${sessionId ?? 'anonymous'}:${provider.name}`;
       const expires = this.sessionFallback.get(fallbackKey) ?? 0;
       if (expires <= Date.now()) this.sessionFallback.delete(fallbackKey);
-      const jsonOutput = slot.provider.jsonOutputMode === 'force' || (slot.provider.jsonOutputMode === 'auto' && !this.sessionFallback.has(fallbackKey));
-      try { return await callProvider(slot.provider, slot.key, input, this.timeoutMs, jsonOutput); }
-      catch (error) {
-        lastError = error;
-        if (slot.provider.jsonOutputMode === 'auto' && jsonOutput && error.responseFormatError === true) {
-          this.sessionFallback.set(fallbackKey, Date.now() + 30 * 60_000);
-          try { return await callProvider(slot.provider, slot.key, input, this.timeoutMs, false); }
-          catch (fallbackError) { lastError = fallbackError; }
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const jsonOutput = provider.jsonOutputMode === 'force'
+          || (provider.jsonOutputMode === 'auto' && !this.sessionFallback.has(fallbackKey));
+        const startedAt = Date.now();
+        logEvent('info', 'provider_attempt', { provider: provider.name, attempt, maxAttempts, jsonOutput, sessionId: sessionId ?? null });
+        try {
+          const value = await callProvider(provider, this.nextKey(provider), input, jsonOutput);
+          logEvent('info', 'provider_success', { provider: provider.name, attempt, maxAttempts, durationMs: Date.now() - startedAt, sessionId: sessionId ?? null });
+          return { value, providerName: provider.name };
+        } catch (error) {
+          lastError = error;
+          let fallbackActivated = false;
+          if (provider.jsonOutputMode === 'auto' && jsonOutput && error.responseFormatError === true) {
+            this.sessionFallback.set(fallbackKey, Date.now() + 30 * 60_000);
+            fallbackActivated = true;
+          }
+          logEvent('warn', 'provider_failure', {
+            provider: provider.name,
+            attempt,
+            maxAttempts,
+            durationMs: Date.now() - startedAt,
+            retryable: error.retryable !== false,
+            responseFormatFallback: fallbackActivated,
+            message: error.message,
+            sessionId: sessionId ?? null,
+          });
+          if (error.retryable === false && !fallbackActivated) break;
         }
-        console.warn(`[proxy] ${slot.provider.name} 第 ${attempt + 1} 次尝试失败: ${error.message}`);
-        if (error.retryable === false && error.responseFormatError !== true) break;
       }
     }
     throw lastError;
@@ -119,7 +282,7 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
   const providers = loadProviders(await readJsonFile(configPath(configFile, config.providersFile)));
   const acceptedVersions = new Set(config.acceptedClientVersions);
   if (acceptedVersions.size === 0) throw new Error('acceptedClientVersions 不能为空');
-  const pool = new ProviderPool(providers, config.upstreamTimeoutMs, config.maxAttempts);
+  const pool = new ProviderPool(providers);
   const ca = await readFile(configPath(configFile, config.tls.ca));
   const cert = await readFile(configPath(configFile, config.tls.cert));
   const key = await readFile(configPath(configFile, config.tls.key));
@@ -128,7 +291,7 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
   pruneTimer.unref();
   // Docker 将仓库以可写卷挂载到 /app；本地运行则使用当前工作目录。
   const updateProjectRoot = config.update?.projectRoot ?? process.cwd();
-  const updateHandler = createUpdateHandler(config.update, updateProjectRoot);
+  const updateHandler = createUpdateHandler(config.update, updateProjectRoot, (message) => logEvent('info', 'update_log', { message }));
   const server = https.createServer({ ca, cert, key, requestCert: true, rejectUnauthorized: true, minVersion: 'TLSv1.3' }, async (request, response) => {
     if (!request.socket.authorized) return sendJson(response, 401, { error: 'unauthorized_client_certificate' });
     const url = new URL(request.url ?? '/', 'https://localhost');
@@ -138,38 +301,44 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
     }
     if (url.pathname !== INTERNAL_PATH) return sendJson(response, 404, { error: 'not_found' });
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method_not_allowed' });
+    const startedAt = Date.now();
+    let sessionId = null;
     try {
       const body = await readBody(request);
       if (!verifySignedRequest(password, request, url.pathname, body, nonceStore)) return sendJson(response, 401, { error: 'invalid_internal_signature' });
       const payload = parseJsonBody(body);
-      const sessionId = request.headers['x-majo-wolf-session'];
+      sessionId = request.headers['x-majo-wolf-session'] ?? null;
       const validationError = validatePublicPayload(payload, acceptedVersions);
       if (validationError) return sendJson(response, 400, { error: 'invalid_game_request', message: validationError });
-      sendJson(response, 200, await pool.request(payload, sessionId));
+      logEvent('info', 'proxy_request', { sessionId, bytes: body.length });
+      const result = await pool.request(payload, sessionId);
+      logEvent('info', 'proxy_success', { sessionId, provider: result.providerName, durationMs: Date.now() - startedAt });
+      sendJson(response, 200, result.value);
     } catch (error) {
       const status = Number.isInteger(error.statusCode) ? error.statusCode : 502;
+      logEvent('warn', 'proxy_error', { sessionId, status, durationMs: Date.now() - startedAt, message: error.message });
       sendJson(response, status, { error: status === 502 ? 'upstream_unavailable' : 'bad_request', message: error.message, rawOutput: typeof error.rawOutput === 'string' ? error.rawOutput.slice(0, 4000) : null });
     }
   });
   await new Promise((resolvePromise, reject) => { server.once('error', reject); server.listen(config.listen.port ?? 34023, config.listen.host ?? '0.0.0.0', resolvePromise); });
   const stopWatchingRestart = await watchRestartSignal(process.env.MAJO_RESTART_SIGNAL, async () => {
-    console.warn('[proxy] 检测到共享代码更新，正在重启');
+    logEvent('warn', 'proxy_restart', { message: '检测到共享代码更新，正在重启' });
     const forceExit = setTimeout(() => process.exit(0), 5_000);
     forceExit.unref();
     await new Promise((resolvePromise) => server.close(resolvePromise));
     clearTimeout(forceExit);
     process.exit(0);
-  });
+  }, (message) => logEvent('warn', 'proxy_restart_watch_error', { message }));
   server.on('close', () => {
     clearInterval(pruneTimer);
     stopWatchingRestart();
   });
   const address = server.address();
-  console.log(`Majo proxy listening on https://${typeof address === 'object' && address ? address.address : config.listen.host}:${typeof address === 'object' && address ? address.port : config.listen.port}`);
+  logEvent('info', 'proxy_listening', { address: typeof address === 'object' && address ? address.address : config.listen.host, port: typeof address === 'object' && address ? address.port : config.listen.port });
   return server;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) startProxyServer().catch(() => {
-  console.error('[proxy] startup failed');
+if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) startProxyServer().catch((error) => {
+  logEvent('error', 'proxy_startup_error', { message: error.message });
   process.exitCode = 1;
 });
