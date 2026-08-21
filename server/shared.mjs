@@ -4,7 +4,12 @@ import { basename, dirname, resolve } from 'node:path';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
 
-export async function watchRestartSignal(signalPath, onSignal, log = console.warn) {
+export function logEvent(level, event, fields = {}) {
+  const writer = level === 'error' ? console.error : level === 'warn' ? console.warn : level === 'info' ? console.info : console.log;
+  writer(JSON.stringify({ time: new Date().toISOString(), event, ...fields }));
+}
+
+export async function watchRestartSignal(signalPath, onSignal, log = (message) => logEvent('warn', 'restart_watch_error', { message })) {
   if (typeof signalPath !== 'string' || signalPath.length === 0) return () => {};
   const absolutePath = resolve(signalPath);
   const directory = dirname(absolutePath);

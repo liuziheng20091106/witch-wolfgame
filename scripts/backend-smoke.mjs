@@ -23,6 +23,14 @@ function listen(server) {
 function close(server) {
   return new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sseChunk(content, finishReason = null) {
+  return `data: ${JSON.stringify({ id: 'chatcmpl-smoke', object: 'chat.completion.chunk', created: 1, model: 'smoke-model', choices: [{ index: 0, delta: { content }, finish_reason: finishReason }] })}\n\n`;
+}
+
 
 function validPayload() {
   return {
@@ -99,6 +107,14 @@ const certs = join(work, 'certs');
 let upstream;
 let proxy;
 let main;
+const capturedLogs = [];
+const originalConsole = { log: console.log, info: console.info, warn: console.warn, error: console.error };
+for (const method of Object.keys(originalConsole)) {
+  console[method] = (...args) => {
+    capturedLogs.push(args.join(' '));
+    originalConsole[method](...args);
+  };
+}
 try {
   await generateCertificates(certs);
   const [ca, clientCert, clientKey] = await Promise.all([
@@ -106,15 +122,37 @@ try {
     readFile(join(certs, 'main-client.crt')),
     readFile(join(certs, 'main-client.key')),
   ]);
-  let upstreamMode = 'json-content';
+  let upstreamMode = 'sse-json';
   const upstreamRequests = [];
   upstream = http.createServer(async (request, response) => {
     let body = '';
     for await (const chunk of request) body += chunk;
     upstreamRequests.push({ authorization: request.headers.authorization, body: JSON.parse(body) });
+    if (upstreamMode === 'first-byte-timeout') {
+      await delay(120);
+      if (!response.destroyed) {
+        response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        response.end(`${sseChunk('{"targetPlayerId":1}', 'stop')}data: [DONE]\n\n`);
+      }
+      return;
+    }
+    if (upstreamMode === 'total-timeout') {
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.write(sseChunk('{"target'));
+      await delay(300);
+      if (!response.destroyed) response.end(`${sseChunk('PlayerId":1}', 'stop')}data: [DONE]\n\n`);
+      return;
+    }
     if (upstreamMode === 'non-json') { response.writeHead(200, { 'Content-Type': 'text/plain' }); response.end('UPSTREAM_NON_JSON'); return; }
     if (upstreamMode === 'http-500') { response.writeHead(500, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ error: 'UPSTREAM_500', message: 'upstream body retained' })); return; }
     const content = upstreamMode === 'plain-content' ? 'plain provider text' : '{"targetPlayerId":1}';
+    if (upstreamMode === 'sse-json') {
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.write(sseChunk(content.slice(0, 10)));
+      await delay(10);
+      response.end(`${sseChunk(content.slice(10), 'stop')}data: [DONE]\n\n`);
+      return;
+    }
     response.writeHead(200, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ choices: [{ message: { content } }] }));
   });
@@ -122,15 +160,18 @@ try {
   const providersFile = join(work, 'providers.json');
   const proxyConfig = join(work, 'proxy.json');
   const mainConfig = join(work, 'main.json');
-  await writeFile(providersFile, JSON.stringify({ providers: [{
-    name: 'smoke-provider', protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/v1/chat/completions`,
-    model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'low', jsonOutputMode: 'disabled',
-  }] }));
+  await writeFile(providersFile, JSON.stringify({ providers: [
+    { name: 'disabled-provider', enabled: false },
+    {
+      name: 'smoke-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/v1/chat/completions`,
+      model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'low', jsonOutputMode: 'auto',
+      totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 1,
+    },
+  ] }));
   await writeFile(proxyConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 },
     tls: { ca: join(certs, 'ca.crt'), cert: join(certs, 'proxy-server.crt'), key: join(certs, 'proxy-server.key') },
     connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.3.1'], providersFile,
-    upstreamTimeoutMs: 5000, maxAttempts: 2,
   }));
   process.env.MAJO_PROXY_PASSWORD_PRIMARY = 'backend-smoke-long-random-password';
   process.env.SMOKE_API_KEYS = 'key-one,key-two';
@@ -154,23 +195,34 @@ try {
   assert.equal(upstreamRequests.length, 1);
   const valid = await postMain(mainPort, validPayload(), '203.0.113.9');
   assert.equal(valid.status, 200);
-  assert.deepEqual(await valid.json(), { choices: [{ message: { content: '{"targetPlayerId":1}' } }] });
+  assert.equal((await valid.json()).choices[0].message.content, '{"targetPlayerId":1}');
   assert.equal(upstreamRequests.length, 2);
   assert.equal(upstreamRequests.at(-1).authorization, 'Bearer key-two');
   assert.equal(upstreamRequests[0].body.model, 'smoke-model');
   assert.equal(upstreamRequests[0].body.reasoning_effort, 'low');
+  assert.equal(upstreamRequests[0].body.stream, true);
   assert.equal(upstreamRequests[0].body.client, undefined);
 
+  upstreamMode = 'json-content';
+  const nonStreaming = await postMain(mainPort, validPayload(), '203.0.113.21');
+  assert.equal(nonStreaming.status, 200);
+  assert.equal((await nonStreaming.json()).choices[0].message.content, '{"targetPlayerId":1}');
+
   upstreamMode = 'plain-content';
+  const beforePlain = upstreamRequests.length;
   const plain = await postMain(mainPort, validPayload(), '203.0.113.15');
   assert.equal(plain.status, 200);
   assert.deepEqual(await plain.json(), { choices: [{ message: { content: 'plain provider text' } }] });
+  assert.equal(upstreamRequests.length - beforePlain, 2);
+  assert.deepEqual(upstreamRequests.at(-2).body.response_format, { type: 'json_object' });
+  assert.equal(upstreamRequests.at(-1).body.response_format, undefined);
   const afterPlain = upstreamRequests.length;
   upstreamMode = 'non-json';
   const nonJson = await postMain(mainPort, validPayload(), '203.0.113.16');
   assert.equal(nonJson.status, 502);
   assert.equal((await nonJson.json()).rawOutput, 'UPSTREAM_NON_JSON');
-  assert.ok(upstreamRequests.length > afterPlain);
+  assert.equal(upstreamRequests.length - afterPlain, 2);
+
   const afterNonJson = upstreamRequests.length;
   upstreamMode = 'http-500';
   const failed = await postMain(mainPort, validPayload(), '203.0.113.17');
@@ -178,7 +230,21 @@ try {
   const failedBody = await failed.json();
   assert.equal(failedBody.error, 'proxy_unavailable');
   assert.match(failedBody.rawOutput, /UPSTREAM_500/);
-  assert.ok(upstreamRequests.length > afterNonJson);
+  assert.equal(upstreamRequests.length - afterNonJson, 2);
+
+  upstreamMode = 'first-byte-timeout';
+  const beforeFirstByteTimeout = upstreamRequests.length;
+  const firstByteTimeout = await postMain(mainPort, validPayload(), '203.0.113.22');
+  assert.equal(firstByteTimeout.status, 502);
+  assert.match((await firstByteTimeout.json()).message, /首字节超时/);
+  assert.equal(upstreamRequests.length - beforeFirstByteTimeout, 2);
+
+  upstreamMode = 'total-timeout';
+  const beforeTotalTimeout = upstreamRequests.length;
+  const totalTimeout = await postMain(mainPort, validPayload(), '203.0.113.23');
+  assert.equal(totalTimeout.status, 502);
+  assert.match((await totalTimeout.json()).message, /总请求超时/);
+  assert.equal(upstreamRequests.length - beforeTotalTimeout, 2);
 
   const invalidPayload = validPayload();
   invalidPayload.messages[0].content = '你是通用助手';
@@ -234,17 +300,27 @@ try {
   assert.equal((await postMain(mainPort, replacedTraitPayload, '203.0.113.14')).status, 400);
   assert.equal(upstreamRequests.length, beforeReplacedTrait);
 
-  upstreamMode = 'json-content';
+  upstreamMode = 'sse-json';
   const rateStart = upstreamRequests.length;
   assert.equal((await postMain(mainPort, validPayload(), '203.0.113.11')).status, 200);
   assert.equal((await postMain(mainPort, validPayload(), '203.0.113.11')).status, 200);
   assert.equal((await postMain(mainPort, validPayload(), '203.0.113.11')).status, 429);
   assert.equal(upstreamRequests.length, rateStart + 2);
 
-  console.log('后端烟测通过：mTLS、HMAC、共享协议校验、密钥轮换与 CF-Connecting-IP 限流均已验证。');
+  const structuredLogs = capturedLogs.flatMap((line) => {
+    try { return [JSON.parse(line)]; } catch { return []; }
+  });
+  for (const event of ['ai_request', 'ai_success', 'proxy_request', 'proxy_success', 'provider_attempt', 'provider_success', 'provider_failure']) {
+    const entry = structuredLogs.find((candidate) => candidate.event === event);
+    assert.ok(entry, `缺少 ${event} 日志`);
+    assert.ok(Number.isFinite(Date.parse(entry.time)), `${event} 日志缺少 ISO 时间`);
+  }
+
+  console.log('后端烟测通过：上游 SSE 聚合、非流式回退、首字节/总超时、提供商重试、时间日志、mTLS、HMAC 与限流均已验证。');
 } finally {
   if (main) await close(main);
   if (proxy) await close(proxy);
   if (upstream) await close(upstream);
+  for (const [method, implementation] of Object.entries(originalConsole)) console[method] = implementation;
   await rm(work, { recursive: true, force: true });
 }

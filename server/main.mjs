@@ -11,6 +11,7 @@ import {
   parseJsonBody,
   readBody,
   readJsonFile,
+  logEvent,
   requireEnv,
   sendJson,
   watchRestartSignal,
@@ -106,7 +107,7 @@ class ProxyPool {
         lastError = error;
         if (Number.isInteger(error.statusCode) && error.statusCode < 500) break;
       }
-      console.warn(`[main] ${node.name} 不可用: ${lastError.message}`);
+      logEvent('warn', 'proxy_node_failure', { proxy: node.name, sessionId, message: lastError.message });
     }
     throw lastError;
   }
@@ -140,12 +141,16 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
       limiter.release(ip);
       return sendJson(response, 400, { error: 'invalid_session' }, cors);
     }
-    console.info(JSON.stringify({ event: 'ai_request', ip, sessionId, path: url.pathname, bytes: request.headers['content-length'] ?? null }));
+    const startedAt = Date.now();
+    logEvent('info', 'ai_request', { ip, sessionId, path: url.pathname, bytes: request.headers['content-length'] ?? null });
     try {
       const body = await readBody(request);
       const payload = parseJsonBody(body);
       const validationError = validatePublicPayload(payload, acceptedVersions);
-      if (validationError) return sendJson(response, 400, { error: 'invalid_game_request', message: validationError }, cors);
+      if (validationError) {
+        logEvent('warn', 'ai_error', { ip, sessionId, status: 400, durationMs: Date.now() - startedAt, message: validationError });
+        return sendJson(response, 400, { error: 'invalid_game_request', message: validationError }, cors);
+      }
       const upstream = await proxyPool.request(body, sessionId);
       if (upstream.statusCode >= 200 && upstream.statusCode < 300) {
         let responsePayload;
@@ -162,13 +167,14 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
           throw error;
         }
       }
+      logEvent('info', 'ai_success', { ip, sessionId, status: upstream.statusCode, proxy: upstream.nodeName, durationMs: Date.now() - startedAt, bytes: upstream.body.length });
       response.writeHead(upstream.statusCode, { ...cors, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Majo-Proxy': upstream.nodeName });
       response.end(upstream.body);
     } catch (error) {
       const status = Number.isInteger(error.statusCode) ? error.statusCode : 502;
       const rawOutput = typeof error.rawOutput === 'string' ? error.rawOutput.slice(0, 4000) : null;
       const errorCode = status >= 500 ? 'proxy_unavailable' : status >= 400 ? 'upstream_error' : 'bad_request';
-      console.warn(JSON.stringify({ event: 'ai_error', ip, sessionId, status, message: error.message, rawOutput }));
+      logEvent('warn', 'ai_error', { ip, sessionId, status, durationMs: Date.now() - startedAt, message: error.message });
       sendJson(response, status, { error: errorCode, message: error.message, rawOutput }, cors);
     } finally {
       limiter.release(ip);
@@ -179,22 +185,22 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
     server.listen(config.listen.port, config.listen.host, resolvePromise);
   });
   const stopWatchingRestart = await watchRestartSignal(process.env.MAJO_RESTART_SIGNAL, async () => {
-    console.warn('[main] 检测到共享代码更新，正在重启');
+    logEvent('warn', 'main_restart', { message: '检测到共享代码更新，正在重启' });
     const forceExit = setTimeout(() => process.exit(0), 5_000);
     forceExit.unref();
     await new Promise((resolvePromise) => server.close(resolvePromise));
     clearTimeout(forceExit);
     process.exit(0);
-  });
+  }, (message) => logEvent('warn', 'main_restart_watch_error', { message }));
   server.on('close', stopWatchingRestart);
   const address = server.address();
-  console.log(`Majo main backend listening on http://${typeof address === 'object' && address ? address.address : config.listen.host}:${typeof address === 'object' && address ? address.port : config.listen.port}`);
+  logEvent('info', 'main_listening', { address: typeof address === 'object' && address ? address.address : config.listen.host, port: typeof address === 'object' && address ? address.port : config.listen.port });
   return server;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
-  startMainServer().catch(() => {
-    console.error('[main] 启动失败');
+  startMainServer().catch((error) => {
+    logEvent('error', 'main_startup_error', { message: error.message });
     process.exitCode = 1;
   });
 }

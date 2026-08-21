@@ -2,21 +2,29 @@
   "providers": [
     {
       "name": "deepseek-primary",
+      "enabled": true,
       "protocol": "deepseek",
       "endpoint": "https://api.deepseek.com/v1/chat/completions",
       "model": "deepseek-chat",
       "apiKeysEnv": "DEEPSEEK_API_KEYS",
       "reasoningEffort": "none",
-      "jsonOutputMode": "auto"
+      "jsonOutputMode": "auto",
+      "totalTimeoutMs": 55000,
+      "firstByteTimeoutMs": 15000,
+      "retryCount": 1
     },
     {
       "name": "openai-compatible-backup",
+      "enabled": true,
       "protocol": "openai",
       "endpoint": "https://api.example.com/v1/chat/completions",
       "model": "example-model",
       "apiKeysEnv": "BACKUP_API_KEYS",
       "reasoningEffort": "low",
-      "jsonOutputMode": "disabled"
+      "jsonOutputMode": "disabled",
+      "totalTimeoutMs": 55000,
+      "firstByteTimeoutMs": 15000,
+      "retryCount": 1
     }
   ]
 }
