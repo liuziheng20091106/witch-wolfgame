@@ -6,6 +6,19 @@ export const SETTINGS_KEY = 'majo-wolf.settings.v1';
 export const GAME_KEY = 'majo-wolf.game.v1';
 export const SETUP_KEY = 'majo-wolf.setup.v1';
 export const SESSION_KEY = 'majo-wolf.session.v1';
+export type ThemePreference = 'light' | 'dark' | 'system';
+
+export interface ThemeSettings {
+  preference: ThemePreference;
+  judgmentMode: boolean;
+}
+
+export const THEME_KEY = 'majo-wolf.theme.v1';
+
+export const defaultThemeSettings: ThemeSettings = {
+  preference: 'system',
+  judgmentMode: false,
+};
 
 export interface SetupPreferences {
   mode: GameMode;
@@ -159,6 +172,19 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
 
 export function saveSettings(config: AiProviderConfig): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsSchema.parse(config)));
+}
+
+const themeSettingsSchema = z.strictObject({
+  preference: z.enum(['light', 'dark', 'system']),
+  judgmentMode: z.boolean(),
+});
+
+export function loadThemeSettings(): StorageResult<ThemeSettings> {
+  return readValue(THEME_KEY, themeSettingsSchema);
+}
+
+export function saveThemeSettings(settings: ThemeSettings): void {
+  localStorage.setItem(THEME_KEY, JSON.stringify(themeSettingsSchema.parse(settings)));
 }
 
 export function loadSessionId(): string {

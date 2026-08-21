@@ -1,4 +1,4 @@
-import { CircleCheck, Eye, EyeOff, Heart, Save, ShieldCheck, Sparkles, X } from 'lucide-react';
+import { CircleCheck, Eye, EyeOff, Heart, Moon, Palette, Save, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { validateAiEndpoint } from '../../ai/client';
 import { APP_VERSION } from '../../config/version';
@@ -9,17 +9,20 @@ import {
   type AiProviderConfig,
   type CustomAiProviderConfig,
 } from '../../ai/types';
+import type { ThemePreference, ThemeSettings } from '../../storage/browserStorage';
 import styles from './AiSettingsDrawer.module.css';
 
 interface AiSettingsDrawerProps {
   open: boolean;
   config: AiProviderConfig;
+  theme: ThemeSettings;
   onClose(): void;
-  onSave(config: AiProviderConfig): void;
+  onSave(config: AiProviderConfig, theme: ThemeSettings): void;
 }
 
-export function AiSettingsDrawer({ open, config, onClose, onSave }: AiSettingsDrawerProps) {
+export function AiSettingsDrawer({ open, config, theme, onClose, onSave }: AiSettingsDrawerProps) {
   const [draft, setDraft] = useState<AiProviderConfig>(config);
+  const [themeDraft, setThemeDraft] = useState<ThemeSettings>(theme);
   const [customDraft, setCustomDraft] = useState<CustomAiProviderConfig>(
     config.provider === 'custom' ? config : defaultCustomAiConfig,
   );
@@ -31,12 +34,13 @@ export function AiSettingsDrawer({ open, config, onClose, onSave }: AiSettingsDr
   useEffect(() => {
     if (!open) return;
     setDraft(config);
+    setThemeDraft(theme);
     if (config.provider === 'custom') setCustomDraft(config);
     setValidationError(null);
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const timer = window.setTimeout(() => panelRef.current?.querySelector<HTMLElement>('input, select, button')?.focus(), 0);
     return () => window.clearTimeout(timer);
-  }, [config, open]);
+  }, [config, open, theme]);
 
   useEffect(() => {
     if (!open) return;
@@ -95,14 +99,14 @@ export function AiSettingsDrawer({ open, config, onClose, onSave }: AiSettingsDr
     <div className={styles.backdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
       <div ref={panelRef} className={styles.drawer} role="dialog" aria-modal="true" aria-labelledby="ai-settings-title">
         <header className={styles.header}>
-          <div><span className={styles.eyebrow}>AI SERVICE</span><h2 id="ai-settings-title">AI 服务设置</h2></div>
+          <div><span className={styles.eyebrow}>AI & INTERFACE</span><h2 id="ai-settings-title">应用设置</h2></div>
           <button className={styles.iconButton} type="button" onClick={close} aria-label="关闭设置"><X /></button>
         </header>
         <form className={styles.form} onSubmit={(event) => {
           event.preventDefault();
           try {
             validate();
-            onSave(draft);
+            onSave(draft, themeDraft);
           } catch (error) {
             setValidationError(error instanceof Error ? error.message : '设置不合法');
           }
@@ -127,6 +131,11 @@ export function AiSettingsDrawer({ open, config, onClose, onSave }: AiSettingsDr
           </>}
           {draft.provider === 'custom' && <><label className={styles.reasoning}>思考强度<select value={customDraft.reasoningEffort} onChange={(event) => updateReasoningEffort(event.target.value as CustomAiProviderConfig['reasoningEffort'])}><option value="none">none</option><option value="low">low</option><option value="high">high</option><option value="max">max</option></select></label><label className={styles.retry}>模型错误重试次数<input type="number" min="0" max="5" value={customDraft.retryCount} onChange={(event) => updateCustom({ retryCount: Math.min(5, Math.max(0, Number(event.target.value) || 0)) })} /></label><label className={styles.jsonMode}>JSON Output<select value={customDraft.jsonOutputMode} onChange={(event) => updateCustom({ jsonOutputMode: event.target.value as CustomAiProviderConfig['jsonOutputMode'] })}><option value="auto">自动</option><option value="force">强制</option><option value="disabled">禁用</option></select></label><p className={styles.disclosure}><ShieldCheck />自动模式在格式错误后仅对当前浏览器会话关闭 JSON Output。</p></>}
           {draft.provider === 'free' && <label className={styles.retry}>模型错误重试次数<input type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ provider: 'free', retryCount: Math.min(5, Math.max(0, Number(event.target.value) || 0)) })} /></label>}
+          <section className={styles.themeSection} aria-labelledby="theme-title">
+            <div className={styles.themeHeading}><Palette /><div><span>INTERFACE</span><h3 id="theme-title">界面主题</h3></div></div>
+            <label className={styles.themeSelect}>主题模式<select value={themeDraft.preference} onChange={(event) => setThemeDraft((current) => ({ ...current, preference: event.target.value as ThemePreference }))}><option value="system">跟随系统</option><option value="light">亮色主题</option><option value="dark">黑色主题</option></select></label>
+            <label className={styles.judgmentToggle}><input type="checkbox" checked={themeDraft.judgmentMode} onChange={(event) => setThemeDraft((current) => ({ ...current, judgmentMode: event.target.checked }))} /><span><strong><Moon />审判模式</strong><small>游戏白天使用亮色，黑夜使用暗色；会覆盖上面的主题模式。</small></span></label>
+          </section>
           {validationError && <p className={styles.error} role="alert">{validationError}</p>}
           <footer className={styles.actions}><button className={styles.primary} type="submit"><Save />保存设置</button></footer>
           <p className={styles.version}>v{APP_VERSION}</p>

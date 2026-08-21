@@ -4,12 +4,12 @@
 .intro span, .sectionHeading span, .confirmDialog > span { color: var(--verdict); font-family: var(--sans); font-size: 11px; font-weight: 900; }
 .settingsButton { min-height: 46px; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; border: 1px solid var(--ink); background: transparent; font-family: var(--sans); font-weight: 800; }
 .settingsButton svg { width: 19px; }
-.commandBand { display: grid; grid-template-columns: minmax(220px, .85fr) minmax(360px, 1.4fr) minmax(150px, .45fr); gap: 26px; align-items: end; padding: 34px clamp(18px, 4vw, 64px); background: var(--ink); color: var(--paper-bright); }
+.commandBand { display: grid; grid-template-columns: minmax(220px, .85fr) minmax(360px, 1.4fr) minmax(150px, .45fr); gap: 26px; align-items: end; padding: 34px clamp(18px, 4vw, 64px); background: var(--ink-surface); color: #fffefa; }
 .intro h2 { margin: 5px 0 0; font-size: 30px; }
 .modeSwitch { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid rgb(255 255 255 / 32%); }
-.modeSwitch button { min-height: 58px; display: inline-flex; justify-content: center; align-items: center; gap: 9px; border: 0; background: transparent; color: var(--paper-bright); font-family: var(--sans); font-weight: 800; }
+.modeSwitch button { min-height: 58px; display: inline-flex; justify-content: center; align-items: center; gap: 9px; border: 0; background: transparent; color: var(--ink-on-surface); font-family: var(--sans); font-weight: 800; }
 .modeSwitch button + button { border-left: 1px solid rgb(255 255 255 / 32%); }
-.modeSwitch .activeMode { background: var(--verdict); }
+.modeSwitch .activeMode { background: var(--verdict); color: #19181c; }
 .modeSwitch svg { width: 20px; }
 .seedField { display: grid; gap: 7px; color: var(--paper-dim); font-family: var(--sans); font-size: 12px; font-weight: 800; }
 .seedField input { width: 100%; min-height: 48px; padding: 8px 12px; border: 1px solid rgb(255 255 255 / 35%); background: transparent; color: white; }
@@ -27,17 +27,18 @@
 .character:hover, .selectedCharacter { border-color: var(--verdict); box-shadow: inset 0 -4px var(--verdict); }
 .character:focus-visible, .selectedCharacter:focus-visible { outline: 3px solid var(--intel); outline-offset: 2px; }
 .character img, .selectedCharacter img { width: 100%; aspect-ratio: 1; object-fit: cover; object-position: top center; }
-.seatNumber { position: absolute; top: 7px; left: 7px; z-index: 1; padding: 3px 6px; background: var(--ink); color: white; font-family: var(--sans); font-size: 10px; font-weight: 900; }
+.seatNumber { position: absolute; top: 7px; left: 7px; z-index: 1; padding: 3px 6px; background: var(--ink-surface); color: var(--ink-on-surface); font-family: var(--sans); font-size: 10px; font-weight: 900; }
 .characterName { padding: 10px 9px 2px; font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trait { padding: 0 9px; color: var(--muted); font-family: var(--sans); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .check { position: absolute; top: 7px; right: 7px; display: grid; width: 28px; height: 28px; place-items: center; background: var(--verdict); color: white; }
 .check svg { width: 17px; }
 .launchBand { display: grid; grid-template-columns: minmax(280px, 1fr) auto; gap: 20px 34px; align-items: center; padding: 26px clamp(18px, 4vw, 64px) 42px; }
-.aiStatus { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; }
-.aiStatus > svg { width: 44px; height: 44px; padding: 10px; background: var(--intel-soft); color: var(--intel-dark); }
-.aiStatus div { display: grid; gap: 2px; min-width: 0; }
-.aiStatus strong { font-size: 17px; }
-.aiStatus span { color: var(--muted); font-family: var(--sans); font-size: 13px; overflow-wrap: anywhere; }
+.aiStatus { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.aiIcon { width: 44px; height: 44px; display: grid; place-items: center; overflow: hidden; background: var(--intel-soft); color: var(--intel-dark); }
+.aiIcon svg { width: 24px; height: 24px; padding: 0; }
+.aiStatus > div { min-width: 0; display: grid; gap: 2px; align-content: center; }
+.aiStatus strong { display: block; line-height: 1.2; font-size: 17px; }
+.aiStatus span { display: block; color: var(--muted); font-family: var(--sans); font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
 .aiStatus button { min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 0 10px; border: 0; background: transparent; color: var(--intel-dark); font-weight: 800; }
 .aiStatus button svg { width: 17px; }
 .launchActions { display: flex; gap: 12px; align-items: stretch; }

@@ -69,7 +69,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
     <main className={styles.page}>
       <header className={styles.masthead}>
         <img className={styles.brandMark} src={brandMark} alt="魔女狼人杀" />
-        <button className={styles.settingsButton} type="button" onClick={onOpenSettings}><Settings />AI 设置</button>
+        <button className={styles.settingsButton} type="button" onClick={onOpenSettings}><Settings />设置</button>
       </header>
 
       <section className={styles.commandBand} aria-labelledby="setup-title">
@@ -113,7 +113,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
 
       <section className={styles.launchBand}>
         <div className={styles.aiStatus}>
-          <Bot />
+          <span className={styles.aiIcon}><Bot /></span>
           <div><strong>{settings.provider === 'free' ? '免费服务' : '自定义服务'}</strong><span>{settings.provider === 'free' ? '公益服务，不保证稳定可用' : settings.model || '请填写模型'}</span></div>
           <button type="button" onClick={onOpenSettings}>{settings.provider === 'free' ? '服务详情' : '打开设置'}<ChevronRight /></button>
         </div>

@@ -28,11 +28,36 @@
   background: var(--paper);
   font-family: 'Majo Serif', 'Songti SC', 'Noto Serif SC', serif;
   font-synthesis: none;
+  --ink-surface: #19181c;
+  --ink-on-surface: #fffefa;
 }
 
-* { box-sizing: border-box; }
+html[data-theme='dark'] {
+  --paper: #101116;
+  --paper-bright: #1a1c22;
+  --paper-dim: #b9bbc3;
+  --ink: #f1eee8;
+  --muted: #a7aab4;
+  --line: #353842;
+  --line-strong: #606572;
+  --verdict: #e05b73;
+  --verdict-dark: #ff9aac;
+  --verdict-light: #f38ca0;
+  --verdict-soft: #3b2029;
+  --intel: #55b8c2;
+  --intel-dark: #8bd5db;
+  --intel-soft: #17363a;
+  --magic: #e0bd57;
+  --magic-dark: #f4d77b;
+  --magic-soft: #3c3219;
+  --pink: #e38eaa;
+  --ink-surface: #08090c;
+  --ink-on-surface: #f1eee8;
+}
+
 html { min-width: 320px; min-height: 100%; color-scheme: light; }
-body, #root { min-width: 320px; min-height: 100%; margin: 0; }
+html[data-theme='dark'] { color-scheme: dark; }
+body, #root { min-width: 320px; min-height: 100%; margin: 0; background: var(--paper); color: var(--ink); }
 body { overflow-x: hidden; }
 button, input, select, textarea { font: inherit; letter-spacing: 0; }
 button { cursor: pointer; }
@@ -44,3 +69,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 ::-webkit-scrollbar-track { background: var(--paper); }
 ::-webkit-scrollbar-thumb { background: var(--line-strong); border: 2px solid var(--paper); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
+
+html.theme-changing::after { content: ''; position: fixed; z-index: 1000; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 8%, rgb(213 173 61 / 24%) 42%, rgb(255 255 255 / 18%) 50%, transparent 72%); background-size: 220% 100%; animation: themeSweep .76s cubic-bezier(.22, .8, .3, 1) both; mix-blend-mode: screen; }
+html.theme-changing *, html.theme-changing *::before, html.theme-changing *::after { transition: background-color .55s ease, border-color .55s ease, color .55s ease, box-shadow .55s ease !important; }
+@keyframes themeSweep { from { opacity: 0; background-position: 120% 0; } 18% { opacity: 1; } to { opacity: 0; background-position: -20% 0; } }
