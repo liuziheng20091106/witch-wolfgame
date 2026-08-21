@@ -16,6 +16,7 @@ import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events'
 import { chooseWithState } from '../engine/random';
 import { getAlivePlayerIds, getPlayer, getRoleAssignment } from '../engine/selectors';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
+import { getVisionSkillDecision } from './nightSkills';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return characterById[getPlayer(state, playerId).characterId].name;
@@ -58,6 +59,11 @@ export function getNextDayStartSkillDecision(state: GameState): PendingDecision 
         return makeSkillDecision(state, gaze, '视线诱导-目标', '选择诱导对象：被诱导者今天的发言必须提及她。你可以选择自己——你渴望被人注视。', candidates, 'target');
       }
     }
+  }
+  // 幻视（奈叶香，主动技，每天一次）：触碰一名未查看过的存活者，概率看到其夜间行动轨迹
+  const vision = getVisionSkillDecision(state);
+  if (vision) {
+    return vision;
   }
   return null;
 }

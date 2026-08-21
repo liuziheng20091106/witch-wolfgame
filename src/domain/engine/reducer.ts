@@ -14,6 +14,7 @@ import type {
 import {
   applyNightSkillDecision,
   applySpeechSkillDecision,
+  applyVisionSkillDecision,
   applyVoteSkillDecision,
   attachBrainwashSuggestion,
   gazeRequiredMention,
@@ -489,6 +490,8 @@ function applyDecision(state: GameState, event: Extract<GameEvent, { type: 'subm
     }
     if (skill.definitionId === 'levitation') {
       applyVoteSkillDecision(state, pending, event.decision);
+    } else if (skill.definitionId === 'mind-reading') {
+      applyVisionSkillDecision(state, pending, event.decision);
     } else if (skill.definitionId === 'speech-restrain' || skill.definitionId === 'ignition' || skill.definitionId === 'brainwash' || skill.definitionId === 'voice-mimic' || skill.definitionId === 'gaze-guidance') {
       applySpeechSkillDecision(state, pending, event.decision);
     } else {

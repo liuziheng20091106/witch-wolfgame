@@ -1,4 +1,4 @@
-export { getHealingDecision, getNextNightSkillDecision, applyNightSkillDecision } from './nightSkills';
+export { getHealingDecision, getNextNightSkillDecision, applyNightSkillDecision, getVisionSkillDecision, applyVisionSkillDecision } from './nightSkills';
 export {
   applySpeechSkillDecision,
   attachBrainwashSuggestion,
