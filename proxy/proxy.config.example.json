@@ -12,10 +12,19 @@
   "maxAttempts": 4,
   "update": {
     "passEnv": "MAJO_UPDATE_PASS",
-    "source": "https://example.com/raw/{file}",
-    "files": ["server/gameProtocol.mjs", "proxy/server.mjs"],
-    "projectRoot": "/app",
+    "source": "https://raw.githubusercontent.com/liuziheng20091106/witch-wolfgame/main/{file}",
+    "files": [
+      "server/gameProtocol.mjs",
+      "server/main.mjs",
+      "server/shared.mjs",
+      "proxy/server.mjs",
+      "proxy/update.mjs"
+    ],
     "downloadTimeoutMs": 30000,
-    "restartOnSuccess": true
+    "downloadAttempts": 3,
+    "retryDelayMs": 500,
+    "maxRedirects": 5,
+    "restartSignalFile": ".runtime/restart-token",
+    "restartOnSuccess": "code0"
   }
 }

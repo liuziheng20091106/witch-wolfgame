@@ -13,6 +13,7 @@ import {
   readJsonFile,
   requireEnv,
   sendJson,
+  watchRestartSignal,
 } from './shared.mjs';
 
 class SlidingWindowLimiter {
@@ -177,6 +178,15 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
     server.once('error', reject);
     server.listen(config.listen.port, config.listen.host, resolvePromise);
   });
+  const stopWatchingRestart = await watchRestartSignal(process.env.MAJO_RESTART_SIGNAL, async () => {
+    console.warn('[main] 检测到共享代码更新，正在重启');
+    const forceExit = setTimeout(() => process.exit(0), 5_000);
+    forceExit.unref();
+    await new Promise((resolvePromise) => server.close(resolvePromise));
+    clearTimeout(forceExit);
+    process.exit(0);
+  });
+  server.on('close', stopWatchingRestart);
   const address = server.address();
   console.log(`Majo main backend listening on http://${typeof address === 'object' && address ? address.address : config.listen.host}:${typeof address === 'object' && address ? address.port : config.listen.port}`);
   return server;

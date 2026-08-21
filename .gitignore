@@ -11,6 +11,7 @@ dist/
 node_modules/
 .vite/
 *.tsbuildinfo
+.runtime/
 
 # ---------- 你的打包发行版 ----------
 Majowolf1.0.2/
@@ -23,6 +24,7 @@ backup/
 *-backup/
 
 # ---------- 敏感信息 ----------
+deploy.*.env
 .env
 certs/
 .tmp-certs-check/

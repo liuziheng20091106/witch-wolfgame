@@ -1,0 +1,47 @@
+name: majowolf-backend
+
+x-node-service: &node-service
+  image: node:22-alpine
+  working_dir: /app
+  network_mode: host
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 10s
+  environment:
+    MAJO_RESTART_SIGNAL: /app/.runtime/restart-token
+
+services:
+  proxy:
+    <<: *node-service
+    container_name: majowolf-proxy
+    command: ["node", "proxy/server.mjs"]
+    env_file:
+      - ./deploy.proxy.env
+    environment:
+      MAJO_RESTART_SIGNAL: /app/.runtime/restart-token
+      MAJO_PROXY_CONFIG: /app/proxy/proxy.config.json
+    volumes:
+      - ./server:/app/server:rw
+      - ./proxy:/app/proxy:rw
+      - ./certs/ca.crt:/app/certs/ca.crt:ro
+      - ./certs/proxy-server.crt:/app/certs/proxy-server.crt:ro
+      - ./certs/proxy-server.key:/app/certs/proxy-server.key:ro
+      - ./.runtime:/app/.runtime:rw
+
+  main:
+    <<: *node-service
+    container_name: majowolf-main
+    command: ["node", "server/main.mjs"]
+    env_file:
+      - ./deploy.main.env
+    environment:
+      MAJO_RESTART_SIGNAL: /app/.runtime/restart-token
+      MAJO_MAIN_CONFIG: /app/server/main.config.json
+    volumes:
+      - ./server:/app/server:rw
+      - ./certs/ca.crt:/app/certs/ca.crt:ro
+      - ./certs/main-client.crt:/app/certs/main-client.crt:ro
+      - ./certs/main-client.key:/app/certs/main-client.key:ro
+      - ./.runtime:/app/.runtime:rw
+    depends_on:
+      - proxy

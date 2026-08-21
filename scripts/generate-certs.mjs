@@ -93,7 +93,10 @@ export async function generateCertificates(outputDirectory) {
     openssl(binary, ['genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-out', join(output, 'main-client.key')], work);
     openssl(binary, ['req', '-new', '-key', join(output, 'main-client.key'), '-out', join(work, 'main-client.csr'), '-subj', '/CN=majo-main'], work);
     openssl(binary, ['x509', '-req', '-sha256', '-in', join(work, 'main-client.csr'), '-CA', join(output, 'ca.crt'), '-CAkey', join(output, 'ca.key'), '-CAcreateserial', '-out', join(output, 'main-client.crt'), '-days', '825', '-extfile', join(work, 'client.ext')], work);
-    openssl(binary, ['verify', '-CAfile', join(output, 'ca.crt'), join(output, 'proxy-server.crt'), join(output, 'main-client.crt')], work);
+    openssl(binary, ['genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-out', join(output, 'update-client.key')], work);
+    openssl(binary, ['req', '-new', '-key', join(output, 'update-client.key'), '-out', join(work, 'update-client.csr'), '-subj', '/CN=majo-update-client'], work);
+    openssl(binary, ['x509', '-req', '-sha256', '-in', join(work, 'update-client.csr'), '-CA', join(output, 'ca.crt'), '-CAkey', join(output, 'ca.key'), '-CAcreateserial', '-out', join(output, 'update-client.crt'), '-days', '825', '-extfile', join(work, 'client.ext')], work);
+    openssl(binary, ['verify', '-CAfile', join(output, 'ca.crt'), join(output, 'proxy-server.crt'), join(output, 'main-client.crt'), join(output, 'update-client.crt')], work);
     console.log(`证书已生成并验证：${output}`);
   } finally {
     await rm(work, { recursive: true, force: true });
