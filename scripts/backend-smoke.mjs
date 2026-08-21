@@ -6,11 +6,14 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startMainServer } from '../server/main.mjs';
-import { startProxyServer } from '../proxy/server.mjs';
+import { buildUpstreamPayload, startProxyServer } from '../proxy/server.mjs';
 import { generateCertificates } from './generate-certs.mjs';
 import { createSignedHeaders } from '../server/shared.mjs';
 
 const origin = 'https://game.example';
+assert.equal(buildUpstreamPayload({ messages: [] }, { model: 'openai-model', protocol: 'openai', reasoningEffort: 'none' }, false).reasoning_effort, 'none');
+assert.deepEqual(buildUpstreamPayload({ messages: [] }, { model: 'deepseek-model', protocol: 'deepseek', reasoningEffort: 'none' }, false).thinking, { type: 'disabled' });
+
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -164,7 +167,7 @@ try {
     { name: 'disabled-provider', enabled: false },
     {
       name: 'smoke-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/v1/chat/completions`,
-      model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'low', jsonOutputMode: 'auto',
+      model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'none', jsonOutputMode: 'auto',
       totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 1,
     },
   ] }));
@@ -200,7 +203,7 @@ try {
   assert.equal(upstreamRequests.length, 2);
   assert.equal(upstreamRequests.at(-1).authorization, 'Bearer key-two');
   assert.equal(upstreamRequests[0].body.model, 'smoke-model');
-  assert.equal(upstreamRequests[0].body.reasoning_effort, 'low');
+  assert.equal(upstreamRequests[0].body.reasoning_effort, 'none');
   assert.equal(upstreamRequests[0].body.stream, true);
   assert.equal(upstreamRequests[0].body.client, undefined);
 

@@ -37,7 +37,7 @@ function buildPayload(config: AiProviderConfig, messages: PromptMessage[], jsonO
     ? { client: { name: FREE_PROVIDER_CLIENT_NAME, version: APP_VERSION, protocol: 'majo-wolf-free-v1' }, messages }
     : { model: config.model, messages };
   if (config.provider === 'custom' && jsonOutput) payload.response_format = { type: 'json_object' };
-  if (config.provider === 'custom' && config.reasoningEffort !== 'none') payload.reasoning_effort = config.reasoningEffort;
+  if (config.provider === 'custom') payload.reasoning_effort = config.reasoningEffort;
   return payload;
 }
 
