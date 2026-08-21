@@ -6,8 +6,8 @@ export interface VoteResolution {
   tiedPlayerIds: PlayerId[];
 }
 
-export function resolveVotes(votes: VoteRecord[], round: 1 | 2): VoteResolution {
-  const roundVotes = votes.filter((vote) => vote.round === round);
+export function resolveVotes(votes: VoteRecord[], round: 1 | 2, burnedVoterIds: ReadonlySet<PlayerId> = new Set()): VoteResolution {
+  const roundVotes = votes.filter((vote) => vote.round === round && !burnedVoterIds.has(vote.voterPlayerId));
   const abstentions = roundVotes.filter((vote) => vote.targetPlayerId === null).length;
   const counts: Partial<Record<PlayerId, number>> = {};
   for (const vote of roundVotes) {

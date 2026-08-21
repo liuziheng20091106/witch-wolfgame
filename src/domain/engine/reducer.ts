@@ -12,17 +12,24 @@ import type {
   WitchDecision,
 } from '../model';
 import {
+  applyDayIgnition,
+  applyNightIgnition,
+  applyNightIgnitionPotion,
   applyNightSkillDecision,
   applySpeechSkillDecision,
   applyVisionSkillDecision,
   applyVoteSkillDecision,
   attachBrainwashSuggestion,
+  burnedVoters,
   gazeRequiredMention,
   getAfterSpeechSkillDecision,
   getBeforeSpeechSkillDecision,
+  getDayIgnitionDecision,
   getHealingDecision,
   getNextDayStartSkillDecision,
   getNextNightSkillDecision,
+  getNightIgnitionDecision,
+  getNightIgnitionPotionDecision,
   getTieBreaker,
   getVoteOrder,
   getVoteSkillDecision,
@@ -32,6 +39,7 @@ import {
 import { addKnowledge, addPrivateEvent, addPublicEvent } from './events';
 import { refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
 import { getAlivePlayerIds, getPlayer, getRoleAssignment, getSkillInstance } from './selectors';
+import { exhaustSkill } from '../skills/types';
 import { resolveVotes } from './vote';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
@@ -83,6 +91,21 @@ function wolfTargets(state: GameState): PlayerId[] {
 }
 
 function advanceNightSkills(state: GameState): GameState {
+  // 点火烧药第二步：若点火已暂存烧药目标，先完成烧药再继续其它夜间技能
+  const ignition = state.skillInstances.find(
+    (entry) => entry.definitionId === 'ignition' && typeof entry.data.pendingBurnTarget === 'number',
+  );
+  if (ignition) {
+    const potion = getNightIgnitionPotionDecision(state, ignition.data.pendingBurnTarget as PlayerId);
+    if (potion) {
+      state.pendingDecision = potion;
+      return state;
+    }
+    // 目标药已无（防御）：直接耗尽，避免卡死
+    delete ignition.data.pendingBurnTarget;
+    delete ignition.data.pendingBurnNight;
+    exhaustSkill(ignition);
+  }
   const pending = getNextNightSkillDecision(state);
   if (pending) {
     state.pendingDecision = pending;
@@ -287,7 +310,13 @@ function advanceVoting(state: GameState): GameState {
     state.pendingDecision = pending;
     return state;
   }
-  const resolution = resolveVotes(state.currentVotes, 1);
+  // 投票全部完成：先询问白天点火（烧票/烧技能），再计票
+  const ignition = getDayIgnitionDecision(state);
+  if (ignition) {
+    state.pendingDecision = ignition;
+    return state;
+  }
+  const resolution = resolveVotes(state.currentVotes, 1, burnedVoters(state));
   if (resolution.outcome === 'runoff') {
     addPublicEvent(state, 'vote', `最高票并列：${resolution.tiedPlayerIds.map((id) => nameOf(state, id)).join('、')}，进行一次重投。`, {
       targetPlayerIds: resolution.tiedPlayerIds,
@@ -321,7 +350,7 @@ function advanceRunoff(state: GameState): GameState {
     state.pendingDecision = pending;
     return state;
   }
-  const resolution = resolveVotes(state.currentVotes, 2);
+  const resolution = resolveVotes(state.currentVotes, 2, burnedVoters(state));
   if (resolution.outcome === 'exile' && resolution.targetPlayerId !== null) {
     addExileIntent(state, resolution.targetPlayerId);
     state.phase = 'day-resolution';
@@ -492,7 +521,15 @@ function applyDecision(state: GameState, event: Extract<GameEvent, { type: 'subm
       applyVoteSkillDecision(state, pending, event.decision);
     } else if (skill.definitionId === 'mind-reading') {
       applyVisionSkillDecision(state, pending, event.decision);
-    } else if (skill.definitionId === 'speech-restrain' || skill.definitionId === 'ignition' || skill.definitionId === 'brainwash' || skill.definitionId === 'voice-mimic' || skill.definitionId === 'gaze-guidance') {
+    } else if (skill.definitionId === 'ignition') {
+      if (pending.title === '点火-烧药') {
+        applyNightIgnitionPotion(state, pending, event.decision);
+      } else if (pending.title === '点火-白天') {
+        applyDayIgnition(state, pending, event.decision);
+      } else {
+        applyNightIgnition(state, pending, event.decision);
+      }
+    } else if (skill.definitionId === 'speech-restrain' || skill.definitionId === 'brainwash' || skill.definitionId === 'voice-mimic' || skill.definitionId === 'gaze-guidance') {
       applySpeechSkillDecision(state, pending, event.decision);
     } else {
       applyNightSkillDecision(state, pending, event.decision);

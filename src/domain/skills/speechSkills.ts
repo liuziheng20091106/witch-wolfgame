@@ -27,15 +27,12 @@ export function getNextDayStartSkillDecision(state: GameState): PendingDecision 
   const skills = state.skillInstances
     .filter((skill) => skill.status === 'ready' && !wasOffered(skill, key))
     .filter((skill) => getPlayer(state, skill.ownerPlayerId).alive)
-    .filter((skill) => skill.definitionId === 'speech-restrain' || skill.definitionId === 'ignition')
+    .filter((skill) => skill.definitionId === 'speech-restrain')
     .sort((left, right) => left.ownerPlayerId - right.ownerPlayerId);
   for (const skill of skills) {
     const candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== skill.ownerPlayerId);
     if (candidates.length === 0) {
       continue;
-    }
-    if (skill.definitionId === 'ignition') {
-      return makeSkillDecision(state, skill, '点火', '公开随机一名其他存活者的阵营。', candidates, 'ignition');
     }
     return makeSkillDecision(state, skill, '力气大', '指定一名其他存活者，她今天无法发言。', candidates, 'optional-target');
   }
@@ -133,19 +130,6 @@ export function applySpeechSkillDecision(state: GameState, pending: PendingDecis
   const use = (decision as OptionalTargetDecision | IgnitionDecision).use;
   if (!use) {
     addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
-    return;
-  }
-
-  if (skill.definitionId === 'ignition') {
-    const choice = chooseWithState(pending.candidates, state.rngState);
-    state.rngState = choice.state;
-    const alignment = roleAlignment[getRoleAssignment(state, choice.item).roleId];
-    addPublicEvent(state, 'trial-by-fire', `火焰审判指向 ${nameOf(state, choice.item)}：她属于${alignment === 'wolf' ? '狼人' : '好人'}阵营。`, {
-      actorPlayerId: skill.ownerPlayerId,
-      targetPlayerIds: [choice.item],
-      data: { alignment },
-    });
-    exhaustSkill(skill);
     return;
   }
 
