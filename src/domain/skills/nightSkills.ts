@@ -481,7 +481,7 @@ export function applyNightIgnition(state: GameState, pending: PendingDecision, d
     // 10% 烧技能
     const burned = burnAllSkills(state, targetPlayerId);
     const targetName = nameOf(state, targetPlayerId);
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `火焰吞没了 ${targetName} 的全部魔女技！`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你用火焰烧毁了 ${targetName} 的全部魔女技！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -498,7 +498,7 @@ export function applyNightIgnition(state: GameState, pending: PendingDecision, d
   const hasPoison = assignment.resources.poison === 1;
   if (!hasAntidote && !hasPoison) {
     // 无药可烧：落空（持有者私密知晓）
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `火焰在 ${nameOf(state, targetPlayerId)} 身上没有找到可烧毁的物品，扑了个空。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你的火焰在 ${nameOf(state, targetPlayerId)} 身上没有找到可烧毁的物品，扑了个空。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -525,7 +525,7 @@ export function applyNightIgnitionPotion(state: GameState, pending: PendingDecis
   const targetName = nameOf(state, targetPlayerId);
   if (choice === 0 && assignment.resources.antidote === 1) {
     assignment.resources.antidote = 0;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `火焰烧毁了 ${targetName} 的解药！`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你用火焰烧毁了 ${targetName} 的解药！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -535,7 +535,7 @@ export function applyNightIgnitionPotion(state: GameState, pending: PendingDecis
     });
   } else if (choice === 1 && assignment.resources.poison === 1) {
     assignment.resources.poison = 0;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `火焰烧毁了 ${targetName} 的毒药！`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你用火焰烧毁了 ${targetName} 的毒药！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -596,7 +596,7 @@ export function applyDayIgnition(state: GameState, pending: PendingDecision, dec
     // 10% 烧技能
     burnAllSkills(state, targetPlayerId);
     const targetName = nameOf(state, targetPlayerId);
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `火焰吞没了 ${targetName} 的全部魔女技！`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你用火焰烧毁了 ${targetName} 的全部魔女技！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -609,7 +609,7 @@ export function applyDayIgnition(state: GameState, pending: PendingDecision, dec
     skill.data.burnedVoteDay = state.day;
     skill.data.burnedVoteTarget = targetPlayerId;
     const targetName = nameOf(state, targetPlayerId);
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `火焰瞄准了 ${targetName} 今天的投票。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你烧毁了 ${targetName} 今天的投票，她的票将不作数。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });

@@ -91,10 +91,11 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
     return { decision: { use: true, mode: 'move-last', targetPlayerId: selected.playerId }, rngState: selected.rngState };
   }
   if (pending.schemaKey === 'voice-mimic') {
-    // 伪造发言必须使用"被模仿者"的例句，而不是模仿者自己的
+    // 伪造发言必须使用"被模仿者"的例句，而不是模仿者自己的；且 ≤50 字（契约限制）
     const generated = fallbackSpeech(state, selected.playerId, pending, selected.rngState);
+    const forgedSpeech = generated.speech.slice(0, 50);
     return {
-      decision: { use: true, targetPlayerId: selected.playerId, forgedSpeech: generated.speech },
+      decision: { use: true, targetPlayerId: selected.playerId, forgedSpeech },
       rngState: generated.rngState,
     };
   }

@@ -48,7 +48,7 @@ export const levitationDecisionSchema = z.object({
 export const voiceMimicDecisionSchema = z.object({
   use: z.boolean(),
   targetPlayerId: z.number().int().min(0).max(5).nullable(),
-  forgedSpeech: z.string().min(1).max(100).nullable(),
+  forgedSpeech: z.string().min(1).max(50).nullable(),
 }).superRefine((value, context) => {
   const valid = value.use
     ? value.targetPlayerId !== null && value.forgedSpeech !== null

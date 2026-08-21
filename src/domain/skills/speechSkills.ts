@@ -106,7 +106,7 @@ export function getAfterSpeechSkillDecision(state: GameState, actorId: PlayerId)
     const player = getPlayer(state, playerId);
     return { playerId, name: nameOf(state, playerId), speechStyle: characterById[player.characterId].speechStyle.slice(0, 300) };
   });
-  const decision = makeSkillDecision(state, skill, '声音模仿', '选择一名尚未发言者，并伪造一段不超过 100 字的内容。伪造内容必须完全模仿所选目标本人的说话风格与语气，禁止使用你自己的说话风格。', candidates, 'voice-mimic', { mimicVoices });
+  const decision = makeSkillDecision(state, skill, '声音模仿', '选择一名尚未发言者，并伪造一段内容。伪造内容必须尽量简短、不超过 50 字，且完全模仿所选目标本人的说话风格与语气，禁止使用你自己的说话风格。', candidates, 'voice-mimic', { mimicVoices });
   // 视线诱导为主动技（指定被诱导者），不再全局强制提及持有者；
   // 伪造内容挂在被模仿者名下，若被模仿者是被诱导者，其约束在 applySpeechSkillDecision 中按目标校验。
   return decision;
@@ -158,8 +158,8 @@ export function applySpeechSkillDecision(state: GameState, pending: PendingDecis
   }
   if (skill.definitionId === 'voice-mimic') {
     const forgedSpeech = (decision as VoiceMimicDecision).forgedSpeech?.trim() ?? '';
-    if (forgedSpeech.length === 0 || forgedSpeech.length > 100) {
-      throw new Error('伪造发言必须为 1–100 字');
+    if (forgedSpeech.length === 0 || forgedSpeech.length > 50) {
+      throw new Error('伪造发言必须为 1–50 字');
     }
     // 视线诱导约束只作用于被诱导者本人的真实发言（publishSpeech 校验）；
     // 伪造内容由模仿者书写，无法预知被模仿者是否被诱导，不在此校验视线诱导。
@@ -353,6 +353,11 @@ export function publishSpeech(state: GameState, actorId: PlayerId, decision: Spe
   );
   const forgedSpeech = typeof mimic?.data.forgedSpeech === 'string' ? mimic.data.forgedSpeech : '';
   const merged = [speech || '（保持沉默）', forgedSpeech].filter(Boolean).join(' ');
+  // 声音模仿合并后总长限制：真发言（≤100）+ 伪造（≤50）合计不得超过 150 字，
+  // 防止被模仿者"说"出超长发言而露馅或破坏发言长度规则
+  if (forgedSpeech && merged.length > 150) {
+    throw new Error(`合并后的发言不能超过 150 字（当前 ${merged.length} 字）`);
+  }
   const event = addPublicEvent(state, 'speech', merged, {
     actorPlayerId: actorId,
     targetPlayerIds: [actorId],

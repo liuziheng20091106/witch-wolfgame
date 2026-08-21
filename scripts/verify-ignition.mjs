@@ -60,57 +60,124 @@ console.log('=== 1. 烧技能（burnAllSkills）===');
   check(`烧掉 ${before.length} 个技能`, before.length > 0, `目标技能数=${before.length}`);
 }
 
-// ===== 2. 夜间点火：烧物品（有药 → 自选毒/解药）=====
-console.log('\n=== 2. 夜间点火：烧物品 ===');
+// ===== 2. 夜间点火：走完整流程（RNG 判定 90%/10%）=====
+console.log('\n=== 2. 夜间点火：完整流程（RNG 判定）===');
 {
-  // 找一个女巫作为目标（有药）
-  let verified = false;
-  for (let seed = 1; seed <= 100; seed++) {
-    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
-    const ignition = game.skillInstances.find((s) => s.definitionId === 'ignition');
-    if (!ignition) continue;
-    const ownerId = ignition.ownerPlayerId;
-    // 找女巫（有药）
-    const witch = game.players.find((p) => getRoleAssignment(game, p.id).roleId === 'witch' && p.id !== ownerId);
-    if (!witch) continue;
-    const witchPotionBefore = { ...getRoleAssignment(game, witch.id).resources };
-    // 夜间点火决策（模拟 night 询问，手动构造）
-    const pending = {
-      id: 'test-ignition', kind: 'skill', schemaKey: 'optional-target', actorId: ownerId,
-      title: '点火', description: '', candidates: [witch.id], allowAbstain: true,
-      skillInstanceId: ignition.id, options: {},
-    };
-    // 强制"烧物品"分支：rngState 调成非 0 的倍数（roll.item !== 0 → 90% 分支）
-    // 直接调 applyNightIgnition 前把 rngState 设为已知值使 roll.item >= 1
-    // 用 chooseWithState([0..9], rngState) 无法精确控制，改为注入已烧物品的判定：
-    // 直接把 ignition 技能状态设为"有药待烧"，验证第二步
-    const skillInst = game.skillInstances.find((s) => s.id === ignition.id);
-    skillInst.data.pendingBurnTarget = witch.id;
-    skillInst.data.pendingBurnNight = game.day;
-    const potionPending = getNightIgnitionPotionDecision(game, witch.id);
-    if (!potionPending) { check('烧药第二步决策存在', false); continue; }
-    check(`seed ${seed}: 烧药候选含目标拥有的药（${witchPotionBefore.antidote === 1 ? '解药 ' : ''}${witchPotionBefore.poison === 1 ? '毒药' : ''}）`, potionPending.candidates.length > 0, `候选=${potionPending.candidates.join(',')}`);
-    // 选毒药（若目标有毒药）
-    const hasPoison = witchPotionBefore.poison === 1;
-    const choice = hasPoison ? 1 : 0;
-    applyNightIgnitionPotion(game, potionPending, { targetPlayerId: choice });
-    const resourcesAfter = getRoleAssignment(game, witch.id).resources;
-    if (hasPoison) {
-      check(`seed ${seed}: 毒药被烧毁`, resourcesAfter.poison === 0, `poison=${resourcesAfter.poison}`);
-      check(`seed ${seed}: 解药保留`, resourcesAfter.antidote === 1, `antidote=${resourcesAfter.antidote}`);
-    } else {
-      check(`seed ${seed}: 解药被烧毁`, resourcesAfter.antidote === 0, `antidote=${resourcesAfter.antidote}`);
+  const { nextRandom } = await server.ssrLoadModule('/src/domain/engine/random.ts');
+  // 辅助：找能让 chooseWithState([0..9]) 返回指定 item 的 rngState
+  const findRngForItem = (item, start = 1) => {
+    for (let rng = start; rng < start + 5000; rng++) {
+      const r = nextRandom(rng >>> 0);
+      const rolled = Math.floor(r.value * 10);
+      if (rolled === item) return rng >>> 0;
     }
-    check(`seed ${seed}: 点火技能耗尽`, game.skillInstances.find((s) => s.id === ignition.id).status === 'exhausted');
-    verified = true;
-    break;
+    return null;
+  };
+  const rngBurnSkill = findRngForItem(0); // 10% 烧技能
+  const rngBurnPotion = findRngForItem(5); // 90% 烧物品（非 0 即烧物品）
+  check('找到烧技能分支的 RNG', rngBurnSkill !== null);
+  check('找到烧物品分支的 RNG', rngBurnPotion !== null);
+
+  // 场景 A：烧技能（10%）
+  {
+    let verified = false;
+    for (let seed = 1; seed <= 100 && !verified; seed++) {
+      const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+      const ignition = game.skillInstances.find((s) => s.definitionId === 'ignition');
+      if (!ignition) continue;
+      const ownerId = ignition.ownerPlayerId;
+      const target = game.players.find((p) => p.id !== ownerId);
+      if (!target || !rngBurnSkill) continue;
+      const targetSkillsBefore = game.skillInstances.filter((s) => s.ownerPlayerId === target.id).length;
+      if (targetSkillsBefore === 0) continue;
+      game.rngState = rngBurnSkill;
+      const pending = {
+        id: 't-a', kind: 'skill', schemaKey: 'optional-target', actorId: ownerId,
+        title: '点火', description: '', candidates: [target.id], allowAbstain: true,
+        skillInstanceId: ignition.id, options: {},
+      };
+      applyNightIgnition(game, pending, { use: true, targetPlayerId: target.id });
+      const targetSkillsAfter = game.skillInstances.filter((s) => s.ownerPlayerId === target.id);
+      check(`seed ${seed} 烧技能(10%): 目标技能全 exhausted`, targetSkillsAfter.every((s) => s.status === 'exhausted'));
+      check(`seed ${seed} 烧技能: 带 burned 标记`, targetSkillsAfter.every((s) => s.data.burned === true));
+      check(`seed ${seed} 烧技能: 点火耗尽`, game.skillInstances.find((s) => s.id === ignition.id).status === 'exhausted');
+      verified = true;
+    }
+    if (!verified) check('烧技能场景：找到有效对局', false);
   }
-  if (!verified) check('找到点火持有者+女巫目标的对局', false, '100 种子内未找到');
+
+  // 场景 B：烧物品（90%）→ 有药 → 二次决策
+  {
+    let verified = false;
+    for (let seed = 1; seed <= 100 && !verified; seed++) {
+      const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+      const ignition = game.skillInstances.find((s) => s.definitionId === 'ignition');
+      if (!ignition) continue;
+      const ownerId = ignition.ownerPlayerId;
+      const witch = game.players.find((p) => getRoleAssignment(game, p.id).roleId === 'witch' && p.id !== ownerId);
+      if (!witch || !rngBurnPotion) continue;
+      const before = { ...getRoleAssignment(game, witch.id).resources };
+      if (before.antidote !== 1 && before.poison !== 1) continue;
+      game.rngState = rngBurnPotion;
+      const pending = {
+        id: 't-b', kind: 'skill', schemaKey: 'optional-target', actorId: ownerId,
+        title: '点火', description: '', candidates: [witch.id], allowAbstain: true,
+        skillInstanceId: ignition.id, options: {},
+      };
+      applyNightIgnition(game, pending, { use: true, targetPlayerId: witch.id });
+      // 有药 → 应进入第二步（pendingBurnTarget 已设，技能未耗尽）
+      const skillAfter = game.skillInstances.find((s) => s.id === ignition.id);
+      check(`seed ${seed} 烧物品(90%): 目标有药 → 进入烧药第二步`, skillAfter.status === 'ready' && skillAfter.data.pendingBurnTarget === witch.id, `status=${skillAfter.status} pending=${skillAfter.data.pendingBurnTarget}`);
+      // 第二步：选药
+      const potionPending = getNightIgnitionPotionDecision(game, witch.id);
+      check(`seed ${seed} 烧药候选非空`, Boolean(potionPending) && potionPending.candidates.length > 0);
+      if (potionPending) {
+        const hasPoison = before.poison === 1;
+        const choice = hasPoison ? 1 : 0;
+        applyNightIgnitionPotion(game, potionPending, { targetPlayerId: choice });
+        const after = getRoleAssignment(game, witch.id).resources;
+        if (hasPoison) {
+          check(`seed ${seed} 毒药被烧毁`, after.poison === 0 && after.antidote === 1, `poison=${after.poison} antidote=${after.antidote}`);
+        } else {
+          check(`seed ${seed} 解药被烧毁`, after.antidote === 0 && after.poison === 1, `antidote=${after.antidote} poison=${after.poison}`);
+        }
+        check(`seed ${seed} 烧药后点火耗尽`, game.skillInstances.find((s) => s.id === ignition.id).status === 'exhausted');
+      }
+      verified = true;
+    }
+    if (!verified) check('烧物品场景：找到有效对局', false);
+  }
+
+  // 场景 C：烧物品（90%）→ 目标无药 → 落空
+  {
+    let verified = false;
+    for (let seed = 1; seed <= 200 && !verified; seed++) {
+      const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+      const ignition = game.skillInstances.find((s) => s.definitionId === 'ignition');
+      if (!ignition) continue;
+      const ownerId = ignition.ownerPlayerId;
+      // 找非女巫目标（无药）
+      const target = game.players.find((p) => p.id !== ownerId && getRoleAssignment(game, p.id).roleId !== 'witch');
+      if (!target || !rngBurnPotion) continue;
+      game.rngState = rngBurnPotion;
+      const pending = {
+        id: 't-c', kind: 'skill', schemaKey: 'optional-target', actorId: ownerId,
+        title: '点火', description: '', candidates: [target.id], allowAbstain: true,
+        skillInstanceId: ignition.id, options: {},
+      };
+      applyNightIgnition(game, pending, { use: true, targetPlayerId: target.id });
+      const skillAfter = game.skillInstances.find((s) => s.id === ignition.id);
+      check(`seed ${seed} 烧物品: 目标无药 → 落空且点火耗尽`, skillAfter.status === 'exhausted' && skillAfter.data.pendingBurnTarget === undefined, `status=${skillAfter.status} pending=${skillAfter.data.pendingBurnTarget}`);
+      verified = true;
+    }
+    if (!verified) check('烧物品落空场景：找到有效对局', false);
+  }
 }
 
-// ===== 3. 白天点火：烧投票（计票过滤）=====
-console.log('\n=== 3. 白天点火：烧投票 ===');
+// ===== 3. 白天点火：烧投票（计票过滤，无假阳性）=====
+console.log('\n=== 3. 白天点火：烧投票（计票过滤验证）===');
 {
+  const { resolveVotes } = await server.ssrLoadModule('/src/domain/engine/vote.ts');
   const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 2 >>> 0 });
   const ignition = game.skillInstances.find((s) => s.definitionId === 'ignition');
   if (!ignition) { check('找到点火持有者', false); }
@@ -119,26 +186,23 @@ console.log('\n=== 3. 白天点火：烧投票 ===');
     const target = game.players.find((p) => p.id !== ownerId);
     if (!target) { check('找到点火目标', false); }
     else {
-      // 模拟白天点火结算（90% 烧投票分支：roll.item >= 1）
-      const pending = {
-        id: 'test-day-ignition', kind: 'skill', schemaKey: 'optional-target', actorId: ownerId,
-        title: '点火-白天', description: '', candidates: [target.id], allowAbstain: true,
-        skillInstanceId: ignition.id, options: {},
-      };
-      // 强制烧投票：把 rngState 设大确保 roll.item >= 1
-      game.rngState = 0xFFFFFFFF; // 大值 → nextRandom 结果大 → roll.item 高
-      applyDayIgnition(game, pending, { use: true, targetPlayerId: target.id });
-      const burned = burnedVoters(game);
-      check(`白天点火标记目标 ${target.id} 投票被烧`, burned.has(target.id), `burned=${[...burned].join(',')}`);
-      check('点火技能耗尽', game.skillInstances.find((s) => s.id === ignition.id).status === 'exhausted');
-      // 计票过滤验证：构造一票，resolveVotes 应排除
-      const { resolveVotes } = await server.ssrLoadModule('/src/domain/engine/vote.ts');
+      // 构造：目标投票给 A，另一人投票给 A，A 得 2 票（最高）→ 不烧则 A 被放逐
+      // 烧目标后：A 只剩 1 票，B 得 1 票 → 平票 → runoff（证明目标票被过滤）
+      const A = 3;
+      const B = 4;
       const votes = [
-        { voterPlayerId: target.id, targetPlayerId: 3, round: 1 },
-        { voterPlayerId: 1, targetPlayerId: 3, round: 1 },
+        { voterPlayerId: target.id, targetPlayerId: A, round: 1 },
+        { voterPlayerId: 1, targetPlayerId: A, round: 1 },
+        { voterPlayerId: 2, targetPlayerId: B, round: 1 },
       ];
-      const res = resolveVotes(votes, 1, burned);
-      check('被烧者的票不计入', res.targetPlayerId !== target.id, `result target=${res.targetPlayerId}`);
+      // 不烧：A 2 票最高 → exile A
+      const resNoBurn = resolveVotes(votes, 1);
+      check('不烧票时 A 得 2 票最高（对照组）', resNoBurn.outcome === 'exile' && resNoBurn.targetPlayerId === A, `outcome=${resNoBurn.outcome} target=${resNoBurn.targetPlayerId}`);
+      // 烧目标：目标票剔除 → A 1 票、B 1 票 → 平票 runoff
+      const burned = new Set([target.id]);
+      const resBurned = resolveVotes(votes, 1, burned);
+      check('烧票后目标票被剔除 → 平票 runoff', resBurned.outcome === 'runoff', `outcome=${resBurned.outcome}`);
+      check('烧票后 A 不再是最高（票被过滤）', resBurned.targetPlayerId !== A || resBurned.outcome === 'runoff', `target=${resBurned.targetPlayerId}`);
     }
   }
 }
