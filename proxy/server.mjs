@@ -223,7 +223,6 @@ async function callProvider(provider, apiKey, input, jsonOutput) {
 class ProviderPool {
   constructor(providers) {
     this.providers = providers;
-    this.cursor = 0;
     this.keyCursors = new Map(providers.map((provider) => [provider.name, 0]));
     this.sessionFallback = new Map();
   }
@@ -235,10 +234,8 @@ class ProviderPool {
   }
 
   async request(input, sessionId) {
-    const start = this.cursor++ % this.providers.length;
     let lastError = new Error('没有可用服务商');
-    for (let providerOffset = 0; providerOffset < this.providers.length; providerOffset += 1) {
-      const provider = this.providers[(start + providerOffset) % this.providers.length];
+    for (const provider of this.providers) {
       const maxAttempts = provider.retryCount + 1;
       const fallbackKey = `${sessionId ?? 'anonymous'}:${provider.name}`;
       const expires = this.sessionFallback.get(fallbackKey) ?? 0;

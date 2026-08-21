@@ -81,7 +81,7 @@ py scripts\quick_update.py
 工具通过 SSH 隧道连接代理的 mTLS `/update` 接口，读取本地 `certs/update-client.crt`、`certs/update-client.key`、`certs/ca.crt` 和 `certs/update-pass.txt`，先暂存主后端文件，再更新代理，最后重启并检查两个服务。执行前会要求确认生产更新；密钥不会写入日志。
 
 
-把 `server/.env.example` 与 `proxy/.env.example` 中对应的 `MAJO_PROXY_PASSWORD_PRIMARY` 设置为同一个高熵随机值。`providers.json` 的 `apiKeysEnv` 指向逗号分隔的密钥环境变量。每个 provider 必须配置 `enabled`、`totalTimeoutMs`、`firstByteTimeoutMs` 和 `retryCount`：`enabled: false` 时完全跳过且不读取其 API Key；`retryCount` 只计算初次请求之后的额外重试。每次尝试轮换 API Key，首字节或总请求超时会中止当前上游连接并按该 provider 的预算重试。每个代理节点可使用独立密码变量、证书和服务商池；在主后端 `proxies` 中分别配置。主后端和代理的结构化日志均含 ISO `time`，成功请求分别记录 `ai_success`、`proxy_success` 和 `provider_success`。
+把 `server/.env.example` 与 `proxy/.env.example` 中对应的 `MAJO_PROXY_PASSWORD_PRIMARY` 设置为同一个高熵随机值。`providers.json` 的 `apiKeysEnv` 指向逗号分隔的密钥环境变量。每个 provider 必须配置 `enabled`、`totalTimeoutMs`、`firstByteTimeoutMs` 和 `retryCount`：`enabled: false` 时完全跳过且不读取其 API Key；`retryCount` 只计算初次请求之后的额外重试。provider 按配置文件顺序组成固定 fallback 链，每次新请求都从第一个已启用 provider 开始；当前 provider 的重试预算耗尽后才尝试下一个，成功后立即停止。每次尝试轮换 API Key，首字节或总请求超时会中止当前上游连接。每个代理节点可使用独立密码变量、证书和服务商池；在主后端 `proxies` 中分别配置。主后端和代理的结构化日志均含 ISO `time`，成功请求分别记录 `ai_success`、`proxy_success` 和 `provider_success`。
 
 `npm run certs:generate` 生成私有 CA、代理服务端证书和主后端客户端证书。部署时：
 

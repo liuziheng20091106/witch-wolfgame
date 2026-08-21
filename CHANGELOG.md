@@ -15,6 +15,7 @@
 - 代理自动更新改用 Bearer 请求头认证，支持受控 HTTPS 重定向与自动重试，并增加流式大小限制、并发互斥、事务回滚和覆盖测试
 - 删除已完成使命的一次性诊断与规则验证脚本，保留正式烟测、证书工具、服务商验证工具和蒙特卡洛工具
 - 代理改为请求上游流式 Chat Completions 并聚合 SSE，新增提供商级 `enabled`、首字节超时、总超时和重试次数；主后端与代理日志统一输出 ISO 时间并记录成功请求
+- provider 调度由轮询改为固定 fallback 链：每次请求均从第一个已启用 provider 开始，失败并耗尽其重试预算后再按配置顺序尝试后续 provider
 
 ### 修复
 - `reasoningEffort: "none"` 现在会显式向 OpenAI 兼容接口发送 `reasoning_effort: "none"`，向 DeepSeek 接口发送 `thinking.type: "disabled"`，不再因省略参数而启用模型默认推理

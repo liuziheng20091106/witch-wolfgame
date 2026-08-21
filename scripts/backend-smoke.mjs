@@ -109,6 +109,7 @@ const work = await mkdtemp(join(tmpdir(), 'majo-backend-smoke-'));
 const certs = join(work, 'certs');
 let upstream;
 let proxy;
+let fallbackProxy;
 let main;
 const capturedLogs = [];
 const originalConsole = { log: console.log, info: console.info, warn: console.warn, error: console.error };
@@ -130,7 +131,7 @@ try {
   upstream = http.createServer(async (request, response) => {
     let body = '';
     for await (const chunk of request) body += chunk;
-    upstreamRequests.push({ authorization: request.headers.authorization, body: JSON.parse(body) });
+    upstreamRequests.push({ path: request.url, authorization: request.headers.authorization, body: JSON.parse(body) });
     if (upstreamMode === 'first-byte-timeout') {
       await delay(120);
       if (!response.destroyed) {
@@ -144,6 +145,11 @@ try {
       response.write(sseChunk('{"target'));
       await delay(300);
       if (!response.destroyed) response.end(`${sseChunk('PlayerId":1}', 'stop')}data: [DONE]\n\n`);
+      return;
+    }
+    if (upstreamMode === 'primary-http-500' && request.url?.startsWith('/primary/')) {
+      response.writeHead(500, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'PRIMARY_FAILED' }));
       return;
     }
     if (upstreamMode === 'non-json') { response.writeHead(200, { 'Content-Type': 'text/plain' }); response.end('UPSTREAM_NON_JSON'); return; }
@@ -311,6 +317,44 @@ try {
   assert.equal((await postMain(mainPort, validPayload(), '203.0.113.11')).status, 429);
   assert.equal(upstreamRequests.length, rateStart + 2);
 
+  const fallbackProvidersFile = join(work, 'fallback-providers.json');
+  const fallbackProxyConfig = join(work, 'fallback-proxy.json');
+  await writeFile(fallbackProvidersFile, JSON.stringify({ providers: [
+    {
+      name: 'primary-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/primary/chat/completions`,
+      model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'none', jsonOutputMode: 'auto',
+      totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 1,
+    },
+    {
+      name: 'fallback-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/fallback/chat/completions`,
+      model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'none', jsonOutputMode: 'auto',
+      totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 0,
+    },
+  ] }));
+  await writeFile(fallbackProxyConfig, JSON.stringify({
+    listen: { host: '127.0.0.1', port: 0 },
+    tls: { ca: join(certs, 'ca.crt'), cert: join(certs, 'proxy-server.crt'), key: join(certs, 'proxy-server.key') },
+    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.3.1'], providersFile: fallbackProvidersFile,
+  }));
+  fallbackProxy = await startProxyServer(fallbackProxyConfig);
+  const fallbackProxyPort = fallbackProxy.address().port;
+  upstreamMode = 'primary-http-500';
+  const beforeFallback = upstreamRequests.length;
+  const fallbackSession = 'fallback-sequence-request-01';
+  const fallbackHeaders = createSignedHeaders('backend-smoke-long-random-password', 'POST', '/internal/v1/chat/completions', internalBody, fallbackSession);
+  assert.equal((await postProxy(fallbackProxyPort, ca, clientCert, clientKey, internalBody, fallbackHeaders)).status, 200);
+  assert.deepEqual(upstreamRequests.slice(beforeFallback).map((entry) => entry.path), [
+    '/primary/chat/completions',
+    '/primary/chat/completions',
+    '/fallback/chat/completions',
+  ]);
+
+  upstreamMode = 'sse-json';
+  const secondFallbackSession = 'fallback-sequence-request-02';
+  const secondFallbackHeaders = createSignedHeaders('backend-smoke-long-random-password', 'POST', '/internal/v1/chat/completions', internalBody, secondFallbackSession);
+  assert.equal((await postProxy(fallbackProxyPort, ca, clientCert, clientKey, internalBody, secondFallbackHeaders)).status, 200);
+  assert.equal(upstreamRequests.at(-1).path, '/primary/chat/completions');
+
   const structuredLogs = capturedLogs.flatMap((line) => {
     try { return [JSON.parse(line)]; } catch { return []; }
   });
@@ -320,8 +364,9 @@ try {
     assert.ok(Number.isFinite(Date.parse(entry.time)), `${event} 日志缺少 ISO 时间`);
   }
 
-  console.log('后端烟测通过：上游 SSE 聚合、非流式回退、首字节/总超时、提供商重试、时间日志、mTLS、HMAC 与限流均已验证。');
+  console.log('后端烟测通过：固定 provider fallback 顺序、上游 SSE 聚合、非流式回退、首字节/总超时、重试、时间日志、mTLS、HMAC 与限流均已验证。');
 } finally {
+  if (fallbackProxy) await close(fallbackProxy);
   if (main) await close(main);
   if (proxy) await close(proxy);
   if (upstream) await close(upstream);
