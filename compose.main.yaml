@@ -1,0 +1,25 @@
+name: majowolf-main
+
+services:
+  main:
+    image: node:22-alpine
+    container_name: majowolf-main
+    working_dir: /app
+    command: ["node", "server/main.mjs"]
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s
+    env_file:
+      - ./.env
+    environment:
+      MAJO_MAIN_CONFIG: /data/main.config.json
+      MAJO_RESTART_SIGNAL: /app/.runtime/restart-token
+    ports:
+      - "127.0.0.1:34022:34022"
+    volumes:
+      - ./app/server:/app/server:rw
+      - ./main.config.json:/data/main.config.json:ro
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/main-client.crt:/certs/main-client.crt:ro
+      - ./certs/main-client.key:/certs/main-client.key:ro
+      - ./.runtime:/app/.runtime:rw

@@ -1,0 +1,27 @@
+name: majowolf-proxy
+
+services:
+  proxy:
+    image: node:22-alpine
+    container_name: majowolf-proxy
+    working_dir: /app
+    command: ["node", "proxy/server.mjs"]
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s
+    env_file:
+      - ./.env
+    environment:
+      MAJO_PROXY_CONFIG: /data/proxy.config.json
+      MAJO_RESTART_SIGNAL: /app/.runtime/restart-token
+    ports:
+      - "34023:34023"
+    volumes:
+      - ./app/server:/app/server:rw
+      - ./app/proxy:/app/proxy:rw
+      - ./proxy.config.json:/data/proxy.config.json:ro
+      - ./providers.json:/data/providers.json:ro
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/proxy-server.crt:/certs/proxy-server.crt:ro
+      - ./certs/proxy-server.key:/certs/proxy-server.key:ro
+      - ./.runtime:/app/.runtime:rw

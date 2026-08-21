@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import https from 'node:https';
 import { resolve } from 'node:path';
 import { validateChatCompletionsResponse, validateProviderResponse, validatePublicPayload } from '../server/gameProtocol.mjs';
-import { INTERNAL_PATH, configPath, parseJsonBody, pruneNonces, readBody, readJsonFile, requireEnv, sendJson, verifySignedRequest } from '../server/shared.mjs';
+import { INTERNAL_PATH, configPath, parseJsonBody, pruneNonces, readBody, readJsonFile, requireEnv, sendJson, verifySignedRequest, watchRestartSignal } from '../server/shared.mjs';
 import { createUpdateHandler } from './update.mjs';
 
 const PROVIDER_PROTOCOLS = new Set(['openai', 'deepseek']);
@@ -126,9 +126,8 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
   const nonceStore = new Map();
   const pruneTimer = setInterval(() => pruneNonces(nonceStore), 30_000);
   pruneTimer.unref();
-  // 自动更新处理器（未配置 update 时为 null，不启用）
-  // projectRoot 显式配置（docker 内代码在 /app；本地开发为项目根）
-  const updateProjectRoot = config.update?.projectRoot ?? '/app';
+  // Docker 将仓库以可写卷挂载到 /app；本地运行则使用当前工作目录。
+  const updateProjectRoot = config.update?.projectRoot ?? process.cwd();
   const updateHandler = createUpdateHandler(config.update, updateProjectRoot);
   const server = https.createServer({ ca, cert, key, requestCert: true, rejectUnauthorized: true, minVersion: 'TLSv1.3' }, async (request, response) => {
     if (!request.socket.authorized) return sendJson(response, 401, { error: 'unauthorized_client_certificate' });
@@ -152,8 +151,19 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
       sendJson(response, status, { error: status === 502 ? 'upstream_unavailable' : 'bad_request', message: error.message, rawOutput: typeof error.rawOutput === 'string' ? error.rawOutput.slice(0, 4000) : null });
     }
   });
-  server.on('close', () => clearInterval(pruneTimer));
   await new Promise((resolvePromise, reject) => { server.once('error', reject); server.listen(config.listen.port ?? 34023, config.listen.host ?? '0.0.0.0', resolvePromise); });
+  const stopWatchingRestart = await watchRestartSignal(process.env.MAJO_RESTART_SIGNAL, async () => {
+    console.warn('[proxy] 检测到共享代码更新，正在重启');
+    const forceExit = setTimeout(() => process.exit(0), 5_000);
+    forceExit.unref();
+    await new Promise((resolvePromise) => server.close(resolvePromise));
+    clearTimeout(forceExit);
+    process.exit(0);
+  });
+  server.on('close', () => {
+    clearInterval(pruneTimer);
+    stopWatchingRestart();
+  });
   const address = server.address();
   console.log(`Majo proxy listening on https://${typeof address === 'object' && address ? address.address : config.listen.host}:${typeof address === 'object' && address ? address.port : config.listen.port}`);
   return server;

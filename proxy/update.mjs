@@ -1,34 +1,17 @@
 /**
- * 自动更新模块（proxy 专用）：
- * 收到带密钥的更新请求后，从配置的地址下载指定文件清单、原子替换、退出进程重启。
+ * 代理节点自动更新：认证后下载白名单文件，完整暂存，带回滚地替换并协调容器重启。
  *
- * 请求：POST /update?pass=<密钥>
- *
- * 配置（proxy.config.json）：
- *   "update": {
- *     "passEnv": "MAJO_UPDATE_PASS",                 // 密钥所在环境变量名（推荐，勿写进配置）
- *     "source": "https://example.com/raw/{file}",    // 下载地址模板，{file} 会被替换为文件相对路径
- *     "files": ["server/gameProtocol.mjs", "proxy/server.mjs"],  // 要更新的文件清单（相对项目根）
- *     "restartOnSuccess": true                       // 成功后退出进程重启（需 docker restart: on-failure 或 always）
- *   }
- *
- * 安全：
- * - 仅 POST + ?pass 密钥匹配（timingSafeEqual 比较，密钥走环境变量）
- * - 文件清单白名单 + 路径越界检查（防任意路径覆盖）
- * - 下载 → 校验 → 临时文件 → 原子 rename
- * - 任一步失败都不替换文件，返回 502；成功才退出进程
- *
- * 重启说明：
- * - docker restart: on-failure → 进程以非零码退出才会重启，因此成功退出用码 1（docker 视为失败但无害）
- * - docker restart: always  → 任意退出都重启，可用码 0
- * 建议把容器 restart 策略设为 always（或 on-failure + 本模块用非零退出）。
+ * 请求：POST /update
+ * 认证：Authorization: Bearer <MAJO_UPDATE_PASS>
  */
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { readBody, sendJson } from '../server/shared.mjs';
 
-const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024; // 单文件上限 8MB
+const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const RETRYABLE_STATUSES = new Set([408, 425, 429]);
 
 function safeEqual(left, right) {
   const a = Buffer.from(String(left));
@@ -36,19 +19,91 @@ function safeEqual(left, right) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-async function downloadFile(url, timeoutMs) {
+function getBearerToken(request) {
+  const authorization = request.headers?.authorization;
+  if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return null;
+  return authorization.slice('Bearer '.length);
+}
+
+function validateDownloadUrl(value) {
+  const url = value instanceof URL ? value : new URL(value);
+  const localHttp = url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !localHttp) throw new Error(`更新源必须使用 HTTPS: ${url}`);
+  return url;
+}
+
+function wait(ms) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+async function readDownloadBody(response) {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_DOWNLOAD_BYTES) {
+    throw new Error('下载内容超过 8MB 上限');
+  }
+  if (!response.body) throw new Error('下载响应没有内容');
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of response.body) {
+    const buffer = Buffer.from(chunk);
+    size += buffer.length;
+    if (size > MAX_DOWNLOAD_BYTES) {
+      await response.body.cancel().catch(() => {});
+      throw new Error('下载内容超过 8MB 上限');
+    }
+    chunks.push(buffer);
+  }
+  if (size === 0) throw new Error('下载内容为空');
+  return Buffer.concat(chunks, size);
+}
+
+async function downloadOnce(initialUrl, timeoutMs, maxRedirects) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs ?? 30_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { signal: controller.signal, redirect: 'follow' });
-    if (!response.ok) throw new Error(`下载失败 HTTP ${response.status}: ${url}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length === 0) throw new Error('下载内容为空');
-    if (buffer.length > MAX_DOWNLOAD_BYTES) throw new Error('下载内容超过 8MB 上限');
-    return buffer;
+    let currentUrl = validateDownloadUrl(initialUrl);
+    for (let redirects = 0; ; redirects += 1) {
+      const response = await fetch(currentUrl, { signal: controller.signal, redirect: 'manual' });
+      if (REDIRECT_STATUSES.has(response.status)) {
+        const location = response.headers.get('location');
+        await response.body?.cancel().catch(() => {});
+        if (!location) throw new Error(`更新源重定向缺少 Location: ${currentUrl}`);
+        if (redirects >= maxRedirects) throw new Error(`更新源重定向超过 ${maxRedirects} 次`);
+        currentUrl = validateDownloadUrl(new URL(location, currentUrl));
+        continue;
+      }
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => {});
+        const error = new Error(`下载失败 HTTP ${response.status}: ${currentUrl}`);
+        error.retryable = RETRYABLE_STATUSES.has(response.status) || response.status >= 500;
+        throw error;
+      }
+      return await readDownloadBody(response);
+    }
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function downloadFile(url, options, expectedHash, log) {
+  let lastError;
+  for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
+    try {
+      const content = await downloadOnce(url, options.timeoutMs, options.maxRedirects);
+      if (expectedHash) {
+        const actual = createHash('sha256').update(content).digest('hex');
+        if (actual !== expectedHash) throw new Error('SHA256 校验失败');
+      }
+      return content;
+    } catch (error) {
+      lastError = error;
+      if (error.retryable === false || attempt === options.attempts) throw error;
+      const delayMs = options.retryDelayMs * (2 ** (attempt - 1));
+      log(`[update] 下载失败，第 ${attempt}/${options.attempts} 次，${delayMs}ms 后重试: ${error.message}`);
+      await wait(delayMs);
+    }
+  }
+  throw lastError;
 }
 
 /**
@@ -62,90 +117,127 @@ export function createUpdateHandler(update, projectRoot, log = console.log) {
     log('[update] 未配置 update 段，更新接口未启用');
     return null;
   }
-  const passEnv = update.passEnv;
-  let pass = null;
-  if (typeof passEnv === 'string' && passEnv) {
-    pass = process.env[passEnv];
-  }
-  const sourceTemplate = update.source;
-  let files = [];
-  if (Array.isArray(update.files) && update.files.length > 0) {
-    files = update.files;
-  }
-  const restartOnSuccess = update.restartOnSuccess !== false;
-  let downloadTimeoutMs = 30_000;
-  if (Number.isFinite(update.downloadTimeoutMs)) {
-    downloadTimeoutMs = update.downloadTimeoutMs;
-  }
 
-  // 配置校验：任一必需项缺失则返回 null（接口不启用）
-  if (!pass || typeof sourceTemplate !== 'string' || !sourceTemplate.includes('{file}') || files.length === 0) {
-    log('[update] 未启用：update 配置需包含 passEnv(环境变量已设)、source(含 {file})、files(非空)');
+  const passEnv = typeof update.passEnv === 'string' ? update.passEnv : '';
+  const pass = passEnv ? process.env[passEnv] : null;
+  const sourceTemplate = update.source;
+  const files = Array.isArray(update.files) ? update.files : [];
+  const root = resolve(projectRoot ?? '.');
+  const restartOnSuccess = update.restartOnSuccess !== false;
+  const restartSignalPath = typeof update.restartSignalFile === 'string'
+    ? resolve(root, update.restartSignalFile)
+    : null;
+  const downloadOptions = {
+    timeoutMs: Number.isFinite(update.downloadTimeoutMs) && update.downloadTimeoutMs > 0 ? update.downloadTimeoutMs : 30_000,
+    attempts: Number.isInteger(update.downloadAttempts) && update.downloadAttempts > 0 ? Math.min(update.downloadAttempts, 10) : 3,
+    retryDelayMs: Number.isFinite(update.retryDelayMs) && update.retryDelayMs >= 0 ? update.retryDelayMs : 500,
+    maxRedirects: Number.isInteger(update.maxRedirects) && update.maxRedirects >= 0 ? Math.min(update.maxRedirects, 10) : 5,
+  };
+
+  const validFiles = files.length > 0
+    && files.every((file) => typeof file === 'string' && file.length > 0)
+    && new Set(files).size === files.length;
+  try {
+    if (typeof sourceTemplate === 'string' && sourceTemplate.includes('{file}')) {
+      validateDownloadUrl(sourceTemplate.replaceAll('{file}', 'server/gameProtocol.mjs'));
+    }
+    if (restartSignalPath && restartSignalPath !== root && !restartSignalPath.startsWith(root + sep)) {
+      throw new Error('restartSignalFile 路径越界');
+    }
+  } catch (error) {
+    log(`[update] 未启用：${error.message}`);
+    return null;
+  }
+  if (!pass || typeof sourceTemplate !== 'string' || !sourceTemplate.includes('{file}') || !validFiles) {
+    log('[update] 未启用：需设置 passEnv 对应环境变量、含 {file} 的 HTTPS source，以及非空且无重复的 files');
     return null;
   }
 
-  return async function handleUpdate(request, response, url) {
+  let updateInProgress = false;
+  return async function handleUpdate(request, response) {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method_not_allowed' });
-    const provided = url.searchParams.get('pass');
+    const provided = getBearerToken(request);
     if (!provided || !safeEqual(provided, pass)) {
       return sendJson(response, 401, { error: 'invalid_update_pass' });
     }
-    try {
-      await readBody(request); // 消费请求体（可忽略）
-    } catch { /* ignore */ }
+    if (updateInProgress) return sendJson(response, 409, { error: 'update_in_progress' });
+    updateInProgress = true;
 
-    log(`[update] 收到更新请求，共 ${files.length} 个文件`);
-    const staged = []; // { file, targetPath, tempPath, size }
+    const transactionId = `${process.pid}-${randomUUID()}`;
+    const staged = [];
     try {
-      // 阶段一：全部下载 + 校验到各自的临时文件（任一失败则整体中止，不触碰线上文件）
+      try {
+        await readBody(request);
+      } catch { /* 请求体与更新无关 */ }
+
+      log(`[update] 收到更新请求，共 ${files.length} 个文件`);
       for (const file of files) {
-        const targetPath = resolve(projectRoot, file);
-        // 路径越界检查：目标必须在项目根内
-        if (targetPath !== projectRoot && !targetPath.startsWith(projectRoot + sep)) {
+        const targetPath = resolve(root, file);
+        if (targetPath !== root && !targetPath.startsWith(root + sep)) {
           throw new Error(`文件路径越界: ${file}`);
         }
-        const downloadUrl = sourceTemplate.replace('{file}', file.split('/').map((segment) => encodeURIComponent(segment)).join('/'));
-        const content = await downloadFile(downloadUrl, downloadTimeoutMs);
-        // 可选 SHA256 校验：配置 update.sha256 为 {file}:{hash} 映射
-        const expectedHash = update.sha256?.[file];
-        if (typeof expectedHash === 'string') {
-          const actual = createHash('sha256').update(content).digest('hex');
-          if (actual !== expectedHash) throw new Error(`SHA256 校验失败: ${file}`);
-        }
-        const tempPath = `${targetPath}.update-${process.pid}`;
+        const encodedFile = file.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+        const downloadUrl = sourceTemplate.replaceAll('{file}', encodedFile);
+        const expectedHash = typeof update.sha256?.[file] === 'string' ? update.sha256[file] : null;
+        const content = await downloadFile(downloadUrl, downloadOptions, expectedHash, log);
+        const tempPath = `${targetPath}.update-${transactionId}`;
+        const backupPath = `${targetPath}.backup-${transactionId}`;
         await mkdir(dirname(targetPath), { recursive: true });
-        await writeFile(tempPath, content);
-        staged.push({ file, targetPath, tempPath, size: content.length });
+        await writeFile(tempPath, content, { flag: 'wx' });
+        staged.push({ file, targetPath, tempPath, backupPath, installed: false, backedUp: false });
         log(`[update] 已暂存: ${file} (${content.length} 字节)`);
       }
-      // 阶段二：全部就绪后逐一原子替换（rename 失败概率极低；若仍失败，已替换的文件保留、
-      // 未替换的回滚 —— 但由于阶段一已全部校验通过，此分支几乎不可达）
+
       const updated = [];
       for (const entry of staged) {
-        await rename(entry.tempPath, entry.targetPath);
-        updated.push(entry.file);
-        log(`[update] 已替换: ${entry.file}`);
+        await rename(entry.targetPath, entry.backupPath);
+        entry.backedUp = true;
+        try {
+          await rename(entry.tempPath, entry.targetPath);
+          entry.installed = true;
+          updated.push(entry.file);
+          log(`[update] 已替换: ${entry.file}`);
+        } catch (error) {
+          await rename(entry.backupPath, entry.targetPath);
+          entry.backedUp = false;
+          throw error;
+        }
+      }
+
+      if (restartOnSuccess && restartSignalPath) {
+        await mkdir(dirname(restartSignalPath), { recursive: true });
+        await writeFile(restartSignalPath, randomUUID());
+      }
+      for (const entry of staged) {
+        await rm(entry.backupPath, { force: true }).catch((error) => {
+          log(`[update] 清理备份失败: ${entry.file}: ${error.message}`);
+        });
+        entry.backedUp = false;
       }
       log(`[update] 全部更新成功: ${updated.join(', ')}`);
-      sendJson(response, 200, { ok: true, updated, next: 'restarting' });
+      sendJson(response, 200, { ok: true, updated, next: restartOnSuccess ? 'restarting' : 'running' });
       if (restartOnSuccess) {
-        // 给响应留出发送时间再退出；docker restart: on-failure 需非零退出码
         setTimeout(() => {
-          log('[update] 进程退出，等待 docker 重启');
-          if (restartOnSuccess === 'code0') {
-            process.exit(0);
-          } else {
-            process.exit(1);
-          }
-        }, 500);
+          log('[update] 进程退出，等待 Docker 重启');
+          process.exit(restartOnSuccess === 'code0' ? 0 : 1);
+        }, restartSignalPath ? 1_500 : 500);
       }
     } catch (error) {
-      log(`[update] 更新失败: ${error.message}`);
-      // 清理所有临时文件（阶段一失败时线上文件未被触碰；阶段二失败时已替换的保留）
-      for (const entry of staged) {
+      const rollbackErrors = [];
+      for (const entry of [...staged].reverse()) {
+        try {
+          if (entry.installed) await rm(entry.targetPath, { force: true });
+          if (entry.backedUp) await rename(entry.backupPath, entry.targetPath);
+        } catch (rollbackError) {
+          rollbackErrors.push(`${entry.file}: ${rollbackError.message}`);
+        }
         await rm(entry.tempPath, { force: true }).catch(() => {});
       }
-      sendJson(response, 502, { error: 'update_failed', message: error.message });
+      const rollbackSuffix = rollbackErrors.length > 0 ? `；回滚失败: ${rollbackErrors.join(', ')}` : '';
+      log(`[update] 更新失败: ${error.message}${rollbackSuffix}`);
+      sendJson(response, 502, { error: 'update_failed', message: `${error.message}${rollbackSuffix}` });
+    } finally {
+      updateInProgress = false;
     }
   };
 }

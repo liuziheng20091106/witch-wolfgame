@@ -1,7 +1,37 @@
+import { watch } from 'node:fs';
+import { mkdir, readFile } from 'node:fs/promises';
+import { basename, dirname, resolve } from 'node:path';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
-import { dirname, resolve } from 'node:path';
+
+export async function watchRestartSignal(signalPath, onSignal, log = console.warn) {
+  if (typeof signalPath !== 'string' || signalPath.length === 0) return () => {};
+  const absolutePath = resolve(signalPath);
+  const directory = dirname(absolutePath);
+  const filename = basename(absolutePath);
+  await mkdir(directory, { recursive: true });
+  let lastValue = '';
+  try { lastValue = await readFile(absolutePath, 'utf8'); } catch {}
+  let triggered = false;
+  const check = async () => {
+    if (triggered) return;
+    try {
+      const value = await readFile(absolutePath, 'utf8');
+      if (value && value !== lastValue) {
+        triggered = true;
+        lastValue = value;
+        await onSignal();
+      }
+    } catch (error) {
+      log(`[restart] 读取重启信号失败: ${error.message}`);
+    }
+  };
+  const watcher = watch(directory, (eventType, changedName) => {
+    if (!changedName || String(changedName) === filename) void check();
+  });
+  watcher.on('error', (error) => log(`[restart] 监听重启信号失败: ${error.message}`));
+  return () => watcher.close();
+}
 
 export const INTERNAL_PATH = '/internal/v1/chat/completions';
 export const PUBLIC_PATHS = new Set(['/v1/chat/completions', '/api/ai/chat/completions']);
