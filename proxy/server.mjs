@@ -8,7 +8,7 @@ import { createUpdateHandler } from './update.mjs';
 const PROVIDER_PROTOCOLS = new Set(['openai', 'deepseek']);
 const REASONING_EFFORTS = new Set(['none', 'low', 'high', 'max']);
 const MAX_UPSTREAM_RESPONSE_BYTES = 2 * 1024 * 1024;
-const MAX_PROVIDER_TIMEOUT_MS = 120_000;
+const MAX_PROVIDER_TIMEOUT_MS = 3_600_000;
 
 function requireBoundedInteger(value, minimum, maximum, label) {
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
@@ -42,7 +42,7 @@ function loadProviders(value) {
     if (!['auto', 'force', 'disabled'].includes(provider.jsonOutputMode)) throw new Error(`服务商 ${provider.name} JSON Output 模式无效`);
     const totalTimeoutMs = requireBoundedInteger(provider.totalTimeoutMs, 100, MAX_PROVIDER_TIMEOUT_MS, `服务商 ${provider.name} totalTimeoutMs`);
     const firstByteTimeoutMs = requireBoundedInteger(provider.firstByteTimeoutMs, 50, totalTimeoutMs, `服务商 ${provider.name} firstByteTimeoutMs`);
-    const retryCount = requireBoundedInteger(provider.retryCount, 0, 9, `服务商 ${provider.name} retryCount`);
+    const retryCount = requireBoundedInteger(provider.retryCount, 0, 20, `服务商 ${provider.name} retryCount`);
     const keys = requireEnv(provider.apiKeysEnv).split(',').map((key) => key.trim()).filter(Boolean);
     if (keys.length === 0) throw new Error(`服务商 ${provider.name} 没有可用 API Key`);
     return { ...provider, endpoint: validateEndpoint(provider.endpoint), totalTimeoutMs, firstByteTimeoutMs, retryCount, keys };
