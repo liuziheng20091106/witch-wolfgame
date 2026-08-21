@@ -179,7 +179,7 @@ try {
   const proxyPort = proxy.address().port;
   await writeFile(mainConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 }, cors: { allowedOrigins: [origin] },
-    proxies: [{ name: 'smoke-proxy', url: `https://127.0.0.1:${proxyPort}/internal/v1/chat/completions`, ca: join(certs, 'ca.crt'), clientCert: join(certs, 'main-client.crt'), clientKey: join(certs, 'main-client.key'), serverName: 'proxy.internal', connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', timeoutMs: 5000 }],
+    proxies: [{ name: '水梦梦的服务器', url: `https://127.0.0.1:${proxyPort}/internal/v1/chat/completions`, ca: join(certs, 'ca.crt'), clientCert: join(certs, 'main-client.crt'), clientKey: join(certs, 'main-client.key'), serverName: 'proxy.internal', connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', timeoutMs: 5000 }],
     rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 }, acceptedClientVersions: ['2.3.1'],
   }));
   main = await startMainServer(mainConfig);
@@ -196,6 +196,7 @@ try {
   const valid = await postMain(mainPort, validPayload(), '203.0.113.9');
   assert.equal(valid.status, 200);
   assert.equal((await valid.json()).choices[0].message.content, '{"targetPlayerId":1}');
+  assert.equal(valid.headers.get('X-Majo-Proxy'), encodeURIComponent('水梦梦的服务器'));
   assert.equal(upstreamRequests.length, 2);
   assert.equal(upstreamRequests.at(-1).authorization, 'Bearer key-two');
   assert.equal(upstreamRequests[0].body.model, 'smoke-model');

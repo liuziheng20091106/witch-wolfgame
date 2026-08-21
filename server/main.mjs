@@ -168,7 +168,7 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
         }
       }
       logEvent('info', 'ai_success', { ip, sessionId, status: upstream.statusCode, proxy: upstream.nodeName, durationMs: Date.now() - startedAt, bytes: upstream.body.length });
-      response.writeHead(upstream.statusCode, { ...cors, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Majo-Proxy': upstream.nodeName });
+      response.writeHead(upstream.statusCode, { ...cors, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Majo-Proxy': encodeURIComponent(upstream.nodeName) });
       response.end(upstream.body);
     } catch (error) {
       const status = Number.isInteger(error.statusCode) ? error.statusCode : 502;
