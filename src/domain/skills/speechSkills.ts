@@ -484,7 +484,7 @@ function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pend
       targetPlayerIds: [viewerId],
     });
     addKnowledge(state, ownerId, { subjectPlayerId: viewerId, kind: 'role', value: roleId, observedDay: state.day }, event.id);
-    addPrivateEvent(state, [viewerId], 'skill', `${viewerName} 观看了 ${ownerName} 的直播，她知晓了你的身份。若你确认她与你同阵营，可通过她的直播获得一位能为你作铁证的人。`, {
+    addPrivateEvent(state, [viewerId], 'skill', `${viewerName} 观看了 ${ownerName} 的直播，她知晓了你的身份。`, {
       actorPlayerId: viewerId,
       targetPlayerIds: [viewerId],
     });
