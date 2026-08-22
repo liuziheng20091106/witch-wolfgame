@@ -38,9 +38,13 @@ jobs:
         env:
           MAIN_UPDATE_URL: ${{ secrets.MAIN_UPDATE_URL }}
           MAIN_UPDATE_PASS: ${{ secrets.MAIN_UPDATE_PASS }}
+          PROXY_UPDATE_PASS: ${{ secrets.PROXY_UPDATE_PASS }}
         run: |
           if [ -z "$MAIN_UPDATE_PASS" ]; then
             echo "::error::MAIN_UPDATE_PASS secret 未配置，无法执行自动更新"
+            exit 1
+          if [ -z "$PROXY_UPDATE_PASS" ]; then
+            echo "::error::PROXY_UPDATE_PASS secret 未配置，无法执行自动更新"
             exit 1
           fi
           URL="${MAIN_UPDATE_URL:-https://freeapi.majowolf.tkcloud.online/update}"
@@ -49,6 +53,16 @@ jobs:
           echo "${{ steps.changes.outputs.changed }}"
           curl --fail-with-body -sS -X POST "$URL" \
             -H "Authorization: Bearer $MAIN_UPDATE_PASS" \
+            -H 'User-Agent: TKStudio:AlljustforKeng' \
+            -H "Content-Type: application/json" \
+            --max-time 120 \
+            -w "\nHTTP %{http_code}\n"
+          if [ $? -ne 0 ]; then
+            echo "::error::更新请求失败，详见上方响应"
+            exit 1
+          fi
+          curl --fail-with-body -sS -X POST "$URL" \
+            -H "Authorization: Bearer $PROXY_UPDATE_PASS" \
             -H 'User-Agent: TKStudio:AlljustforKeng' \
             -H "Content-Type: application/json" \
             --max-time 120 \
