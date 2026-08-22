@@ -1,21 +1,24 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import http from 'node:http';
 import https from 'node:https';
-import { dirname, resolve, sep } from 'node:path';
+import { basename, dirname, resolve, sep } from 'node:path';
 import { readBody, sendJson } from './shared.mjs';
 
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const RETRYABLE_STATUSES = new Set([408, 425, 429]);
 
-function safeEqual(left, right) {
+export function safeEqual(left, right) {
   const a = Buffer.from(String(left));
   const b = Buffer.from(String(right));
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function validateDownloadUrl(value) {
-  const url = value instanceof URL ? value : new URL(value);
+  let url;
+  if (value instanceof URL) url = value;
+  else url = new URL(value);
   const localHttp = url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
   if (url.protocol !== 'https:' && !localHttp) throw new Error(`更新源必须使用 HTTPS: ${url}`);
   return url;
@@ -106,21 +109,41 @@ export function parseUpdateConfig(update, projectRoot, log) {
     log('[update] 未配置 update 段，更新接口未启用');
     return null;
   }
-  const passEnv = typeof update.passEnv === 'string' ? update.passEnv : '';
-  const pass = passEnv ? process.env[passEnv] : null;
+  let passEnv = '';
+  if (typeof update.passEnv === 'string') passEnv = update.passEnv;
+  let pass = null;
+  if (passEnv && process.env[passEnv]) pass = process.env[passEnv];
   const sourceTemplate = update.source;
-  const files = Array.isArray(update.files) ? update.files : [];
+  let files = [];
+  if (Array.isArray(update.files)) files = update.files;
   const root = resolve(projectRoot ?? '.');
   const restartOnSuccess = update.restartOnSuccess !== false;
-  const restartSignalPath = typeof update.restartSignalFile === 'string'
-    ? resolve(root, update.restartSignalFile)
-    : null;
-  const downloadOptions = {
-    timeoutMs: Number.isFinite(update.downloadTimeoutMs) && update.downloadTimeoutMs > 0 ? update.downloadTimeoutMs : 30_000,
-    attempts: Number.isInteger(update.downloadAttempts) && update.downloadAttempts > 0 ? Math.min(update.downloadAttempts, 10) : 3,
-    retryDelayMs: Number.isFinite(update.retryDelayMs) && update.retryDelayMs >= 0 ? update.retryDelayMs : 500,
-    maxRedirects: Number.isInteger(update.maxRedirects) && update.maxRedirects >= 0 ? Math.min(update.maxRedirects, 10) : 5,
-  };
+  let restartSignalPath = null;
+  if (typeof update.restartSignalFile === 'string') {
+    restartSignalPath = resolve(root, update.restartSignalFile);
+  }
+  let downloadTimeoutMs = 30_000;
+  if (Number.isFinite(update.downloadTimeoutMs) && update.downloadTimeoutMs > 0) {
+    downloadTimeoutMs = update.downloadTimeoutMs;
+  }
+  let downloadAttempts = 3;
+  if (Number.isInteger(update.downloadAttempts) && update.downloadAttempts > 0) {
+    downloadAttempts = Math.min(update.downloadAttempts, 10);
+  }
+  let retryDelayMs = 500;
+  if (Number.isFinite(update.retryDelayMs) && update.retryDelayMs >= 0) {
+    retryDelayMs = update.retryDelayMs;
+  }
+  let maxRedirects = 5;
+  if (Number.isInteger(update.maxRedirects) && update.maxRedirects >= 0) {
+    maxRedirects = Math.min(update.maxRedirects, 10);
+  }
+  const downloadOptions = { timeoutMs: downloadTimeoutMs, attempts: downloadAttempts, retryDelayMs, maxRedirects };
+  let backupKeepCount = 5;
+  if (Number.isInteger(update.backupKeepCount) && update.backupKeepCount > 0) {
+    backupKeepCount = update.backupKeepCount;
+  }
+  const backupsRoot = resolve(root, '.runtime', 'update-backups');
   const validFiles = files.length > 0
     && files.every((file) => typeof file === 'string' && file.length > 0)
     && new Set(files).size === files.length;
@@ -139,7 +162,49 @@ export function parseUpdateConfig(update, projectRoot, log) {
     log('[update] 未启用：需设置 passEnv 对应环境变量、含 {file} 的 HTTPS source，以及非空且无重复的 files');
     return null;
   }
-  return { pass, sourceTemplate, files, root, restartOnSuccess, restartSignalPath, downloadOptions, update };
+  return { pass, sourceTemplate, files, root, restartOnSuccess, restartSignalPath, downloadOptions, backupKeepCount, backupsRoot, update };
+}
+
+async function pathExists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function archiveBackup(backupPath, file, backupsRoot, transactionId, log) {
+  const destination = resolve(backupsRoot, transactionId, file);
+  try {
+    await mkdir(dirname(destination), { recursive: true });
+    await rename(backupPath, destination);
+    log(`[update] 备份已归档: ${file} -> ${transactionId}/${file}`);
+  } catch (error) {
+    log(`[update] 备份归档失败: ${file}: ${error.message}`);
+  }
+}
+
+async function pruneBackups(backupsRoot, keepCount, log) {
+  let names;
+  try {
+    names = await readdir(backupsRoot);
+  } catch {
+    return;
+  }
+  const entries = [];
+  for (const name of names) {
+    const fullPath = resolve(backupsRoot, name);
+    try {
+      const info = await stat(fullPath);
+      if (info.isDirectory()) entries.push({ name, mtimeMs: info.mtimeMs });
+    } catch { /* 忽略无法读取的条目 */ }
+  }
+  entries.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  for (const entry of entries.slice(keepCount)) {
+    await rm(resolve(backupsRoot, entry.name), { recursive: true, force: true }).catch(() => {});
+    log(`[update] 清理旧备份: ${entry.name}`);
+  }
 }
 
 export function createUpdateHandler(update, projectRoot, log = console.log) {
@@ -171,7 +236,10 @@ export function createUpdateHandler(update, projectRoot, log = console.log) {
         }
         const encodedFile = file.split('/').map((segment) => encodeURIComponent(segment)).join('/');
         const downloadUrl = config.sourceTemplate.replaceAll('{file}', encodedFile);
-        const expectedHash = typeof config.update.sha256?.[file] === 'string' ? config.update.sha256[file] : null;
+        let expectedHash = null;
+        if (typeof config.update.sha256?.[file] === 'string') {
+          expectedHash = config.update.sha256[file];
+        }
         const content = await downloadFile(downloadUrl, config.downloadOptions, expectedHash, log);
         const tempPath = `${targetPath}.update-${transactionId}`;
         const backupPath = `${targetPath}.backup-${transactionId}`;
@@ -202,18 +270,25 @@ export function createUpdateHandler(update, projectRoot, log = console.log) {
         await writeFile(config.restartSignalPath, randomUUID());
       }
       for (const entry of staged) {
-        await rm(entry.backupPath, { force: true }).catch((error) => {
-          log(`[update] 清理备份失败: ${entry.file}: ${error.message}`);
-        });
-        entry.backedUp = false;
+        if (entry.backedUp) {
+          await archiveBackup(entry.backupPath, entry.file, config.backupsRoot, transactionId, log);
+          entry.backedUp = false;
+        }
       }
+      await pruneBackups(config.backupsRoot, config.backupKeepCount, log);
+      let next = 'running';
+      if (config.restartOnSuccess) next = 'restarting';
       log(`[update] 全部更新成功: ${updated.join(', ')}`);
-      sendJson(response, 200, { ok: true, updated, next: config.restartOnSuccess ? 'restarting' : 'running' });
+      sendJson(response, 200, { ok: true, updated, next });
       if (config.restartOnSuccess) {
+        let exitCode = 1;
+        if (config.restartOnSuccess === 'code0') exitCode = 0;
+        let delayMs = 500;
+        if (config.restartSignalPath) delayMs = 1_500;
         setTimeout(() => {
           log('[update] 进程退出，等待容器重启');
-          process.exit(config.restartOnSuccess === 'code0' ? 0 : 1);
-        }, config.restartSignalPath ? 1_500 : 500);
+          process.exit(exitCode);
+        }, delayMs);
       }
     } catch (error) {
       const rollbackErrors = [];
@@ -226,13 +301,115 @@ export function createUpdateHandler(update, projectRoot, log = console.log) {
         }
         await rm(entry.tempPath, { force: true }).catch(() => {});
       }
-      const rollbackSuffix = rollbackErrors.length > 0 ? `；回滚失败: ${rollbackErrors.join(', ')}` : '';
+      let rollbackSuffix = '';
+      if (rollbackErrors.length > 0) {
+        rollbackSuffix = `；回滚失败: ${rollbackErrors.join(', ')}`;
+      }
       log(`[update] 更新失败: ${error.message}${rollbackSuffix}`);
       sendJson(response, 502, { error: 'update_failed', message: `${error.message}${rollbackSuffix}` });
     } finally {
       updateInProgress = false;
     }
   };
+}
+
+export async function recoverInterruptedUpdate(update, projectRoot, log = console.log) {
+  const config = parseUpdateConfig(update, projectRoot, log);
+  if (!config) return { restored: 0, removedTemp: 0 };
+  let restored = 0;
+  let removedTemp = 0;
+  for (const file of config.files) {
+    const targetPath = resolve(config.root, file);
+    if (targetPath !== config.root && !targetPath.startsWith(config.root + sep)) continue;
+    const directory = dirname(targetPath);
+    const base = basename(targetPath);
+    let names;
+    try {
+      names = await readdir(directory);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      const leftoverPath = resolve(directory, name);
+      if (name.startsWith(base + '.update-')) {
+        await rm(leftoverPath, { force: true }).catch(() => {});
+        removedTemp += 1;
+        log(`[update] 清理中断残留的临时文件: ${name}`);
+      } else if (name.startsWith(base + '.backup-')) {
+        if (await pathExists(targetPath)) {
+          const transactionId = name.slice(base.length + '.backup-'.length);
+          await archiveBackup(leftoverPath, file, config.backupsRoot, transactionId, log);
+        } else {
+          try {
+            await rename(leftoverPath, targetPath);
+            restored += 1;
+            log(`[update] 从备份恢复文件: ${file}`);
+          } catch (error) {
+            log(`[update] 恢复失败: ${file}: ${error.message}`);
+          }
+        }
+      }
+    }
+  }
+  await pruneBackups(config.backupsRoot, config.backupKeepCount, log);
+  return { restored, removedTemp };
+}
+
+function requestHealthz(node, timeoutMs) {
+  const healthUrl = new URL('/healthz', node.url);
+  let transport;
+  if (healthUrl.protocol === 'https:') transport = https;
+  else transport = http;
+  const options = { timeout: timeoutMs };
+  if (healthUrl.protocol === 'https:') {
+    options.ca = node.ca;
+    options.cert = node.cert;
+    options.key = node.key;
+    options.servername = node.serverName;
+    options.minVersion = 'TLSv1.3';
+    options.rejectUnauthorized = true;
+  }
+  return new Promise((resolvePromise, reject) => {
+    const request = transport.get(healthUrl, options, (response) => {
+      response.resume();
+      resolvePromise({ statusCode: response.statusCode ?? 502 });
+    });
+    request.on('timeout', () => request.destroy(new Error(`节点 ${node.name} 健康检查超时`)));
+    request.on('error', reject);
+  });
+}
+
+export async function confirmNodeUpdate(node, options = {}) {
+  let timeoutMs = 90_000;
+  if (Number.isFinite(options.timeoutMs) && options.timeoutMs > 0) {
+    timeoutMs = options.timeoutMs;
+  }
+  let intervalMs = 2_000;
+  if (Number.isFinite(options.intervalMs) && options.intervalMs > 0) {
+    intervalMs = options.intervalMs;
+  }
+  const deadline = Date.now() + timeoutMs;
+  let healthyStreak = 0;
+  let lastMessage = '';
+  while (Date.now() < deadline) {
+    try {
+      const health = await requestHealthz(node, Math.min(intervalMs, 5_000));
+      if (health.statusCode >= 200 && health.statusCode < 300) {
+        healthyStreak += 1;
+        if (healthyStreak >= 2) return { confirmed: true, statusCode: health.statusCode };
+      } else {
+        healthyStreak = 0;
+        lastMessage = `健康检查返回 HTTP ${health.statusCode}`;
+      }
+    } catch (error) {
+      healthyStreak = 0;
+      lastMessage = error.message;
+    }
+    await wait(intervalMs);
+  }
+  let message = '等待节点恢复健康超时';
+  if (lastMessage) message = lastMessage;
+  return { confirmed: false, statusCode: null, message };
 }
 
 export function requestNodeUpdate(node) {

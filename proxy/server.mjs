@@ -3,7 +3,7 @@ import https from 'node:https';
 import { resolve } from 'node:path';
 import { validateChatCompletionsResponse, validateProviderResponse, validatePublicPayload } from '../server/gameProtocol.mjs';
 import { INTERNAL_PATH, configPath, logEvent, parseJsonBody, pruneNonces, readBody, readJsonFile, requireEnv, sendJson, verifySignedRequest, watchRestartSignal } from '../server/shared.mjs';
-import { createUpdateHandler } from './update.mjs';
+import { createUpdateHandler, recoverInterruptedUpdate } from './update.mjs';
 
 const PROVIDER_PROTOCOLS = new Set(['openai', 'deepseek']);
 const REASONING_EFFORTS = new Set(['none', 'low', 'high', 'max']);
@@ -290,6 +290,10 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
   // Docker 将仓库以可写卷挂载到 /app；本地运行则使用当前工作目录。
   const updateProjectRoot = config.update?.projectRoot ?? process.cwd();
   const updateHandler = createUpdateHandler(config.update, updateProjectRoot, (message) => logEvent('info', 'update_log', { message }));
+  const recovery = await recoverInterruptedUpdate(config.update, updateProjectRoot, (message) => logEvent('info', 'update_log', { message }));
+  if (recovery.restored > 0 || recovery.removedTemp > 0) {
+    logEvent('warn', 'proxy_update_recovery', { restored: recovery.restored, removedTemp: recovery.removedTemp });
+  }
   const server = https.createServer({ ca, cert, key, requestCert: true, rejectUnauthorized: true, minVersion: 'TLSv1.3' }, async (request, response) => {
     if (!request.socket.authorized) return sendJson(response, 401, { error: 'unauthorized_client_certificate' });
     const url = new URL(request.url ?? '/', 'https://localhost');

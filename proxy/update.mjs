@@ -1,1 +1,9 @@
-export { createUpdateHandler, getBearerToken, parseUpdateConfig, requestNodeUpdate } from '../server/update-core.mjs';
+export {
+  confirmNodeUpdate,
+  createUpdateHandler,
+  getBearerToken,
+  parseUpdateConfig,
+  recoverInterruptedUpdate,
+  requestNodeUpdate,
+  safeEqual,
+} from '../server/update-core.mjs';

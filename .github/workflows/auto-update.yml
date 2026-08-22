@@ -34,13 +34,19 @@ jobs:
           MAIN_UPDATE_PASS: ${{ secrets.MAIN_UPDATE_PASS }}
         run: |
           if [ -z "$MAIN_UPDATE_PASS" ]; then
-            echo "MAIN_UPDATE_PASS secret is not configured; skipping auto update"
-            exit 0
+            echo "::error::MAIN_UPDATE_PASS secret 未配置，无法执行自动更新"
+            exit 1
           fi
           URL="${MAIN_UPDATE_URL:-https://freeapi.majowolf.tkcloud.online/update}"
           echo "Triggering update at $URL"
-          curl -fsS -X POST "$URL" \
+          echo "Changed paths:"
+          echo "${{ steps.changes.outputs.changed }}"
+          curl --fail-with-body -sS -X POST "$URL" \
             -H "Authorization: Bearer $MAIN_UPDATE_PASS" \
             -H "Content-Type: application/json" \
-            -H "Content-Length: 0" \
-            --max-time 120 || echo "Update request failed (non-fatal)"
+            --max-time 120 \
+            -w "\nHTTP %{http_code}\n"
+          if [ $? -ne 0 ]; then
+            echo "::error::更新请求失败，详见上方响应"
+            exit 1
+          fi

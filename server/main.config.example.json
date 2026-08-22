@@ -42,6 +42,7 @@
     "downloadAttempts": 3,
     "retryDelayMs": 500,
     "maxRedirects": 5,
+    "backupKeepCount": 5,
     "restartSignalFile": ".runtime/restart-token",
     "restartOnSuccess": "code0"
   }
