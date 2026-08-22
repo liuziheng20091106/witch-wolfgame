@@ -1,5 +1,10 @@
 import { characterById } from '../catalog/characters';
 import { roleAlignment, roleNames } from '../catalog/roles';
+import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events';
+import { chooseWithState } from '../engine/random';
+import { getAlivePlayerIds, getName, getPlayer, getRoleAssignment } from '../engine/selectors';
+import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
+import { getVisionSkillDecision } from './nightSkills';
 import type {
   GameState,
   IgnitionDecision,
@@ -12,14 +17,9 @@ import type {
   VoiceMimicDecision,
   WitchSkillInstance,
 } from '../model';
-import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events';
-import { chooseWithState } from '../engine/random';
-import { getAlivePlayerIds, getPlayer, getRoleAssignment } from '../engine/selectors';
-import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
-import { getVisionSkillDecision } from './nightSkills';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
-  return characterById[getPlayer(state, playerId).characterId].name;
+  return getName(state, playerId);
 }
 
 export function getNextDayStartSkillDecision(state: GameState): PendingDecision | null {

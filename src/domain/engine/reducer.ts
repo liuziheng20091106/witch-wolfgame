@@ -1,4 +1,3 @@
-import { characterById } from '../catalog/characters';
 import { roleNames } from '../catalog/roles';
 import type {
   GameEvent,
@@ -38,12 +37,12 @@ import {
 } from '../skills/registry';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from './events';
 import { refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
-import { getAlivePlayerIds, getPlayer, getRoleAssignment, getSkillInstance } from './selectors';
+import { getAlivePlayerIds, getName, getPlayer, getRoleAssignment, getSkillInstance } from './selectors';
 import { exhaustSkill } from '../skills/types';
 import { resolveVotes } from './vote';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
-  return characterById[getPlayer(state, playerId).characterId].name;
+  return getName(state, playerId);
 }
 
 function pendingId(state: GameState, kind: string, actorId: PlayerId): string {
@@ -158,13 +157,9 @@ function advanceWolfDecision(state: GameState): GameState {
 }
 
 function advanceWitch(state: GameState): GameState {
-  const witch = getAlivePlayerIds(state).find((playerId) => getRoleAssignment(state, playerId).roleId === 'witch');
-  if (witch === undefined || hasPrivateAction(state, 'witch-action', witch)) {
-    state.phase = 'seer-action';
-    return state;
-  }
-  const resources = getRoleAssignment(state, witch).resources;
-  if (resources.antidote !== 1 && resources.poison !== 1) {
+  // 女巫主体 = 玩家女巫 + 继承女巫的造物（诺亚的造物若为女巫可独立用药）
+  const witchSubjects = getAlivePlayerIds(state).filter((playerId) => getRoleAssignment(state, playerId).roleId === 'witch');
+  if (witchSubjects.length === 0) {
     state.phase = 'seer-action';
     return state;
   }
@@ -172,24 +167,45 @@ function advanceWitch(state: GameState): GameState {
     (event) => event.day === state.day && event.data.actionKind === 'wolf-decision',
   );
   const attackedPlayerId = typeof attack?.data.targetPlayerId === 'number' ? attack.data.targetPlayerId as PlayerId : null;
-  state.pendingDecision = {
-    ...makeRoleDecision(state, 'witch-action', witch, '女巫行动', attackedPlayerId === null ? '今晚没有可见的狼刀。' : `${nameOf(state, attackedPlayerId)} 遭到狼刀。可使用解药，并可对另一人用毒。`, getAlivePlayerIds(state).filter((playerId) => playerId !== witch), true, 'witch'),
-    options: {
-      attackedPlayerId,
-      canSave: resources.antidote === 1 && attackedPlayerId !== null,
-      canPoison: resources.poison === 1,
-    },
-  };
+  for (const witch of witchSubjects) {
+    if (hasPrivateAction(state, 'witch-action', witch)) {
+      continue;
+    }
+    const resources = getRoleAssignment(state, witch).resources;
+    if (resources.antidote !== 1 && resources.poison !== 1) {
+      continue;
+    }
+    const isCreatureWitch = witch === 99;
+    state.pendingDecision = {
+      ...makeRoleDecision(state, 'witch-action', witch, isCreatureWitch ? '造物用药' : '女巫行动', isCreatureWitch
+        ? '你是诺亚的造物，继承女巫的药。你可独立决定用药对象——甚至可以对诺亚使用毒药（但这对你并无好处）。'
+        : attackedPlayerId === null ? '今晚没有可见的狼刀。' : `${nameOf(state, attackedPlayerId)} 遭到狼刀。可使用解药，并可对另一人用毒。`, getAlivePlayerIds(state).filter((playerId) => playerId !== witch), true, 'witch'),
+      options: {
+        attackedPlayerId,
+        canSave: resources.antidote === 1 && attackedPlayerId !== null,
+        canPoison: resources.poison === 1,
+      },
+    };
+    return state;
+  }
+  state.phase = 'seer-action';
   return state;
 }
 
 function advanceSeer(state: GameState): GameState {
-  const seer = getAlivePlayerIds(state).find((playerId) => getRoleAssignment(state, playerId).roleId === 'seer');
-  if (seer === undefined || hasPrivateAction(state, 'seer-action', seer)) {
-    state.phase = 'night-protection';
+  // 预言家主体 = 玩家预言家 + 继承预言家的造物
+  const seerSubjects = getAlivePlayerIds(state).filter((playerId) => getRoleAssignment(state, playerId).roleId === 'seer');
+  for (const seer of seerSubjects) {
+    if (hasPrivateAction(state, 'seer-action', seer)) {
+      continue;
+    }
+    const isCreatureSeer = seer === 99;
+    state.pendingDecision = makeRoleDecision(state, 'seer-action', seer, isCreatureSeer ? '造物查验' : '预言家查验', isCreatureSeer
+      ? '你是诺亚的造物，继承预言家的查验能力。选择一名其他存活者，私下获知其当前职业。'
+      : '选择一名其他存活者，私下获知其当前职业。', getAlivePlayerIds(state).filter((playerId) => playerId !== seer), false);
     return state;
   }
-  state.pendingDecision = makeRoleDecision(state, 'seer-action', seer, '预言家查验', '选择一名其他存活者，私下获知其当前职业。', getAlivePlayerIds(state).filter((playerId) => playerId !== seer), false);
+  state.phase = 'night-protection';
   return state;
 }
 
@@ -290,6 +306,28 @@ function addExileIntent(state: GameState, playerId: PlayerId): void {
   });
 }
 
+/** 造物跟投：造物直接继承诺亚的投票（不独立投票）。 */
+function attachCreatureVotes(state: GameState, round: 1 | 2): void {
+  for (const creature of state.creatures) {
+    if (!creature.alive) {
+      continue;
+    }
+    const ownerVote = state.currentVotes.find(
+      (vote) => vote.round === round && vote.voterPlayerId === creature.ownerPlayerId,
+    );
+    if (!ownerVote) {
+      continue;
+    }
+    if (!state.currentVotes.some((vote) => vote.round === round && vote.voterPlayerId === creature.id)) {
+      state.currentVotes.push({
+        voterPlayerId: creature.id,
+        targetPlayerId: ownerVote.targetPlayerId,
+        round,
+      });
+    }
+  }
+}
+
 function votingPending(state: GameState, round: 1 | 2, candidates: PlayerId[] | null): PendingDecision | null {
   const order = getVoteOrder(state);
   const voter = order.find((playerId) => !state.currentVotes.some((vote) => vote.round === round && vote.voterPlayerId === playerId));
@@ -316,6 +354,7 @@ function advanceVoting(state: GameState): GameState {
     state.pendingDecision = ignition;
     return state;
   }
+  attachCreatureVotes(state, 1);
   const resolution = resolveVotes(state.currentVotes, 1, burnedVoters(state));
   if (resolution.outcome === 'runoff') {
     addPublicEvent(state, 'vote', `最高票并列：${resolution.tiedPlayerIds.map((id) => nameOf(state, id)).join('、')}，进行一次重投。`, {
@@ -350,6 +389,7 @@ function advanceRunoff(state: GameState): GameState {
     state.pendingDecision = pending;
     return state;
   }
+  attachCreatureVotes(state, 2);
   const resolution = resolveVotes(state.currentVotes, 2, burnedVoters(state));
   if (resolution.outcome === 'exile' && resolution.targetPlayerId !== null) {
     addExileIntent(state, resolution.targetPlayerId);

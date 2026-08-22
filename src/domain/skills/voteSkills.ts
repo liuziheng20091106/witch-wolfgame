@@ -1,12 +1,12 @@
 import { characterById } from '../catalog/characters';
 import type { GameState, LevitationDecision, PendingDecision, PlayerId, SubmittedDecision } from '../model';
 import { addPrivateEvent, addPublicEvent } from '../engine/events';
-import { getAlivePlayerIds, getPlayer } from '../engine/selectors';
+import { getAlivePlayerIds, getName, getPlayer } from '../engine/selectors';
 import { attachBrainwashSuggestion } from './speechSkills';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
-  return characterById[getPlayer(state, playerId).characterId].name;
+  return getName(state, playerId);
 }
 
 export function getVoteSkillDecision(state: GameState): PendingDecision | null {
