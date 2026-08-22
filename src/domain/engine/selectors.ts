@@ -110,7 +110,7 @@ export function selectObservation(
       isSelf: player.id === viewerPlayerId,
     };
   });
-  // 造物作为可观察单位加入（供 AI 决策视角与目标池呈现）
+  // 造物作为可观察单位加入（供 AI 决策视角与目标池呈现）；暂无专属立绘，沿用当前主人的立绘
   for (const creature of state.creatures) {
     if (!creature.alive) {
       continue;
@@ -119,11 +119,12 @@ export function selectObservation(
     const assignment = getRoleAssignment(state, creature.id);
     const showWolfTeammate = viewerRole === 'wolf' && assignment.roleId === 'wolf';
     const showPrivate = omniscient || showWolfTeammate;
+    const ownerCharacter = characterById[getPlayer(state, creature.ownerPlayerId).characterId];
     players.push({
       id: creature.id,
       characterId: creature.characterId,
       name: `${ownerName}的造物`,
-      avatarUrl: '',
+      avatarUrl: ownerCharacter.avatarUrl,
       alive: true,
       roleId: showPrivate ? assignment.roleId : null,
       skillId: null,

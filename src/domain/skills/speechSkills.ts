@@ -22,6 +22,11 @@ function nameOf(state: GameState, playerId: PlayerId): string {
   return getName(state, playerId);
 }
 
+/** 白天社交技能的目标池：造物不发言，不参与社交目标（怪力/视线诱导/声音模仿等）。 */
+function socialCandidates(state: GameState): PlayerId[] {
+  return getAlivePlayerIds(state).filter((playerId) => playerId !== 99);
+}
+
 export function getNextDayStartSkillDecision(state: GameState): PendingDecision | null {
   const key = offerKey(state, 'day-start');
   const skills = state.skillInstances
@@ -30,7 +35,7 @@ export function getNextDayStartSkillDecision(state: GameState): PendingDecision 
     .filter((skill) => skill.definitionId === 'speech-restrain')
     .sort((left, right) => left.ownerPlayerId - right.ownerPlayerId);
   for (const skill of skills) {
-    const candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== skill.ownerPlayerId);
+    const candidates = socialCandidates(state).filter((playerId) => playerId !== skill.ownerPlayerId);
     if (candidates.length === 0) {
       continue;
     }
@@ -45,13 +50,13 @@ export function getNextDayStartSkillDecision(state: GameState): PendingDecision 
   if (gaze) {
     if (gaze.data.activeDay !== state.day && gaze.data.gazeAskedDay !== state.day) {
       // 第一步：选择被诱导者（谁今天必须提及你指定的对象）
-      const candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== gaze.ownerPlayerId);
+      const candidates = socialCandidates(state).filter((playerId) => playerId !== gaze.ownerPlayerId);
       if (candidates.length > 0) {
         return makeSkillDecision(state, gaze, '视线诱导', '选择一名被诱导者：她今天的发言必须提及你随后指定的对象。', candidates, 'optional-target');
       }
     } else if (typeof gaze.data.gazeSubjectId === 'number' && typeof gaze.data.gazeObjectId !== 'number' && gaze.data.gazeAskedDay === state.day) {
       // 第一步已提交但尚未选对象：第二步选择诱导对象（可指向自己）
-      const candidates = getAlivePlayerIds(state);
+      const candidates = socialCandidates(state);
       if (candidates.length > 0) {
         return makeSkillDecision(state, gaze, '视线诱导-目标', '选择诱导对象：被诱导者今天的发言必须提及她。你可以选择自己——你渴望被人注视。', candidates, 'target');
       }
@@ -98,7 +103,7 @@ export function getAfterSpeechSkillDecision(state: GameState, actorId: PlayerId)
       .filter((event) => event.day === state.day && (event.kind === 'speech' || event.kind === 'restrained'))
       .flatMap((event) => event.targetPlayerIds.length > 0 ? event.targetPlayerIds : event.actorPlayerId === null ? [] : [event.actorPlayerId]),
   );
-  const candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== actorId && !spoken.has(playerId));
+  const candidates = socialCandidates(state).filter((playerId) => playerId !== actorId && !spoken.has(playerId));
   if (candidates.length === 0) return null;
   // 声音模仿必须"以被模仿者的声音"书写伪造内容：把候选者的说话风格交给 AI，并强制要求模仿目标本人的语气。
   // speechStyle 截断到 300 字，避免 options 超过后端 8000 字节上限（角色数据未来可能变长）

@@ -24,10 +24,15 @@ function buildActorPayload(actor: { id: number; name: string }, character: { per
       skill: '无可见技能',
     };
   }
+  // 诺亚（操控液体持有者）作为预言家时：提示她拥有自己与造物的双重查验结果
+  let personality = character.personality;
+  if (visibleRole.includes('预言家') && visibleSkill.includes('操控液体')) {
+    personality = `${personality}你作为预言家，拥有自己和造物的查验结果，请善加利用这两条情报。`;
+  }
   return {
     playerId: actor.id,
     name: actor.name,
-    personality: character.personality,
+    personality,
     speechStyle: character.speechStyle,
     decisionTraits: character.decisionTraits,
     role: visibleRole,
