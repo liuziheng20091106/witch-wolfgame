@@ -12,6 +12,7 @@ import type {
   WitchDecision,
 } from '../model';
 import {
+  applyClairvoyanceDecision,
   applyDayIgnition,
   applyNightIgnition,
   applyNightIgnitionPotion,
@@ -24,6 +25,7 @@ import {
   gazeRequiredMention,
   getAfterSpeechSkillDecision,
   getBeforeSpeechSkillDecision,
+  getClairvoyanceDecision,
   getDayIgnitionDecision,
   getHealingDecision,
   getNextDayStartSkillDecision,
@@ -513,6 +515,15 @@ function applyDecision(state: GameState, event: Extract<GameEvent, { type: 'subm
     if (pending.kind === 'tie-break') {
       return applyRoleDecision(state, pending, event.decision);
     }
+    // 千里眼观看决策：actor 是观众，技能实例属于开播者（可可），必须按 skillInstanceId 定位技能
+    if (pending.options.clairvoyanceViewer === true) {
+      const clairvoyanceSkill = state.skillInstances.find((entry) => entry.id === pending.skillInstanceId);
+      if (!clairvoyanceSkill || clairvoyanceSkill.definitionId !== 'clairvoyance') {
+        throw new Error('千里眼技能不可用');
+      }
+      applyClairvoyanceDecision(state, pending, event.decision);
+      return state;
+    }
     const skill = getSkillInstance(state, pending.actorId);
     if (!skill || skill.id !== pending.skillInstanceId) {
       throw new Error('待处理技能已移动或失效');
@@ -529,6 +540,8 @@ function applyDecision(state: GameState, event: Extract<GameEvent, { type: 'subm
       } else {
         applyNightIgnition(state, pending, event.decision);
       }
+    } else if (skill.definitionId === 'clairvoyance') {
+      applyClairvoyanceDecision(state, pending, event.decision);
     } else if (skill.definitionId === 'speech-restrain' || skill.definitionId === 'brainwash' || skill.definitionId === 'voice-mimic' || skill.definitionId === 'gaze-guidance') {
       applySpeechSkillDecision(state, pending, event.decision);
     } else {

@@ -95,7 +95,7 @@ export const WITCH_SKILL_CATALOG = freeze([
  freeze({ id: 'speech-restrain', name: '怪力', description: '使用怪力将一名玩家按在椅子上，使其本轮不能发言。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
  freeze({ id: 'levitation', name: '漂浮', description: '调整公开投票顺序，或取得二次平票裁决权。', timings: freeze(/** @type {const} */(['before-vote', 'after-runoff'])), usage: 'once' }),
  freeze({ id: 'healing', name: '治愈', description: '每夜保护一名存活者，移除其所有可防止死亡意图。', timings: freeze(/** @type {const} */(['night-protection'])), usage: 'nightly' }),
- freeze({ id: 'clairvoyance', name: '千里眼', description: '有人提及自己时，看穿真实发言者的当前职业。', timings: freeze(/** @type {const} */(['on-mention'])), usage: 'passive' }),
+ freeze({ id: 'clairvoyance', name: '千里眼', description: '每局一次，白天开启直播：任何选择观看直播的玩家，其职业将被你获知。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
  freeze({ id: 'gaze-guidance', name: '视线诱导', description: '每天指定一名被诱导者与一名诱导对象，被诱导者当天发言必须提及诱导对象。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'daily' }),
  freeze({ id: 'soul-exchange', name: '灵魂交换', description: '每局一次，交换自己与另一名存活者的基础职业及职业资源。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
  freeze({ id: 'mind-reading', name: '幻视', description: '每天一次，触碰一名存活者，概率看到其夜间行动轨迹。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'daily' }),
@@ -155,7 +155,11 @@ export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成�
  */
 export function buildGameSystemPrompt(schemaKey) {
  if (!Object.hasOwn(DECISION_EXAMPLES, schemaKey)) throw new Error(`未知提示词响应契约：${String(schemaKey)}`);
- return `你正在进行六人魔女狼人杀。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${DECISION_EXAMPLES[schemaKey]}`;
+ let useOnlyHint = '';
+ if (schemaKey === 'ignition') {
+  useOnlyHint = '该决策只需回答是否使用（true 或 false），无需选择任何目标。';
+ }
+ return `你正在进行六人魔女狼人杀。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${DECISION_EXAMPLES[schemaKey]}${useOnlyHint}`;
 }
 
 /**
