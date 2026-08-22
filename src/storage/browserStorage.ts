@@ -96,6 +96,14 @@ const stateSchema = z.object({
     status: z.enum(['ready', 'active', 'exhausted']), remainingUses: z.number().nullable(), data: z.record(z.string(), z.unknown()),
   })).min(6),
   knowledgeByPlayer: z.record(z.string(), z.array(z.unknown())),
+  creatures: z.array(z.object({
+    id: playerIdSchema,
+    ownerPlayerId: playerIdSchema,
+    characterId: z.enum(CHARACTER_IDS),
+    roleAssignmentId: z.string(),
+    alive: z.boolean(),
+    resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
+  })).default([]),
   speechOrder: z.array(playerIdSchema).length(6),
   publicEvents: z.array(z.unknown()),
   privateEvents: z.array(z.unknown()),
@@ -195,7 +203,12 @@ export function saveSetup(setup: SetupPreferences): void {
 export function loadGame(): StorageResult<SavedGameEnvelope> {
   const result = readValue(GAME_KEY, envelopeSchema);
   if (!result.ok || result.value === null) return result as StorageResult<SavedGameEnvelope>;
-  return { ok: true, value: result.value as unknown as SavedGameEnvelope };
+  const envelope = result.value as unknown as SavedGameEnvelope;
+  // 旧存档迁移：补造物知识键（99 号），避免造物相关代码访问 undefined
+  if (!envelope.state.knowledgeByPlayer[99]) {
+    envelope.state.knowledgeByPlayer[99] = [];
+  }
+  return { ok: true, value: envelope };
 }
 
 export function saveGame(state: GameState): SavedGameEnvelope {
