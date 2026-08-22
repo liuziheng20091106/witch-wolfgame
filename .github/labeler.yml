@@ -1,0 +1,17 @@
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - LICENSE
+
+bug:
+  - head-branch:
+      - "^bug(?:/|-|$)"
+      - "^bugfix(?:/|-|$)"
+      - "^fix(?:/|-|$)"
+      - "^hotfix(?:/|-|$)"
+
+enhancement:
+  - head-branch:
+      - "^feat(?:/|-|$)"
+      - "^feature(?:/|-|$)"
