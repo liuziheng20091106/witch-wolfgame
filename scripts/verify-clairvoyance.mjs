@@ -204,8 +204,43 @@ console.log('=== 5. 保留开播决策 ===');
   check('保留后技能未消耗', getSkillInstance(game, ownerId).status === 'ready');
 }
 
-// ===== 6. 完整对局 =====
-console.log('=== 6. 完整对局（本地策略）===');
+// ===== 6. 防御校验：重复观看/开播者自己观看被拒 =====
+console.log('=== 6. 观看者有效性校验 ===');
+{
+  const game = createGameWithClairvoyance(11);
+  if (!game) {
+    process.exit(1);
+  }
+  const ownerId = findClairvoyanceOwner(game);
+  const viewerId = findViewer(game, ownerId);
+  const stream = getClairvoyanceDecision(game);
+  applyClairvoyanceDecision(game, stream, { use: true });
+
+  const viewerDecision = getClairvoyanceDecision(game);
+  applyClairvoyanceDecision(game, viewerDecision, { use: true });
+
+  // 重复观看同一观众：应抛错
+  let repeatedError = null;
+  try {
+    applyClairvoyanceDecision(game, viewerDecision, { use: true });
+  } catch (error) {
+    repeatedError = error;
+  }
+  check('重复观看被拒绝', repeatedError !== null && repeatedError.message.includes('观看者无效'));
+
+  // 开播者自己观看：应抛错
+  let selfError = null;
+  const selfDecision = { ...viewerDecision, actorId: ownerId };
+  try {
+    applyClairvoyanceDecision(game, selfDecision, { use: true });
+  } catch (error) {
+    selfError = error;
+  }
+  check('开播者自己观看被拒绝', selfError !== null && selfError.message.includes('观看者无效'));
+}
+
+// ===== 7. 完整对局 =====
+console.log('=== 7. 完整对局（本地策略）===');
 {
   let game = createGameWithClairvoyance(42);
   if (!game) {

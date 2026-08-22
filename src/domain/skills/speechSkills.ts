@@ -471,6 +471,11 @@ export function applyClairvoyanceDecision(state: GameState, pending: PendingDeci
 function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pending: PendingDecision, decision: SubmittedDecision): void {
   const viewerId = pending.actorId;
   const ownerId = skill.ownerPlayerId;
+  // 防御性校验：观看者必须存活、非开播者本人、且未被记录过（防陈旧/畸形提交重复暴露身份）
+  const asked = Array.isArray(skill.data.viewerIds) ? skill.data.viewerIds : [];
+  if (viewerId === ownerId || !getPlayer(state, viewerId).alive || asked.includes(viewerId)) {
+    throw new Error('千里眼观看者无效');
+  }
   const viewerName = nameOf(state, viewerId);
   const ownerName = nameOf(state, ownerId);
   const ignition = decision as IgnitionDecision;
@@ -489,7 +494,6 @@ function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pend
       targetPlayerIds: [viewerId],
     });
   }
-  const asked = Array.isArray(skill.data.viewerIds) ? skill.data.viewerIds : [];
   asked.push(viewerId);
   skill.data.viewerIds = asked;
 }
