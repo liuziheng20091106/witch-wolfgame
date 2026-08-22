@@ -111,7 +111,8 @@ console.log('=== 1. 开播决策 ===');
   const viewerDecision = getClairvoyanceDecision(game);
   check('开播后出观看决策', viewerDecision !== null && viewerDecision.title === '观看直播');
   check('观看决策 actor 是观众（非开播者）', viewerDecision !== null && viewerDecision.actorId !== ownerId);
-  check('观看决策候选只有观众自己', viewerDecision !== null && viewerDecision.candidates.length === 1 && viewerDecision.candidates[0] === viewerDecision.actorId);
+  check('观看决策 schema 为 ignition（use-only）', viewerDecision !== null && viewerDecision.schemaKey === 'ignition');
+  check('观看决策无目标候选（目标固定为观众自己）', viewerDecision !== null && viewerDecision.candidates.length === 0);
 }
 
 // ===== 2. 观看：可可获知职业 + 观众私密反馈 =====
@@ -128,7 +129,7 @@ console.log('=== 2. 观看直播 ===');
 
   const viewerDecision = getClairvoyanceDecision(game);
   const viewerRoleBefore = getRoleAssignment(game, viewerId).roleId;
-  applyClairvoyanceDecision(game, viewerDecision, { use: true, targetPlayerId: viewerId });
+  applyClairvoyanceDecision(game, viewerDecision, { use: true });
 
   const ownerKnowledge = game.knowledgeByPlayer[ownerId];
   const roleFact = ownerKnowledge.find(
@@ -155,12 +156,12 @@ console.log('=== 3. 不观看直播 ===');
   applyClairvoyanceDecision(game, stream, { use: true });
 
   const viewerDecision = getClairvoyanceDecision(game);
-  applyClairvoyanceDecision(game, viewerDecision, { use: false, targetPlayerId: null });
+  applyClairvoyanceDecision(game, viewerDecision, { use: false });
 
   const ownerKnowledge = game.knowledgeByPlayer[ownerId];
   check('不观看：可可无该观众职业知识', !ownerKnowledge.some((fact) => fact.subjectPlayerId === viewerId && fact.kind === 'role'));
   const privateForViewer = privateEventsFor(game, viewerId);
-  check('不观看：观众收到保留事件', privateForViewer.some((e) => e.text.includes('不观看')));
+  check('不观看：观众收到带名字的保留事件', privateForViewer.some((e) => e.text.includes('决定不观看')));
 
   // 该观众已被询问，下一个观看决策应是其他观众
   const nextDecision = getClairvoyanceDecision(game);
@@ -180,7 +181,7 @@ console.log('=== 4. 观看名单不公开 ===');
   const stream = getClairvoyanceDecision(game);
   applyClairvoyanceDecision(game, stream, { use: true });
   const viewerDecision = getClairvoyanceDecision(game);
-  applyClairvoyanceDecision(game, viewerDecision, { use: true, targetPlayerId: viewerId });
+  applyClairvoyanceDecision(game, viewerDecision, { use: true });
 
   // 只检查开播后新增的公屏事件（初始"魔女技公开"播报含所有玩家名，不计入）
   const addedPublicTexts = game.publicEvents.slice(publicCountBefore).map((e) => e.text).join(' ');

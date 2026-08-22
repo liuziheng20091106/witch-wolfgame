@@ -400,7 +400,7 @@ export function getClairvoyanceDecision(state: GameState): PendingDecision | nul
     return null;
   }
   if (skill.data.liveDay === state.day) {
-    // 已开播：逐个询问尚未决定的观看者（候选=自己，观看=选中自己）
+    // 已开播：逐个询问尚未决定的观看者（use-only，目标固定为观众自己，无需选择）
     const candidates = clairvoyanceViewerCandidates(state, skill);
     if (candidates.length > 0) {
       const viewerId = candidates[0] as PlayerId;
@@ -410,8 +410,8 @@ export function getClairvoyanceDecision(state: GameState): PendingDecision | nul
         skill,
         '观看直播',
         `是否观看 ${ownerName} 的直播？观看后你的身份信息将被单向传送给 ${ownerName}；如果你确认与她同阵营，可通过她的直播获得一位能为你作铁证的人。狼人通常不观看以免暴露自己。`,
-        [viewerId],
-        'optional-target',
+        [],
+        'ignition',
       );
       // 观看决策的 actor 是观众（不是开播者），reducer 按 options.clairvoyanceViewer 定位技能实例
       decision.actorId = viewerId;
@@ -471,18 +471,20 @@ export function applyClairvoyanceDecision(state: GameState, pending: PendingDeci
 function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pending: PendingDecision, decision: SubmittedDecision): void {
   const viewerId = pending.actorId;
   const ownerId = skill.ownerPlayerId;
-  const optional = decision as OptionalTargetDecision;
-  if (!optional.use) {
-    addPrivateEvent(state, [viewerId], 'skill', `你决定不观看 ${nameOf(state, ownerId)} 的直播。`, { actorPlayerId: viewerId });
+  const viewerName = nameOf(state, viewerId);
+  const ownerName = nameOf(state, ownerId);
+  const ignition = decision as IgnitionDecision;
+  if (!ignition.use) {
+    addPrivateEvent(state, [viewerId], 'skill', `${viewerName} 决定不观看 ${ownerName} 的直播。`, { actorPlayerId: viewerId });
   } else {
     const roleId = getRoleAssignment(state, viewerId).roleId;
     const roleName = roleNames[roleId];
-    const event = addPrivateEvent(state, [ownerId], 'knowledge', `${nameOf(state, viewerId)} 观看了你的直播，职业是${roleName}。`, {
+    const event = addPrivateEvent(state, [ownerId], 'knowledge', `${viewerName} 观看了你的直播，职业是${roleName}。`, {
       actorPlayerId: ownerId,
       targetPlayerIds: [viewerId],
     });
     addKnowledge(state, ownerId, { subjectPlayerId: viewerId, kind: 'role', value: roleId, observedDay: state.day }, event.id);
-    addPrivateEvent(state, [viewerId], 'skill', `你观看了 ${nameOf(state, ownerId)} 的直播，她知晓了你的身份。若你确认她与你同阵营，可通过她的直播获得一位能为你作铁证的人。`, {
+    addPrivateEvent(state, [viewerId], 'skill', `${viewerName} 观看了 ${ownerName} 的直播，她知晓了你的身份。若你确认她与你同阵营，可通过她的直播获得一位能为你作铁证的人。`, {
       actorPlayerId: viewerId,
       targetPlayerIds: [viewerId],
     });
