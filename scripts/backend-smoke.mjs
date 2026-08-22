@@ -74,6 +74,19 @@ function validPayload() {
   };
 }
 
+function targetSkillPayload() {
+  const payload = validPayload();
+  const prompt = JSON.parse(payload.messages[1].content);
+  prompt.action = {
+    kind: 'skill',
+    title: '视线诱导-目标',
+    description: '选择诱导对象：被诱导者今天的发言必须提及她。',
+    schema: 'target',
+  };
+  payload.messages[1].content = JSON.stringify(prompt);
+  return payload;
+}
+
 async function postMain(port, payload, ip) {
   return fetch(`http://127.0.0.1:${port}/api/ai/chat/completions`, {
     method: 'POST',
@@ -169,14 +182,16 @@ try {
   const providersFile = join(work, 'providers.json');
   const proxyConfig = join(work, 'proxy.json');
   const mainConfig = join(work, 'main.json');
-  await writeFile(providersFile, JSON.stringify({ providers: [
-    { name: 'disabled-provider', enabled: false },
-    {
-      name: 'smoke-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/v1/chat/completions`,
-      model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'none', jsonOutputMode: 'auto',
-      totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 1,
-    },
-  ] }));
+  await writeFile(providersFile, JSON.stringify({
+    providers: [
+      { name: 'disabled-provider', enabled: false },
+      {
+        name: 'smoke-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/v1/chat/completions`,
+        model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'none', jsonOutputMode: 'auto',
+        totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 1,
+      },
+    ]
+  }));
   await writeFile(proxyConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 },
     tls: { ca: join(certs, 'ca.crt'), cert: join(certs, 'proxy-server.crt'), key: join(certs, 'proxy-server.key') },
@@ -212,6 +227,10 @@ try {
   assert.equal(upstreamRequests[0].body.reasoning_effort, 'none');
   assert.equal(upstreamRequests[0].body.stream, true);
   assert.equal(upstreamRequests[0].body.client, undefined);
+
+  const targetSkill = await postMain(mainPort, targetSkillPayload(), '203.0.113.24');
+  assert.equal(targetSkill.status, 200);
+  assert.equal((await targetSkill.json()).choices[0].message.content, '{"targetPlayerId":1}');
 
   upstreamMode = 'json-content';
   const nonStreaming = await postMain(mainPort, validPayload(), '203.0.113.21');
@@ -319,18 +338,20 @@ try {
 
   const fallbackProvidersFile = join(work, 'fallback-providers.json');
   const fallbackProxyConfig = join(work, 'fallback-proxy.json');
-  await writeFile(fallbackProvidersFile, JSON.stringify({ providers: [
-    {
-      name: 'primary-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/primary/chat/completions`,
-      model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'none', jsonOutputMode: 'auto',
-      totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 1,
-    },
-    {
-      name: 'fallback-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/fallback/chat/completions`,
-      model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'none', jsonOutputMode: 'auto',
-      totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 0,
-    },
-  ] }));
+  await writeFile(fallbackProvidersFile, JSON.stringify({
+    providers: [
+      {
+        name: 'primary-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/primary/chat/completions`,
+        model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'none', jsonOutputMode: 'auto',
+        totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 1,
+      },
+      {
+        name: 'fallback-provider', enabled: true, protocol: 'openai', endpoint: `http://127.0.0.1:${upstreamPort}/fallback/chat/completions`,
+        model: 'smoke-model', apiKeysEnv: 'SMOKE_API_KEYS', reasoningEffort: 'none', jsonOutputMode: 'auto',
+        totalTimeoutMs: 250, firstByteTimeoutMs: 80, retryCount: 0,
+      },
+    ]
+  }));
   await writeFile(fallbackProxyConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 },
     tls: { ca: join(certs, 'ca.crt'), cert: join(certs, 'proxy-server.crt'), key: join(certs, 'proxy-server.key') },
