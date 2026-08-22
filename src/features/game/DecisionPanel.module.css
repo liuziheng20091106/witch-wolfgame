@@ -239,6 +239,14 @@
   width: 17px;
 }
 
+.errorMeta {
+  margin: 5px 0 0 !important;
+  color: var(--muted) !important;
+  font-family: var(--sans);
+  font-size: 11px !important;
+  overflow-wrap: anywhere;
+}
+
 .debugError {
   margin: 5px 0 0 !important;
   color: var(--verdict) !important;

@@ -1,17 +1,23 @@
 {
-  "listen": { "host": "0.0.0.0", "port": 34023 },
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 34023
+  },
   "tls": {
     "ca": "../certs/ca.crt",
     "cert": "../certs/proxy-server.crt",
     "key": "../certs/proxy-server.key"
   },
   "connectionPasswordEnv": "MAJO_PROXY_PASSWORD_PRIMARY",
-  "acceptedClientVersions": ["2.3.2"],
+  "acceptedClientVersions": [
+    "2.3.2"
+  ],
   "providersFile": "./providers.json",
   "update": {
     "passEnv": "MAJO_UPDATE_PASS",
     "source": "https://raw.githubusercontent.com/liuziheng20091106/witch-wolfgame/main/{file}",
     "files": [
+      "shared/gamePromptContract.js",
       "server/gameProtocol.mjs",
       "server/main.mjs",
       "server/shared.mjs",

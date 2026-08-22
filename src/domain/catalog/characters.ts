@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CHARACTER_CATALOG } from '../../../shared/gamePromptContract.js';
 import soul0 from '../../data/characters/0.json';
 import soul1 from '../../data/characters/1.json';
 import soul2 from '../../data/characters/2.json';
@@ -30,7 +31,6 @@ import avatar13 from '../../assets/avatars/avatar_13.png';
 import type { CharacterDefinition, CharacterId } from '../model';
 
 const rawCharacterSchema = z.object({
-  name: z.string().min(1),
   personality: z.string().min(1),
   speech_style: z.string().min(1),
   example_phrases: z.array(z.string().min(1)).min(1),
@@ -41,23 +41,19 @@ const rawCharacterSchema = z.object({
   }),
 });
 
-const ids: CharacterId[] = [
-  'soul-0', 'soul-1', 'soul-2', 'soul-3', 'soul-4', 'soul-5', 'soul-6',
-  'soul-7', 'soul-8', 'soul-9', 'soul-10', 'soul-11', 'soul-12', 'soul-13',
-];
 const rawCharacters: unknown[] = [soul0, soul1, soul2, soul3, soul4, soul5, soul6, soul7, soul8, soul9, soul10, soul11, soul12, soul13];
 const avatars = [avatar0, avatar1, avatar2, avatar3, avatar4, avatar5, avatar6, avatar7, avatar8, avatar9, avatar10, avatar11, avatar12, avatar13];
 
 export const characters: CharacterDefinition[] = rawCharacters.map((raw, index) => {
   const parsed = rawCharacterSchema.parse(raw);
-  const id = ids[index];
+  const catalogEntry = CHARACTER_CATALOG[index];
   const avatarUrl = avatars[index];
-  if (!id || !avatarUrl) {
+  if (!catalogEntry || !avatarUrl) {
     throw new Error(`角色目录索引 ${index} 不完整`);
   }
   return {
-    id,
-    name: parsed.name,
+    id: catalogEntry.id,
+    name: catalogEntry.name,
     personality: parsed.personality,
     speechStyle: parsed.speech_style,
     examplePhrases: parsed.example_phrases,

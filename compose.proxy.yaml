@@ -19,6 +19,7 @@ services:
     volumes:
       - ./app/server:/app/server:rw
       - ./app/proxy:/app/proxy:rw
+      - ./app/shared:/app/shared:rw
       - ./proxy.config.json:/data/proxy.config.json:ro
       - ./providers.json:/data/providers.json:ro
       - ./certs/ca.crt:/certs/ca.crt:ro

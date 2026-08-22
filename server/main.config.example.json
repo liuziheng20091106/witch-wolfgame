@@ -1,6 +1,13 @@
 {
-  "listen": { "host": "127.0.0.1", "port": 34022 },
-  "cors": { "allowedOrigins": ["https://example.com"] },
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 34022
+  },
+  "cors": {
+    "allowedOrigins": [
+      "https://example.com"
+    ]
+  },
   "proxies": [
     {
       "name": "proxy-primary",
@@ -13,8 +20,14 @@
       "timeoutMs": 65000
     }
   ],
-  "rateLimit": { "windowMs": 60000, "maxRequests": 20, "maxConcurrent": 2 },
-  "acceptedClientVersions": ["2.3.2"],
+  "rateLimit": {
+    "windowMs": 60000,
+    "maxRequests": 20,
+    "maxConcurrent": 2
+  },
+  "acceptedClientVersions": [
+    "2.3.2"
+  ],
   "proxyUpdatePassEnv": "MAJO_PROXY_UPDATE_PASS",
   "updateNodes": [
     {
@@ -32,6 +45,7 @@
     "passEnv": "MAJO_MAIN_UPDATE_PASS",
     "source": "https://raw.githubusercontent.com/liuziheng20091106/witch-wolfgame/main/{file}",
     "files": [
+      "shared/gamePromptContract.js",
       "server/gameProtocol.mjs",
       "server/main.mjs",
       "server/shared.mjs",

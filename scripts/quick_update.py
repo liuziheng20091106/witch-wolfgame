@@ -24,7 +24,12 @@ from urllib.parse import urlsplit
 APP_TITLE = "魔女狼人杀生产快速更新"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MAX_RESPONSE_BYTES = 1024 * 1024
-MAIN_FILES = ("gameProtocol.mjs", "main.mjs", "shared.mjs")
+MAIN_FILES = (
+    "shared/gamePromptContract.js",
+    "server/gameProtocol.mjs",
+    "server/main.mjs",
+    "server/shared.mjs",
+)
 SSH_TARGET_RE = re.compile(r"^[A-Za-z0-9_.@:-]+$")
 REMOTE_PATH_RE = re.compile(r"^/[A-Za-z0-9_./-]+$")
 
@@ -175,8 +180,19 @@ print(tempfile.mkdtemp(prefix='quick-update-', dir=backup))
     stage = run_remote_python(ssh_target, create_stage, remote_root).strip()
     if not stage.startswith(f"{remote_root}/backups/quick-update-"):
         raise RuntimeError("远端返回了非法暂存目录")
-    files = [str(project_root / "server" / name) for name in MAIN_FILES]
-    run_checked(["scp", "-q", *files, f"{ssh_target}:{stage}/"], timeout=120)
+    prepare_stage = """
+from pathlib import Path
+import sys
+stage = Path(sys.argv[1])
+for value in sys.argv[2:]:
+    relative = Path(value)
+    if relative.is_absolute() or '..' in relative.parts:
+        raise RuntimeError('非法相对路径')
+    (stage / relative).parent.mkdir(parents=True, exist_ok=True)
+"""
+    run_remote_python(ssh_target, prepare_stage, stage, *MAIN_FILES)
+    for relative in MAIN_FILES:
+        run_checked(["scp", "-q", str(project_root / relative), f"{ssh_target}:{stage}/{relative}"], timeout=120)
     return stage
 
 
@@ -186,27 +202,34 @@ from pathlib import Path
 import os, subprocess, sys
 root = Path(sys.argv[1])
 stage = Path(sys.argv[2])
-files = ('gameProtocol.mjs', 'main.mjs', 'shared.mjs')
+files = sys.argv[3:]
 entries = []
 try:
-    for name in files:
-        target = root / 'app' / 'server' / name
-        incoming = stage / name
-        backup = stage / f'{name}.previous'
-        os.replace(target, backup)
-        entries.append((target, backup, False))
+    for value in files:
+        relative = Path(value)
+        if relative.is_absolute() or '..' in relative.parts:
+            raise RuntimeError('非法相对路径')
+        target = root / 'app' / relative
+        incoming = stage / relative
+        backup = stage / '.previous' / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        had_original = target.exists()
+        if had_original:
+            os.replace(target, backup)
+        entries.append((target, backup, had_original, False))
         os.replace(incoming, target)
-        entries[-1] = (target, backup, True)
+        entries[-1] = (target, backup, had_original, True)
 except Exception:
-    for target, backup, installed in reversed(entries):
+    for target, backup, had_original, installed in reversed(entries):
         if installed and target.exists():
             target.unlink()
-        if backup.exists():
+        if had_original and backup.exists():
             os.replace(backup, target)
     raise
 subprocess.run(['docker', 'restart', 'majowolf-main'], check=True, stdout=subprocess.DEVNULL)
 """
-    run_remote_python(ssh_target, commit_script, remote_root, stage, timeout=180)
+    run_remote_python(ssh_target, commit_script, remote_root, stage, *MAIN_FILES, timeout=180)
 
 
 def cleanup_stage(ssh_target: str, stage: str) -> None:

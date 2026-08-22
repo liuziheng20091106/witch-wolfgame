@@ -1,51 +1,46 @@
-const EXAMPLE_BY_SCHEMA = {
-  speech: '{"speech":"我会根据公开记录继续判断。"}',
-  target: '{"targetPlayerId":2}',
-  'optional-target': '{"use":true,"targetPlayerId":2}',
-  witch: '{"save":true,"poisonTargetPlayerId":null}',
-  'liquid-control': '{"use":true,"mode":"extract","targetPlayerId":2,"factId":null}',
-  levitation: '{"use":true,"mode":"move-last","targetPlayerId":2}',
-  'voice-mimic': '{"use":true,"targetPlayerId":2,"forgedSpeech":"我暂时相信3号。"}',
-  ignition: '{"use":true}',
-};
-const SYSTEM_TEMPLATE = (schema) => `你正在进行六人魔女狼人杀。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${EXAMPLE_BY_SCHEMA[schema]}`;
-const KIND_SCHEMAS = new Map([
-  ['skill', new Set(['optional-target', 'liquid-control', 'levitation', 'voice-mimic', 'ignition'])],
-  ['wolf-suggestion', new Set(['target'])],
-  ['wolf-decision', new Set(['target'])],
-  ['witch-action', new Set(['witch'])],
-  ['seer-action', new Set(['target'])],
-  ['healing', new Set(['target'])],
-  ['speech', new Set(['speech'])],
-  ['vote', new Set(['target'])],
-  ['runoff', new Set(['target'])],
-  ['tie-break', new Set(['target'])],
-]);
-const SCHEMAS = new Set(Object.keys(EXAMPLE_BY_SCHEMA));
-const PHASES = new Set(['first-night', 'night-skills', 'wolf-suggestions', 'wolf-decision', 'witch-action', 'seer-action', 'night-protection', 'night-resolution', 'dawn', 'day-skills', 'speeches', 'vote-skills', 'voting', 'runoff', 'day-resolution', 'ended']);
-const CHARACTER_NAMES = new Set(['樱羽艾玛', '二阶堂希罗', '夏目安安', '城崎诺亚', '橘雪莉', '远野汉娜', '月代雪', '宝生玛格', '冰上梅露露', '紫藤亚里沙', '佐伯米莉亚', '莲见蕾雅', '黑部奈叶香', '泽渡可可']);
-const BOARD_DESCRIPTIONS = new Set(['6人局：狼人×2、预言家×1、女巫×1、村民×2']);
-const PROMPT_KEYS = new Set(['action', 'actor', 'phase', 'day', 'board', 'alivePlayers', 'legalCandidates', 'allowAbstain', 'options', 'currentDaySpeeches', 'historicalSpeeches', 'recentPublic', 'privateKnowledge', 'publicSkills', 'privateEvents']);
-const ACTOR_KEYS = new Set(['playerId', 'name', 'personality', 'speechStyle', 'decisionTraits', 'role', 'skill']);
-const PRIVATE_KNOWLEDGE_KEYS = new Set(['subjectPlayerId', 'kind', 'value', 'observedDay']);
-const PUBLIC_SKILLS = new Set([
-  '魔女杀手：每局一次，夜间指定一名无法被解药或治愈保护的目标。',
-  '死亡回溯：首次死亡时回到当日发言前，旧时间线仅观战者可见。',
-  '洗脑：每天可发动一次：当天发言须含【1~6字】内容，作为强提示词影响其他玩家。',
-  '操控液体：抽取他人职业，或公开一条已知事实。',
-  '怪力：使用怪力将一名玩家按在椅子上，使其本轮不能发言。',
-  '漂浮：调整公开投票顺序，或取得二次平票裁决权。',
-  '治愈：每夜保护一名存活者，移除其所有可防止死亡意图。',
-  '千里眼：有人提及自己时，看穿真实发言者的当前职业。',
-  '视线诱导：每天指定一名被诱导者与一名诱导对象，被诱导者当天发言必须提及诱导对象。',
-  '灵魂交换：每局一次，交换自己与另一名存活者的基础职业及职业资源。',
-  '幻视：每天一次，触碰一名存活者，概率看到其夜间行动轨迹。',
-  '点火：每局一次，选择夜间或白天使用：夜间可烧毁目标的物品（90%）或全部魔女技（10%）；白天可烧毁目标的投票（90%）或全部魔女技（10%）。',
-  '声音模仿：把一段伪造内容混入本日尚未发言者的公开记录。',
-  '魔女因子回收：回收一名死亡者尚未耗尽的实际技能实例。',
-]);
-const ROLE_VALUES = new Set(['wolf', 'seer', 'witch', 'villager']);
-const ALIGNMENT_VALUES = new Set(['wolf', 'good']);
+import {
+  ALIGNMENTS,
+  BOARD_DESCRIPTION,
+  buildGameSystemPrompt,
+  CHARACTER_CATALOG,
+  DECISION_SCHEMA_KEYS,
+  FREE_CLIENT_PROTOCOL,
+  GAME_PHASES,
+  PLAYER_IDS,
+  PROMPT_FIELD_KEYS,
+  PROMPT_LIMITS,
+  ROLE_IDS,
+  WITCH_SKILL_IDS,
+  formatPublicSkill,
+  isAllowedDecisionPair,
+} from '../shared/gamePromptContract.js';
+
+const SCHEMAS = new Set(DECISION_SCHEMA_KEYS);
+const PHASES = new Set(GAME_PHASES);
+const CHARACTER_NAMES = new Set(CHARACTER_CATALOG.map((character) => character.name));
+const BOARD_DESCRIPTIONS = new Set([BOARD_DESCRIPTION]);
+const PUBLIC_SKILLS = new Set(WITCH_SKILL_IDS.map((skillId) => formatPublicSkill(skillId)));
+const ROLE_VALUES = new Set(ROLE_IDS);
+const ALIGNMENT_VALUES = new Set(ALIGNMENTS);
+const PLAYER_ID_VALUES = new Set(PLAYER_IDS);
+const PAYLOAD_KEYS = new Set(PROMPT_FIELD_KEYS.payload);
+const CLIENT_KEYS = new Set(PROMPT_FIELD_KEYS.client);
+const MESSAGE_KEYS = new Set(PROMPT_FIELD_KEYS.message);
+const PROMPT_KEYS = new Set(PROMPT_FIELD_KEYS.prompt);
+const ACTION_KEYS = new Set(PROMPT_FIELD_KEYS.action);
+const ACTOR_KEYS = new Set(PROMPT_FIELD_KEYS.actor);
+const DECISION_TRAIT_KEYS = new Set(PROMPT_FIELD_KEYS.decisionTraits);
+const OBSERVED_PLAYER_KEYS = new Set(PROMPT_FIELD_KEYS.observedPlayer);
+const PRIVATE_KNOWLEDGE_KEYS = new Set(PROMPT_FIELD_KEYS.privateKnowledge);
+const PUBLIC_SKILL_KEYS = new Set(PROMPT_FIELD_KEYS.publicSkill);
+
+function validResult() {
+  return { ok: true };
+}
+
+function invalidResult(reason, path) {
+  return { ok: false, reason, path };
+}
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -60,72 +55,184 @@ function boundedStrings(value, maxItems, maxLength) {
 }
 
 function validPlayerId(value) {
-  return Number.isInteger(value) && value >= 0 && value <= 5;
+  return PLAYER_ID_VALUES.has(value);
 }
 
 function validObservedPlayer(value) {
-  return isObject(value) && hasOnlyKeys(value, new Set(['playerId', 'name']))
-    && validPlayerId(value.playerId) && CHARACTER_NAMES.has(value.name);
+  return isObject(value)
+    && hasOnlyKeys(value, OBSERVED_PLAYER_KEYS)
+    && validPlayerId(value.playerId)
+    && CHARACTER_NAMES.has(value.name);
 }
 
 function validPublicSkill(value) {
-  return isObject(value) && hasOnlyKeys(value, new Set(['playerId', 'name', 'skill']))
-    && validPlayerId(value.playerId) && CHARACTER_NAMES.has(value.name) && PUBLIC_SKILLS.has(value.skill);
+  return isObject(value)
+    && hasOnlyKeys(value, PUBLIC_SKILL_KEYS)
+    && validPlayerId(value.playerId)
+    && CHARACTER_NAMES.has(value.name)
+    && PUBLIC_SKILLS.has(value.skill);
 }
 
 export function validateGamePrompt(messages) {
-  if (!Array.isArray(messages) || messages.length !== 2) return false;
+  if (!Array.isArray(messages) || messages.length !== PROMPT_LIMITS.messageCount) {
+    return invalidResult('messages_shape', 'messages');
+  }
   const [system, user] = messages;
-  if (!isObject(system) || !isObject(user) || system.role !== 'system' || user.role !== 'user') return false;
-  if (!hasOnlyKeys(system, new Set(['role', 'content'])) || !hasOnlyKeys(user, new Set(['role', 'content']))) return false;
-  if (typeof user.content !== 'string' || user.content.length > 96_000) return false;
+  if (!isObject(system) || !isObject(user)) return invalidResult('messages_shape', 'messages');
+  if (system.role !== 'system' || user.role !== 'user') return invalidResult('message_roles', 'messages');
+  if (!hasOnlyKeys(system, MESSAGE_KEYS) || !hasOnlyKeys(user, MESSAGE_KEYS)) {
+    return invalidResult('message_keys', 'messages');
+  }
+  if (typeof user.content !== 'string' || user.content.length > PROMPT_LIMITS.userContentMaxLength) {
+    return invalidResult('user_content_shape', 'messages[1].content');
+  }
+
   let prompt;
-  try { prompt = JSON.parse(user.content); } catch { return false; }
-  if (!isObject(prompt) || !hasOnlyKeys(prompt, PROMPT_KEYS) || !isObject(prompt.action) || !isObject(prompt.actor)) return false;
-  if (!KIND_SCHEMAS.get(prompt.action.kind)?.has(prompt.action.schema) || !SCHEMAS.has(prompt.action.schema)) return false;
-  if (system.content !== SYSTEM_TEMPLATE(prompt.action.schema)) return false;
-  if (!hasOnlyKeys(prompt.action, new Set(['kind', 'title', 'description', 'schema']))) return false;
-  if (typeof prompt.action.title !== 'string' || prompt.action.title.length < 1 || prompt.action.title.length > 40) return false;
-  if (typeof prompt.action.description !== 'string' || prompt.action.description.length > 240) return false;
-  if (!hasOnlyKeys(prompt.actor, ACTOR_KEYS)) return false;
-  if (!validPlayerId(prompt.actor.playerId) || !CHARACTER_NAMES.has(prompt.actor.name)) return false;
-  if (typeof prompt.actor.personality !== 'string' || prompt.actor.personality.length < 1 || prompt.actor.personality.length > 2_000) return false;
-  if (typeof prompt.actor.speechStyle !== 'string' || prompt.actor.speechStyle.length < 1 || prompt.actor.speechStyle.length > 2_000) return false;
-  const traitKeys = ['conservative', 'trusting', 'aggressive'];
+  try {
+    prompt = JSON.parse(user.content);
+  } catch {
+    return invalidResult('user_content_json', 'messages[1].content');
+  }
+  if (!isObject(prompt)) return invalidResult('prompt_shape', 'prompt');
+  if (!hasOnlyKeys(prompt, PROMPT_KEYS)) return invalidResult('prompt_keys', 'prompt');
+  if (!isObject(prompt.action) || !hasOnlyKeys(prompt.action, ACTION_KEYS)) {
+    return invalidResult('action_shape', 'action');
+  }
+  if (!SCHEMAS.has(prompt.action.schema) || !isAllowedDecisionPair(prompt.action.kind, prompt.action.schema)) {
+    return invalidResult('action_schema', 'action.schema');
+  }
+  if (system.content !== buildGameSystemPrompt(prompt.action.schema)) {
+    return invalidResult('system_template', 'messages[0].content');
+  }
+  if (typeof prompt.action.title !== 'string'
+    || prompt.action.title.length < PROMPT_LIMITS.actionTitleMinLength
+    || prompt.action.title.length > PROMPT_LIMITS.actionTitleMaxLength) {
+    return invalidResult('action_title', 'action.title');
+  }
+  if (typeof prompt.action.description !== 'string'
+    || prompt.action.description.length > PROMPT_LIMITS.actionDescriptionMaxLength) {
+    return invalidResult('action_description', 'action.description');
+  }
+
+  if (!isObject(prompt.actor) || !hasOnlyKeys(prompt.actor, ACTOR_KEYS)) {
+    return invalidResult('actor_keys', 'actor');
+  }
+  if (!validPlayerId(prompt.actor.playerId) || !CHARACTER_NAMES.has(prompt.actor.name)) {
+    return invalidResult('actor_identity', 'actor');
+  }
+  if (typeof prompt.actor.personality !== 'string'
+    || prompt.actor.personality.length < PROMPT_LIMITS.actorPersonalityMinLength
+    || prompt.actor.personality.length > PROMPT_LIMITS.actorPersonalityMaxLength) {
+    return invalidResult('actor_personality', 'actor.personality');
+  }
+  if (typeof prompt.actor.speechStyle !== 'string'
+    || prompt.actor.speechStyle.length < PROMPT_LIMITS.actorSpeechStyleMinLength
+    || prompt.actor.speechStyle.length > PROMPT_LIMITS.actorSpeechStyleMaxLength) {
+    return invalidResult('actor_speech_style', 'actor.speechStyle');
+  }
   if (!isObject(prompt.actor.decisionTraits)
-    || Object.keys(prompt.actor.decisionTraits).length !== traitKeys.length
-    || !hasOnlyKeys(prompt.actor.decisionTraits, new Set(traitKeys))) return false;
-  if (!traitKeys.every((key) => typeof prompt.actor.decisionTraits[key] === 'number'
-    && Number.isFinite(prompt.actor.decisionTraits[key]) && prompt.actor.decisionTraits[key] >= 0 && prompt.actor.decisionTraits[key] <= 1)) return false;
-  if (typeof prompt.actor.role !== 'string' || prompt.actor.role.length > 240 || typeof prompt.actor.skill !== 'string' || prompt.actor.skill.length > 240) return false;
-  if (!BOARD_DESCRIPTIONS.has(prompt.board) || !PHASES.has(prompt.phase) || !Number.isInteger(prompt.day) || prompt.day < 0 || prompt.day > 100) return false;
-  if (!Array.isArray(prompt.alivePlayers) || prompt.alivePlayers.length < 1 || prompt.alivePlayers.length > 6 || !prompt.alivePlayers.every(validObservedPlayer)) return false;
-  if (new Set(prompt.alivePlayers.map((entry) => entry.playerId)).size !== prompt.alivePlayers.length) return false;
-  if (!Array.isArray(prompt.legalCandidates) || prompt.legalCandidates.length > 6 || !prompt.legalCandidates.every(validObservedPlayer)) return false;
-  if (new Set(prompt.legalCandidates.map((entry) => entry.playerId)).size !== prompt.legalCandidates.length) return false;
-  if (typeof prompt.allowAbstain !== 'boolean' || !isObject(prompt.options) || JSON.stringify(prompt.options).length > 8_000) return false;
-  if (!boundedStrings(prompt.currentDaySpeeches, 6, 2_000) || !boundedStrings(prompt.historicalSpeeches, 12, 2_000)) return false;
-  if (!boundedStrings(prompt.recentPublic, 24, 2_000) || !boundedStrings(prompt.privateEvents, 12, 2_000)) return false;
-  if (!Array.isArray(prompt.privateKnowledge) || prompt.privateKnowledge.length > 64) return false;
-  if (!prompt.privateKnowledge.every((fact) => isObject(fact) && hasOnlyKeys(fact, PRIVATE_KNOWLEDGE_KEYS)
+    || Object.keys(prompt.actor.decisionTraits).length !== DECISION_TRAIT_KEYS.size
+    || !hasOnlyKeys(prompt.actor.decisionTraits, DECISION_TRAIT_KEYS)) {
+    return invalidResult('decision_traits_shape', 'actor.decisionTraits');
+  }
+  if (![...DECISION_TRAIT_KEYS].every((key) => typeof prompt.actor.decisionTraits[key] === 'number'
+    && Number.isFinite(prompt.actor.decisionTraits[key])
+    && prompt.actor.decisionTraits[key] >= 0
+    && prompt.actor.decisionTraits[key] <= 1)) {
+    return invalidResult('decision_traits_value', 'actor.decisionTraits');
+  }
+  if (typeof prompt.actor.role !== 'string' || prompt.actor.role.length > PROMPT_LIMITS.actorRoleMaxLength) {
+    return invalidResult('actor_role', 'actor.role');
+  }
+  if (typeof prompt.actor.skill !== 'string' || prompt.actor.skill.length > PROMPT_LIMITS.actorSkillMaxLength) {
+    return invalidResult('actor_skill', 'actor.skill');
+  }
+
+  if (!BOARD_DESCRIPTIONS.has(prompt.board)) return invalidResult('board', 'board');
+  if (!PHASES.has(prompt.phase)) return invalidResult('phase', 'phase');
+  if (!Number.isInteger(prompt.day) || prompt.day < PROMPT_LIMITS.dayMin || prompt.day > PROMPT_LIMITS.dayMax) {
+    return invalidResult('day', 'day');
+  }
+  if (!Array.isArray(prompt.alivePlayers)
+    || prompt.alivePlayers.length < PROMPT_LIMITS.alivePlayersMinItems
+    || prompt.alivePlayers.length > PROMPT_LIMITS.alivePlayersMaxItems
+    || !prompt.alivePlayers.every(validObservedPlayer)) {
+    return invalidResult('alive_players_shape', 'alivePlayers');
+  }
+  if (new Set(prompt.alivePlayers.map((entry) => entry.playerId)).size !== prompt.alivePlayers.length) {
+    return invalidResult('alive_players_unique', 'alivePlayers.playerId');
+  }
+  if (!Array.isArray(prompt.legalCandidates)
+    || prompt.legalCandidates.length > PROMPT_LIMITS.legalCandidatesMaxItems
+    || !prompt.legalCandidates.every(validObservedPlayer)) {
+    return invalidResult('legal_candidates_shape', 'legalCandidates');
+  }
+  if (new Set(prompt.legalCandidates.map((entry) => entry.playerId)).size !== prompt.legalCandidates.length) {
+    return invalidResult('legal_candidates_unique', 'legalCandidates.playerId');
+  }
+  if (typeof prompt.allowAbstain !== 'boolean') return invalidResult('allow_abstain', 'allowAbstain');
+  if (!isObject(prompt.options)) return invalidResult('options_shape', 'options');
+  if (JSON.stringify(prompt.options).length > PROMPT_LIMITS.optionsMaxJsonLength) {
+    return invalidResult('options_size', 'options');
+  }
+
+  if (!boundedStrings(prompt.currentDaySpeeches, PROMPT_LIMITS.currentDaySpeechesMaxItems, PROMPT_LIMITS.speechMaxLength)) {
+    return invalidResult('current_day_speeches', 'currentDaySpeeches');
+  }
+  if (!boundedStrings(prompt.historicalSpeeches, PROMPT_LIMITS.historicalSpeechesMaxItems, PROMPT_LIMITS.speechMaxLength)) {
+    return invalidResult('historical_speeches', 'historicalSpeeches');
+  }
+  if (!boundedStrings(prompt.recentPublic, PROMPT_LIMITS.recentPublicMaxItems, PROMPT_LIMITS.speechMaxLength)) {
+    return invalidResult('recent_public', 'recentPublic');
+  }
+  if (!boundedStrings(prompt.privateEvents, PROMPT_LIMITS.privateEventsMaxItems, PROMPT_LIMITS.speechMaxLength)) {
+    return invalidResult('private_events', 'privateEvents');
+  }
+  if (!Array.isArray(prompt.privateKnowledge) || prompt.privateKnowledge.length > PROMPT_LIMITS.privateKnowledgeMaxItems) {
+    return invalidResult('private_knowledge_shape', 'privateKnowledge');
+  }
+  if (!prompt.privateKnowledge.every((fact) => isObject(fact)
+    && hasOnlyKeys(fact, PRIVATE_KNOWLEDGE_KEYS)
     && validPlayerId(fact.subjectPlayerId)
     && ((fact.kind === 'role' && ROLE_VALUES.has(fact.value)) || (fact.kind === 'alignment' && ALIGNMENT_VALUES.has(fact.value)))
-    && Number.isInteger(fact.observedDay) && fact.observedDay >= 0 && fact.observedDay <= prompt.day)) return false;
-  if (!Array.isArray(prompt.publicSkills) || prompt.publicSkills.length !== 6 || !prompt.publicSkills.every(validPublicSkill)) return false;
-  if (new Set(prompt.publicSkills.map((skill) => skill.playerId)).size !== prompt.publicSkills.length) return false;
-  if (new Set(prompt.publicSkills.map((skill) => skill.name)).size !== prompt.publicSkills.length) return false;
-  if (new Set(prompt.publicSkills.map((skill) => skill.skill)).size !== prompt.publicSkills.length) return false;
-  return true;
+    && Number.isInteger(fact.observedDay)
+    && fact.observedDay >= PROMPT_LIMITS.dayMin
+    && fact.observedDay <= prompt.day)) {
+    return invalidResult('private_knowledge_entry', 'privateKnowledge');
+  }
+  if (!Array.isArray(prompt.publicSkills)
+    || prompt.publicSkills.length !== PROMPT_LIMITS.publicSkillsItems
+    || !prompt.publicSkills.every(validPublicSkill)) {
+    return invalidResult('public_skills_shape', 'publicSkills');
+  }
+  if (new Set(prompt.publicSkills.map((skill) => skill.playerId)).size !== prompt.publicSkills.length) {
+    return invalidResult('public_skills_unique_player', 'publicSkills.playerId');
+  }
+  if (new Set(prompt.publicSkills.map((skill) => skill.name)).size !== prompt.publicSkills.length) {
+    return invalidResult('public_skills_unique_name', 'publicSkills.name');
+  }
+  if (new Set(prompt.publicSkills.map((skill) => skill.skill)).size !== prompt.publicSkills.length) {
+    return invalidResult('public_skills_unique_skill', 'publicSkills.skill');
+  }
+  return validResult();
 }
 
 export function validatePublicPayload(payload, acceptedVersions) {
-  if (!isObject(payload) || !isObject(payload.client)) return '缺少客户端协议';
-  if (!hasOnlyKeys(payload, new Set(['client', 'messages', 'response_format']))) return '请求包含不允许的字段';
-  if (!hasOnlyKeys(payload.client, new Set(['name', 'version', 'protocol']))) return '客户端协议包含不允许的字段';
-  if (payload.client.name !== 'majo-wolf' || payload.client.protocol !== 'majo-wolf-free-v1') return '客户端协议不受支持';
-  if (!acceptedVersions.has(payload.client.version)) return '客户端版本不受支持';
-  if (payload.response_format !== undefined && (!isObject(payload.response_format) || Object.keys(payload.response_format).length !== 1 || payload.response_format.type !== 'json_object')) return 'response_format 必须是 JSON 对象格式';
-  return validateGamePrompt(payload.messages) ? null : '提示词不是当前程序生成的合法游戏请求';
+  if (!isObject(payload)) return invalidResult('payload_shape', 'payload');
+  if (!hasOnlyKeys(payload, PAYLOAD_KEYS)) return invalidResult('payload_keys', 'payload');
+  if (!isObject(payload.client)) return invalidResult('client_shape', 'client');
+  if (!hasOnlyKeys(payload.client, CLIENT_KEYS)) return invalidResult('client_keys', 'client');
+  if (payload.client.name !== FREE_CLIENT_PROTOCOL.name || payload.client.protocol !== FREE_CLIENT_PROTOCOL.protocol) {
+    return invalidResult('client_identity', 'client');
+  }
+  if (!acceptedVersions.has(payload.client.version)) return invalidResult('client_version', 'client.version');
+  if (payload.response_format !== undefined
+    && (!isObject(payload.response_format)
+      || Object.keys(payload.response_format).length !== 1
+      || payload.response_format.type !== 'json_object')) {
+    return invalidResult('response_format', 'response_format');
+  }
+  return validateGamePrompt(payload.messages);
 }
 
 export function validateChatCompletionsResponse(value) {

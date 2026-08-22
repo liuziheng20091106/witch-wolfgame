@@ -23,6 +23,7 @@ services:
     volumes:
       - ./server:/app/server:rw
       - ./proxy:/app/proxy:rw
+      - ./shared:/app/shared:rw
       - ./certs/ca.crt:/app/certs/ca.crt:ro
       - ./certs/proxy-server.crt:/app/certs/proxy-server.crt:ro
       - ./certs/proxy-server.key:/app/certs/proxy-server.key:ro
@@ -39,6 +40,7 @@ services:
       MAJO_MAIN_CONFIG: /app/server/main.config.json
     volumes:
       - ./server:/app/server:rw
+      - ./shared:/app/shared:rw
       - ./certs/ca.crt:/app/certs/ca.crt:ro
       - ./certs/main-client.crt:/app/certs/main-client.crt:ro
       - ./certs/main-client.key:/app/certs/main-client.key:ro

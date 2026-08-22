@@ -1,5 +1,5 @@
+import { BOARD_DESCRIPTION, BOARD_ROLE_POOL, PLAYER_IDS } from '../../../shared/gamePromptContract.js';
 import { characterById, characters } from '../catalog/characters';
-import { roleNames } from '../catalog/roles';
 import { defaultSkillByCharacterId, witchSkillDefinitions } from '../catalog/witchSkills';
 import type {
   CharacterId,
@@ -7,23 +7,12 @@ import type {
   GameState,
   PlayerId,
   RewindSnapshot,
-  RoleId,
   RoleResources,
   WitchSkillInstance,
 } from '../model';
 import { addKnowledge, addPublicEvent } from './events';
 import { chooseWithState, shuffleWithState } from './random';
 
-const playerIds: PlayerId[] = [0, 1, 2, 3, 4, 5];
-const rolePool: RoleId[] = ['wolf', 'wolf', 'seer', 'witch', 'villager', 'villager'];
-
-export function describeBoard(pool: RoleId[]): string {
-  const counts = new Map<RoleId, number>();
-  for (const role of pool) {
-    counts.set(role, (counts.get(role) ?? 0) + 1);
-  }
-  return `${pool.length}人局：${[...counts.entries()].map(([role, count]) => `${roleNames[role]}×${count}`).join('、')}`;
-}
 
 export function createRewindSnapshot(state: GameState): RewindSnapshot {
   const { morningCheckpoint: _checkpoint, causalLocks: _locks, archivedTimelines: _archives, usedFreeProvider: _freeProvider, ...snapshot } = state;
@@ -44,11 +33,11 @@ export function createGame(setup: GameSetup): GameState {
     const remaining = characters.map((character) => character.id).filter((id) => id !== humanCharacterId);
     const shuffled = shuffleWithState(remaining, rngState);
     rngState = shuffled.state;
-    const humanSeat = chooseWithState(playerIds, rngState);
+    const humanSeat = chooseWithState(PLAYER_IDS, rngState);
     rngState = humanSeat.state;
     humanPlayerId = humanSeat.item;
     const others = shuffled.items.slice(0, 5);
-    selectedCharacters = playerIds.map((playerId) => {
+    selectedCharacters = PLAYER_IDS.map((playerId) => {
       if (playerId === humanSeat.item) {
         return humanCharacterId;
       }
@@ -65,13 +54,12 @@ export function createGame(setup: GameSetup): GameState {
     selectedCharacters = shuffled.items.slice(0, 6);
   }
 
-  const shuffledRoles = shuffleWithState(rolePool, rngState);
+  const shuffledRoles = shuffleWithState(BOARD_ROLE_POOL, rngState);
   rngState = shuffledRoles.state;
-  const shuffledSpeech = shuffleWithState(playerIds, rngState);
+  const shuffledSpeech = shuffleWithState(PLAYER_IDS, rngState);
   rngState = shuffledSpeech.state;
-  const boardDescription = describeBoard(rolePool);
 
-  const roleAssignments = playerIds.map((playerId) => {
+  const roleAssignments = PLAYER_IDS.map((playerId) => {
     const roleId = shuffledRoles.items[playerId];
     if (!roleId) {
       throw new Error(`座位 ${playerId} 缺少职业`);
@@ -80,7 +68,7 @@ export function createGame(setup: GameSetup): GameState {
     return { id: `role-${playerId}`, ownerPlayerId: playerId, roleId, resources };
   });
 
-  const skillInstances: WitchSkillInstance[] = playerIds.map((playerId) => {
+  const skillInstances: WitchSkillInstance[] = PLAYER_IDS.map((playerId) => {
     const characterId = selectedCharacters[playerId];
     if (!characterId) {
       throw new Error(`座位 ${playerId} 缺少角色`);
@@ -97,7 +85,7 @@ export function createGame(setup: GameSetup): GameState {
     };
   });
 
-  const players = playerIds.map((playerId) => {
+  const players = PLAYER_IDS.map((playerId) => {
     const characterId = selectedCharacters[playerId];
     if (!characterId) {
       throw new Error(`座位 ${playerId} 缺少角色`);
@@ -114,7 +102,7 @@ export function createGame(setup: GameSetup): GameState {
   const state: GameState = {
     schemaVersion: 1,
     gameId: `game-${seed}-${setup.mode}-${setup.humanCharacterId ?? 'auto'}`,
-    board: boardDescription,
+    board: BOARD_DESCRIPTION,
     mode: setup.mode,
     automationMode: 'remote',
     usedFreeProvider: false,
@@ -137,8 +125,8 @@ export function createGame(setup: GameSetup): GameState {
     causalLocks: [],
     result: null,
   };
-  const startEvent = addPublicEvent(state, 'system', `本局版型：${boardDescription}。六名少女进入审判庭，首夜开始。`);
-  const skillAnnouncement = addPublicEvent(state, 'knowledge', `魔女技公开：${playerIds.map((playerId) => {
+  const startEvent = addPublicEvent(state, 'system', `本局版型：${BOARD_DESCRIPTION}。六名少女进入审判庭，首夜开始。`);
+  const skillAnnouncement = addPublicEvent(state, 'knowledge', `魔女技公开：${PLAYER_IDS.map((playerId) => {
     const characterId = selectedCharacters[playerId];
     const definitionId = skillInstances[playerId]?.definitionId;
     if (!characterId || !definitionId) {
@@ -146,7 +134,7 @@ export function createGame(setup: GameSetup): GameState {
     }
     return `${playerId + 1}号 ${characterById[characterId].name}（${witchSkillDefinitions[definitionId].name}）`;
   }).join('、')}。`);
-  for (const playerId of playerIds) {
+  for (const playerId of PLAYER_IDS) {
     const roleId = roleAssignments[playerId]?.roleId;
     if (!roleId) {
       throw new Error(`座位 ${playerId} 缺少初始职业事实`);
@@ -159,7 +147,7 @@ export function createGame(setup: GameSetup): GameState {
       observedDay: 0,
       sourceEventId: startEvent.id,
     });
-    for (const subjectId of playerIds) {
+    for (const subjectId of PLAYER_IDS) {
       const subjectSkill = skillInstances[subjectId];
       if (!subjectSkill) {
         throw new Error(`座位 ${subjectId} 缺少初始魔女技事实`);

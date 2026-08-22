@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { resolve } from 'node:path';
+import { INVALID_GAME_REQUEST_MESSAGE } from '../shared/gamePromptContract.js';
 import { validateChatCompletionsResponse, validatePublicPayload } from './gameProtocol.mjs';
 import {
   PUBLIC_PATHS,
@@ -131,7 +132,7 @@ class ProxyPool {
         const result = await callProxy(node, body, sessionId);
         if (result.statusCode >= 200 && result.statusCode < 300) return result;
         let details = null;
-        try { details = JSON.parse(result.body); } catch {}
+        try { details = JSON.parse(result.body); } catch { }
         const error = new Error(typeof details?.message === 'string' ? details.message : typeof details?.error === 'string' ? details.error : `代理节点 ${node.name} 返回 HTTP ${result.statusCode}`);
         error.statusCode = result.statusCode;
         error.rawOutput = typeof details?.rawOutput === 'string' ? details.rawOutput : result.body;
@@ -250,10 +251,23 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
     try {
       const body = await readBody(request);
       const payload = parseJsonBody(body);
-      const validationError = validatePublicPayload(payload, acceptedVersions);
-      if (validationError) {
-        logEvent('warn', 'ai_error', { ip, sessionId, status: 400, durationMs: Date.now() - startedAt, message: validationError });
-        return sendJson(response, 400, { error: 'invalid_game_request', message: validationError }, cors);
+      const validation = validatePublicPayload(payload, acceptedVersions);
+      if (!validation.ok) {
+        logEvent('warn', 'ai_error', {
+          ip,
+          sessionId,
+          status: 400,
+          durationMs: Date.now() - startedAt,
+          code: 'invalid_game_request',
+          reason: validation.reason,
+          path: validation.path,
+        });
+        return sendJson(response, 400, {
+          error: 'invalid_game_request',
+          message: INVALID_GAME_REQUEST_MESSAGE,
+          reason: validation.reason,
+          path: validation.path,
+        }, cors);
       }
       const upstream = await proxyPool.request(body, sessionId);
       if (upstream.statusCode >= 200 && upstream.statusCode < 300) {

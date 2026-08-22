@@ -89,11 +89,20 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   const requiredMention = typeof pending?.options.requiredMention === 'string' ? pending.options.requiredMention : null;
   const requiredSeatLabel = typeof pending?.options.requiredSeatLabel === 'string' ? pending.options.requiredSeatLabel : null;
   const mentionsRequired = (value: string) => !requiredMention || value.includes(requiredMention) || (requiredSeatLabel !== null && value.includes(requiredSeatLabel));
+  const errorMeta = aiError
+    ? [
+      aiError.status !== null ? `HTTP ${aiError.status}` : null,
+      aiError.remoteError?.code ?? null,
+      aiError.remoteError?.reason ?? null,
+      aiError.remoteError?.path ?? null,
+    ].filter((value): value is string => value !== null).join(' · ')
+    : '';
 
   if (aiError || awaitingRetry) {
     return <section className={styles.panel} aria-live="polite">
       <div className={styles.errorHead}><AlertTriangle /><div><span>AI COMMAND PAUSED</span><h2>{aiError ? 'AI 决策失败' : '已恢复待处理决策'}</h2></div></div>
       <p>{aiError?.message ?? '为避免刷新后自动重复产生费用，本次 AI 请求等待你的确认。'}</p>
+      {errorMeta && <p className={styles.errorMeta}>{errorMeta}</p>}
       {debugReportText && debugReportSize && <div className={styles.debugActions}>
         <button type="button" onClick={copyDebugReport}><Clipboard />{debugExportStatus === 'copied' ? `已复制 ${debugReportSize}` : `复制调试信息 · ${debugReportSize}`}</button>
         <button type="button" onClick={downloadDebugReport}><Download />{debugExportStatus === 'downloaded' ? `已下载 ${debugReportSize}` : `下载调试信息 · ${debugReportSize}`}</button>
