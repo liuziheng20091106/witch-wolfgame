@@ -1,0 +1,52 @@
+name: Auto Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'proxy/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Compute changed paths
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "changed=all" >> "$GITHUB_OUTPUT"
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(server|proxy)/' || true)
+            echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger backend update
+        if: ${{ steps.changes.outputs.changed != '' }}
+        env:
+          MAIN_UPDATE_URL: ${{ secrets.MAIN_UPDATE_URL }}
+          MAIN_UPDATE_PASS: ${{ secrets.MAIN_UPDATE_PASS }}
+        run: |
+          if [ -z "$MAIN_UPDATE_PASS" ]; then
+            echo "::error::MAIN_UPDATE_PASS secret 未配置，无法执行自动更新"
+            exit 1
+          fi
+          URL="${MAIN_UPDATE_URL:-https://freeapi.majowolf.tkcloud.online/update}"
+          echo "Triggering update at $URL"
+          echo "Changed paths:"
+          echo "${{ steps.changes.outputs.changed }}"
+          curl --fail-with-body -sS -X POST "$URL" \
+            -H "Authorization: Bearer $MAIN_UPDATE_PASS" \
+            -H "Content-Type: application/json" \
+            --max-time 120 \
+            -w "\nHTTP %{http_code}\n"
+          if [ $? -ne 0 ]; then
+            echo "::error::更新请求失败，详见上方响应"
+            exit 1
+          fi
