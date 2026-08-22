@@ -16,7 +16,7 @@ import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events'
 import { chooseWithState } from '../engine/random';
 import { getAlivePlayerIds, getPlayer, getRoleAssignment } from '../engine/selectors';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
-import { getVisionSkillDecision } from './nightSkills';
+import { getVisionSkillDecision, isFloatingActive } from './nightSkills';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return characterById[getPlayer(state, playerId).characterId].name;
@@ -377,6 +377,14 @@ function processClairvoyanceMentions(state: GameState, actualAuthorId: PlayerId,
     const name = nameOf(state, skill.ownerPlayerId);
     const seatLabel = `${skill.ownerPlayerId + 1}号`;
     if (!speech.includes(name) && !speech.includes(seatLabel)) {
+      continue;
+    }
+    if (isFloatingActive(state, actualAuthorId, state.day)) {
+      // 漂浮隐匿：千里眼看不穿漂浮者的职业（结果为空）
+      addPrivateEvent(state, [skill.ownerPlayerId], 'knowledge', `千里眼看向 ${nameOf(state, actualAuthorId)}，但她的身影若隐若现，看不透她的职业。`, {
+        actorPlayerId: skill.ownerPlayerId,
+        targetPlayerIds: [actualAuthorId],
+      });
       continue;
     }
     const roleId = getRoleAssignment(state, actualAuthorId).roleId;

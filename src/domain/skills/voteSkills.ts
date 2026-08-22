@@ -10,25 +10,10 @@ function nameOf(state: GameState, playerId: PlayerId): string {
 }
 
 export function getVoteSkillDecision(state: GameState): PendingDecision | null {
-  const key = offerKey(state, 'before-vote');
-  const skill = state.skillInstances.find(
-    (entry) => entry.definitionId === 'levitation'
-      && entry.status === 'ready'
-      && getPlayer(state, entry.ownerPlayerId).alive
-      && !wasOffered(entry, key),
-  );
-  if (!skill) {
-    return null;
-  }
-  return makeSkillDecision(
-    state,
-    skill,
-    '漂浮',
-    '把一名角色移到投票首位/末位，或取得二次平票裁决权。',
-    getAlivePlayerIds(state).filter((playerId) => playerId !== skill.ownerPlayerId),
-    'levitation',
-    { modes: ['move-first', 'move-last', 'tie-break'] },
-  );
+  // 漂浮已重构为隐匿技（night-start 发动），旧投票操纵决策停用；
+  // 返回 null 使 vote-skills 阶段直接跳过，投票按正常顺序进行。
+  void state;
+  return null;
 }
 
 export function applyVoteSkillDecision(state: GameState, pending: PendingDecision, decision: SubmittedDecision): void {

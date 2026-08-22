@@ -13,6 +13,7 @@ import type {
 } from '../model';
 import {
   applyDayIgnition,
+  applyLevitation,
   applyNightIgnition,
   applyNightIgnitionPotion,
   applyNightSkillDecision,
@@ -33,6 +34,7 @@ import {
   getTieBreaker,
   getVoteOrder,
   getVoteSkillDecision,
+  isFloatingActive,
   isRestrainedToday,
   publishSpeech,
 } from '../skills/registry';
@@ -455,11 +457,20 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
         throw new Error('毒药目标不合法');
       }
       assignment.resources.poison = 0;
-      addPrivateEvent(state, [pending.actorId], 'witch-action', `你对 ${nameOf(state, poisonTarget)} 使用毒药。`, {
-        actorPlayerId: pending.actorId,
-        targetPlayerIds: [poisonTarget],
-        data: { intentSource: 'poison', preventable: true, targetPlayerId: poisonTarget },
-      });
+      if (isFloatingActive(state, poisonTarget, state.day)) {
+        // 漂浮隐匿：毒药无法锁定目标，使用失败（毒药已消耗）
+        addPrivateEvent(state, [pending.actorId], 'witch-action', `你对 ${nameOf(state, poisonTarget)} 使用毒药，但她的身影若隐若现，毒药落空了。`, {
+          actorPlayerId: pending.actorId,
+          targetPlayerIds: [poisonTarget],
+          data: { actionKind: 'witch-action', intentSource: 'poison-failed', preventable: false, targetPlayerId: poisonTarget },
+        });
+      } else {
+        addPrivateEvent(state, [pending.actorId], 'witch-action', `你对 ${nameOf(state, poisonTarget)} 使用毒药。`, {
+          actorPlayerId: pending.actorId,
+          targetPlayerIds: [poisonTarget],
+          data: { intentSource: 'poison', preventable: true, targetPlayerId: poisonTarget },
+        });
+      }
     }
     addPrivateEvent(state, [pending.actorId], 'witch-action', '女巫行动已提交。', {
       actorPlayerId: pending.actorId,
@@ -481,8 +492,17 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
       data: { actionKind: 'wolf-decision', intentSource: 'wolf', preventable: true, targetPlayerId: targetPlayerId as PlayerId },
     });
   } else if (pending.kind === 'seer-action') {
-    const roleId = getRoleAssignment(state, targetPlayerId as PlayerId).roleId;
-    const event = addPrivateEvent(state, [pending.actorId], 'seer-check', `${nameOf(state, targetPlayerId as PlayerId)} 的当前职业是${roleNames[roleId]}。`, {
+    const targetId = targetPlayerId as PlayerId;
+    if (isFloatingActive(state, targetId, state.day)) {
+      // 漂浮隐匿：查验不到任何痕迹，结果为空（照常消耗本夜查验）
+      addPrivateEvent(state, [pending.actorId], 'seer-check', `你查验了 ${nameOf(state, targetId)}，但在现场什么都没有看见。`, {
+        actorPlayerId: pending.actorId,
+        targetPlayerIds: [targetId],
+      });
+      return state;
+    }
+    const roleId = getRoleAssignment(state, targetId).roleId;
+    const event = addPrivateEvent(state, [pending.actorId], 'seer-check', `${nameOf(state, targetId)} 的当前职业是${roleNames[roleId]}。`, {
       actorPlayerId: pending.actorId,
       targetPlayerIds: [targetPlayerId as PlayerId],
       data: { actionKind: 'seer-action' },
@@ -518,7 +538,7 @@ function applyDecision(state: GameState, event: Extract<GameEvent, { type: 'subm
       throw new Error('待处理技能已移动或失效');
     }
     if (skill.definitionId === 'levitation') {
-      applyVoteSkillDecision(state, pending, event.decision);
+      applyLevitation(state, pending, event.decision);
     } else if (skill.definitionId === 'mind-reading') {
       applyVisionSkillDecision(state, pending, event.decision);
     } else if (skill.definitionId === 'ignition') {
