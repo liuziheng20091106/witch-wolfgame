@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { APP_VERSION } from '../config/version';
 import type { SubmittedDecision } from '../domain/model';
 import { buildDecisionPrompt, type PromptMessage } from './prompts';
+import { buildAiDebugReport } from './debugReport';
 import { parseDecision } from './schemas';
 import {
   AiCommandError,
@@ -82,12 +83,31 @@ function shouldDisableJsonOutput(error: AiCommandError, config: AiProviderConfig
   return config.provider === 'custom' && config.jsonOutputMode === 'auto' && jsonOutput && ['json', 'schema', 'empty'].includes(error.kind);
 }
 
+function withDebugReport(
+  error: AiCommandError,
+  request: AiDecisionRequest,
+  config: AiProviderConfig,
+  messages: PromptMessage[],
+  attempt: number,
+  maxAttempts: number,
+  jsonOutputRequested: boolean,
+): AiCommandError {
+  return new AiCommandError(
+    error.kind,
+    error.message,
+    error.status,
+    error.rawOutput,
+    buildAiDebugReport({ request, config, messages, error, attempt, maxAttempts, jsonOutputRequested }),
+  );
+}
+
 export async function requestDecision<T extends SubmittedDecision>(request: AiDecisionRequest<T>, config: AiProviderConfig, signal: AbortSignal): Promise<T> {
   let jsonOutput = config.provider === 'custom' && config.jsonOutputMode !== 'disabled';
   if (config.provider === 'custom' && config.jsonOutputMode === 'auto' && sessionJsonFallback.has(request.sessionId)) jsonOutput = false;
   const messages = buildDecisionPrompt(request);
+  const maxAttempts = retryLimit(config) + 1;
   let lastError: AiCommandError | null = null;
-  for (let attempt = 0; attempt <= retryLimit(config); attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       const content = await requestContent(messages, config, request.sessionId, signal, jsonOutput);
       let value: unknown;
@@ -104,8 +124,11 @@ export async function requestDecision<T extends SubmittedDecision>(request: AiDe
         jsonOutput = false;
         continue;
       }
-      if (['config', 'target'].includes(commandError.kind) || attempt >= retryLimit(config)) throw commandError;
+      if (['config', 'target'].includes(commandError.kind) || attempt === maxAttempts - 1) {
+        throw withDebugReport(commandError, request, config, messages, attempt + 1, maxAttempts, jsonOutput);
+      }
     }
   }
-  throw lastError ?? new AiCommandError('network', 'AI 请求失败');
+  const fallbackError = lastError ?? new AiCommandError('network', 'AI 请求失败');
+  throw withDebugReport(fallbackError, request, config, messages, maxAttempts, maxAttempts, jsonOutput);
 }

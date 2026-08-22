@@ -113,8 +113,10 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
 
       <section className={styles.launchBand}>
         <div className={styles.aiStatus}>
-          <span className={styles.aiIcon}><Bot /></span>
-          <div><strong>{settings.provider === 'free' ? '免费服务' : '自定义服务'}</strong><span>{settings.provider === 'free' ? '公益服务，不保证稳定可用' : settings.model || '请填写模型'}</span></div>
+          <div className={styles.aiSummary}>
+            <span className={styles.aiIcon}><Bot /></span>
+            <div className={styles.aiCopy}><strong>{settings.provider === 'free' ? '免费服务' : '自定义服务'}</strong><span>{settings.provider === 'free' ? '公益服务，不保证稳定可用' : settings.model || '请填写模型'}</span></div>
+          </div>
           <button type="button" onClick={onOpenSettings}>{settings.provider === 'free' ? '服务详情' : '打开设置'}<ChevronRight /></button>
         </div>
         {storageError && <p className={styles.storageError} role="alert">{storageError}</p>}

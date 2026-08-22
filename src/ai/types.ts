@@ -1,4 +1,5 @@
 import type { GameObservation, PendingDecision, SubmittedDecision } from '../domain/model';
+import type { AiDebugReport } from './debugReport';
 
 export type ReasoningEffort = 'none' | 'low' | 'high' | 'max';
 export type JsonOutputMode = 'auto' | 'force' | 'disabled';
@@ -37,13 +38,15 @@ export class AiCommandError extends Error {
   readonly kind: AiCommandErrorKind;
   readonly status: number | null;
   readonly rawOutput: string | null;
+  readonly debugReport: AiDebugReport | null;
 
-  constructor(kind: AiCommandErrorKind, message: string, status: number | null = null, rawOutput: string | null = null) {
+  constructor(kind: AiCommandErrorKind, message: string, status: number | null = null, rawOutput: string | null = null, debugReport: AiDebugReport | null = null) {
     super(message);
     this.name = 'AiCommandError';
     this.kind = kind;
     this.status = status;
     this.rawOutput = rawOutput;
+    this.debugReport = debugReport;
   }
 }
 
