@@ -90,7 +90,7 @@ const stateSchema = z.object({
   roleAssignments: z.array(z.object({
     id: z.string(), ownerPlayerId: playerIdSchema, roleId: roleIdSchema,
     resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
-  })).length(6),
+  })).min(6),
   skillInstances: z.array(z.object({
     id: z.string(), definitionId: skillIdSchema, ownerPlayerId: playerIdSchema,
     status: z.enum(['ready', 'active', 'exhausted']), remainingUses: z.number().nullable(), data: z.record(z.string(), z.unknown()),

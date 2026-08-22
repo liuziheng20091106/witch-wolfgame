@@ -77,6 +77,11 @@ export function getNextNightSkillDecision(state: GameState): PendingDecision | n
 
   for (const skill of candidates) {
     if (skill.definitionId === 'liquid-control') {
+      // 防重复创建：已创建过造物（含魔女因子回收恢复后的场景）则跳过，不再询问
+      if (skill.data.creatureCreated === true || state.creatures.some((creature) => creature.id === 99)) {
+        markOffered(skill, key);
+        continue;
+      }
       // 操控液体：创造造物（use-only，无需目标，继承诺亚职业）
       const ownerName = nameOf(state, skill.ownerPlayerId);
       return makeSkillDecision(
@@ -676,7 +681,7 @@ function createCreature(state: GameState, skill: WitchSkillInstance): void {
   });
   skill.data.creatureCreated = true;
   exhaustSkill(skill);
-  addPublicEvent(state, 'skill', `${nameOf(state, ownerId)}的造物在圆桌上凝聚成形——${nameOf(state, ownerId)}操纵液体创造了自己的造物！`, {
+  addPublicEvent(state, 'skill', `${nameOf(state, ownerId)}的造物在圆桌上凝聚成形——液态分身悄然成型！`, {
     actorPlayerId: ownerId,
     targetPlayerIds: [ownerId],
     data: { creatureId: 99 },
