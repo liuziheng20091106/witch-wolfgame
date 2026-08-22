@@ -12,6 +12,7 @@ import type {
   TargetDecision,
   TimelineEvent,
   WitchSkillId,
+  WitchSkillInstance,
 } from '../model';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events';
 import { chooseWithState } from '../engine/random';
@@ -22,8 +23,9 @@ const priority: Record<string, number> = {
   'soul-exchange': 0,
   'witch-killer': 1,
   'liquid-control': 2,
-  'ignition': 3,
-  'witch-factor-recovery': 4,
+  'levitation': 3,
+  'ignition': 4,
+  'witch-factor-recovery': 5,
 };
 
 function nameOf(state: GameState, playerId: PlayerId): string {
@@ -80,6 +82,10 @@ export function getNextNightSkillDecision(state: GameState): PendingDecision | n
     .sort((left, right) => (priority[left.definitionId] ?? 99) - (priority[right.definitionId] ?? 99) || left.ownerPlayerId - right.ownerPlayerId);
 
   for (const skill of candidates) {
+    if (skill.definitionId === 'levitation') {
+      // 漂浮：use-only，无目标（隐匿自身行动，无公开播报）
+      return getLevitationDecision(state, skill);
+    }
     const targets = candidatesForNightSkill(state, skill.definitionId, skill.ownerPlayerId);
     if (targets.length === 0) {
       continue;
@@ -192,6 +198,15 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
     return;
   }
   if (skill.definitionId === 'soul-exchange') {
+    if (isFloatingActive(state, targetPlayerId, state.day)) {
+      // 漂浮隐匿：灵魂交换无法锁定目标，使用失败（照常消耗）
+      addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你对 ${nameOf(state, targetPlayerId)} 发动灵魂交换，但她的存在若隐若现，交换失败了。`, {
+        actorPlayerId: skill.ownerPlayerId,
+        targetPlayerIds: [targetPlayerId],
+      });
+      exhaustSkill(skill);
+      return;
+    }
     const owner = getPlayer(state, skill.ownerPlayerId);
     const target = getPlayer(state, targetPlayerId);
     const ownerAssignmentId = owner.roleAssignmentId;
@@ -374,6 +389,14 @@ export function applyVisionSkillDecision(state: GameState, pending: PendingDecis
   const targetName = nameOf(state, targetPlayerId);
   if (outcome === 'fail') {
     addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `本次幻视行为被系统判定为失败，你什么都没有看到。`, {
+      actorPlayerId: skill.ownerPlayerId,
+      targetPlayerIds: [targetPlayerId],
+    });
+    return;
+  }
+  if (isFloatingActive(state, targetPlayerId, state.day)) {
+    // 漂浮隐匿：目标行动不留痕迹，强制空结果（触碰已消耗）
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你通过幻视看到：${targetName} 在现场没有留下任何行动痕迹。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -630,4 +653,55 @@ export function burnedVoters(state: GameState): Set<PlayerId> {
     }
   }
   return set;
+}
+
+// ===== 漂浮（远野汉娜）：隐匿技——夜晚发动，覆盖当夜 + 次日白天 =====
+// 效果：自己的行动不留任何可追溯记录；观察类技能（幻视/预言家查验/千里眼）对她无效，
+//      选择类技能（女巫药/灵魂交换）对她失败（照常消耗）；魔女杀手不受影响。
+// 发动不产生公开播报（隐匿），他人只能从"查无结果/选中失败"反推。
+
+/** 漂浮发动决策（use-only，无目标）。 */
+export function getLevitationDecision(state: GameState, skill: WitchSkillInstance): PendingDecision {
+  const ownerName = nameOf(state, skill.ownerPlayerId);
+  return makeSkillDecision(
+    state,
+    skill,
+    '漂浮',
+    `发动漂浮，隐藏自己的脚印吗？【选择：是/否】\n发动后直到第二天白天结束，你的行动不留任何可追溯记录：预言家查验、幻视、千里眼都看不到你，女巫药、灵魂交换对你无效。本技能每局仅能发动一次，发动不公开播报。`,
+    [],
+    'ignition',
+  );
+}
+
+/** 漂浮结算：发动后标记生效起始夜（覆盖当夜 + 次日白天）。 */
+export function applyLevitation(state: GameState, pending: PendingDecision, decision: SubmittedDecision): void {
+  const skill = state.skillInstances.find((entry) => entry.id === pending.skillInstanceId);
+  if (!skill || skill.definitionId !== 'levitation' || skill.status !== 'ready') {
+    throw new Error('漂浮技能不可用');
+  }
+  const ignition = decision as IgnitionDecision;
+  if (!ignition.use) {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你保留了漂浮。', { actorPlayerId: skill.ownerPlayerId });
+    markOffered(skill, offerKey(state, `levitation-${state.day}`));
+    return;
+  }
+  skill.data.floatingStartDay = state.day;
+  exhaustSkill(skill);
+  // 无公开播报（隐匿）；仅持有者本人知晓已发动
+  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你发动了漂浮，隐藏了自己的脚印：直到明天白天结束，你的行动不留痕迹。`, {
+    actorPlayerId: skill.ownerPlayerId,
+  });
+}
+
+/**
+ * 查询 playerId 在给定 day 是否处于漂浮生效期。
+ * 生效窗口：发动夜（night-start，day=N）保护当夜结算 + 次日白天（day=N+1）。
+ */
+export function isFloatingActive(state: GameState, playerId: PlayerId, day: number): boolean {
+  return state.skillInstances.some(
+    (skill) => skill.definitionId === 'levitation'
+      && skill.ownerPlayerId === playerId
+      && typeof skill.data.floatingStartDay === 'number'
+      && (skill.data.floatingStartDay === day || skill.data.floatingStartDay === day - 1),
+  );
 }
