@@ -53,7 +53,7 @@ jobs:
           echo "Changed paths:"
           echo "${{ steps.changes.outputs.changed }}"
           curl --fail-with-body -sS -X POST "$URL" \
-            -H "Authorization: Bearer $MAIN_UPDATE_PASS" \
+            -H "Authorization: Bearer $PROXY_UPDATE_PASS" \
             -H 'User-Agent: TKStudio:AlljustforKeng' \
             -H "Content-Type: application/json" \
             --max-time 120 \
@@ -63,7 +63,7 @@ jobs:
             exit 1
           fi
           curl --fail-with-body -sS -X POST "$URL" \
-            -H "Authorization: Bearer $PROXY_UPDATE_PASS" \
+            -H "Authorization: Bearer $MAIN_UPDATE_PASS" \
             -H 'User-Agent: TKStudio:AlljustforKeng' \
             -H "Content-Type: application/json" \
             --max-time 120 \
