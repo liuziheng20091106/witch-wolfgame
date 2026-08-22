@@ -19,10 +19,7 @@ jobs:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           OPENAI.API_BASE: ${{ secrets.OPENAI_ENDPOINT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          github_action_config.pr_actions: '["opened", "reopened", "synchronize", "ready_for_review", "review_requested"]'
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "true"
-          config.model: "gpt-5.6-sol"
-          config.fallback_models: '["gpt-5.6-terra"]'
-          pr_reviewer.extra_instructions: "Answer in Chinese; Focus on best practices"
+          
