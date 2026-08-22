@@ -24,7 +24,13 @@ jobs:
             echo "changed=all" >> "$GITHUB_OUTPUT"
           else
             CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(server|proxy)/' || true)
-            echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+            if [ -z "$CHANGED" ]; then
+              echo "changed=" >> "$GITHUB_OUTPUT"
+            else
+              echo "changed<<EOF" >> "$GITHUB_OUTPUT"
+              echo "$CHANGED" >> "$GITHUB_OUTPUT"
+              echo "EOF" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Trigger backend update
