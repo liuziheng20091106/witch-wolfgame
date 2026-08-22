@@ -409,7 +409,7 @@ export function getClairvoyanceDecision(state: GameState): PendingDecision | nul
         state,
         skill,
         '观看直播',
-        `是否观看 ${ownerName} 的直播？观看后你的身份信息将被单向传送给 ${ownerName}；如果你确认与她同阵营，可通过她的直播获得一位能为你作铁证的人。狼人通常不观看以免暴露自己。`,
+        `观看 ${ownerName} 的直播吗？【选择：是/否】\n观看后你的身份信息将被单向传送给她；如果你确认她与你同阵营，可通过她的直播获得一位能为你作铁证的人。狼人通常不观看以免暴露自己。`,
         [],
         'ignition',
       );
@@ -431,7 +431,7 @@ export function getClairvoyanceDecision(state: GameState): PendingDecision | nul
       state,
       skill,
       '千里眼',
-      `是否开启直播？开启后，${ownerName} 将公屏开启直播，任何选择观看的玩家，其职业将被你获知（观看名单仅你可见）。每局限一次。`,
+      `开启直播吗？【选择：是/否】\n开启后，${ownerName} 的直播将公开通知其他玩家，他们可逐个选择是否观看。\n每个观看者的身份信息将单向传送给你（观看名单仅你可见）。本技能每局仅能开启一次。`,
       [],
       'ignition',
     );
@@ -489,7 +489,7 @@ function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pend
       targetPlayerIds: [viewerId],
     });
     addKnowledge(state, ownerId, { subjectPlayerId: viewerId, kind: 'role', value: roleId, observedDay: state.day }, event.id);
-    addPrivateEvent(state, [viewerId], 'skill', `${viewerName} 观看了 ${ownerName} 的直播，她知晓了你的身份。`, {
+    addPrivateEvent(state, [viewerId], 'skill', `你观看了 ${ownerName} 的直播。她看到了你是${roleName}，因此知晓了你的身份。`, {
       actorPlayerId: viewerId,
       targetPlayerIds: [viewerId],
     });
