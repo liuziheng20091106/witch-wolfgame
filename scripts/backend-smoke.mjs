@@ -65,7 +65,7 @@ function validPayload() {
             { playerId: 1, name: '二阶堂希罗', skill: '死亡回溯：首次死亡时回到当日发言前，旧时间线仅观战者可见。' },
             { playerId: 2, name: '夏目安安', skill: '洗脑：每天可发动一次：当天发言须含【1~6字】内容，作为强提示词影响其他玩家。' },
             { playerId: 3, name: '城崎诺亚', skill: '操控液体：抽取他人职业，或公开一条已知事实。' },
-            { playerId: 4, name: '橘雪莉', skill: '力气大：指定一人当天无法发言。' },
+            { playerId: 4, name: '橘雪莉', skill: '怪力：使用怪力将一名玩家按在椅子上，使其本轮不能发言。' },
             { playerId: 5, name: '远野汉娜', skill: '漂浮：调整公开投票顺序，或取得二次平票裁决权。' },
           ], privateEvents: [],
         }),
