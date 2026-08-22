@@ -55,6 +55,10 @@ function candidatesForNightSkill(state: GameState, skillId: string, ownerId: Pla
       .map((player) => player.id);
   }
   const aliveOthers = getAlivePlayerIds(state).filter((playerId) => playerId !== ownerId);
+  if (skillId === 'soul-exchange') {
+    // 灵魂交换无法选中造物（保持造物与主人同身份，简化维护）
+    return aliveOthers.filter((playerId) => playerId !== 99);
+  }
   if (skillId === 'witch-killer' && getPlayerAlignment(state, ownerId) === 'wolf') {
     // 狼人持有魔女杀手时，禁止标记狼队友为精准击杀（此前候选含全部存活者，
     // AI 或本地策略可能刀到狼队友；灵魂交换后阵营随新职业，此处按当前阵营过滤）。
@@ -621,9 +625,15 @@ export function applyDayIgnition(state: GameState, pending: PendingDecision, dec
   if (targetPlayerId === null || !pending.candidates.includes(targetPlayerId)) {
     throw new Error('点火目标不合法');
   }
-  const roll = chooseWithState([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], state.rngState);
-  state.rngState = roll.state;
-  if (roll.item === 0) {
+  const targetIsCreature = targetPlayerId === 99;
+  // 造物没有魔女技可烧：对造物点火 100% 烧掉它的投票（造物的票跟随诺亚，存在即可被烧）
+  let burnVote = true;
+  if (!targetIsCreature) {
+    const roll = chooseWithState([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], state.rngState);
+    state.rngState = roll.state;
+    burnVote = roll.item !== 0;
+  }
+  if (!burnVote) {
     // 10% 烧技能
     burnAllSkills(state, targetPlayerId);
     const targetName = nameOf(state, targetPlayerId);
@@ -636,7 +646,7 @@ export function applyDayIgnition(state: GameState, pending: PendingDecision, dec
       targetPlayerIds: [targetPlayerId],
     });
   } else {
-    // 90% 烧投票：标记目标当天投票作废
+    // 烧投票：标记目标当天投票作废（造物票亦计入 burnedVoters 过滤）
     skill.data.burnedVoteDay = state.day;
     skill.data.burnedVoteTarget = targetPlayerId;
     const targetName = nameOf(state, targetPlayerId);
@@ -663,7 +673,6 @@ export function burnedVoters(state: GameState): Set<PlayerId> {
   return set;
 }
 
-<<<<<<< HEAD
 // ===== 漂浮（远野汉娜）：隐匿技——夜晚发动，覆盖当夜 + 次日白天 =====
 // 效果：自己的行动不留任何可追溯记录；观察类技能（幻视/预言家查验/千里眼）对她无效，
 //      选择类技能（女巫药/灵魂交换）对她失败（照常消耗）；魔女杀手不受影响。
