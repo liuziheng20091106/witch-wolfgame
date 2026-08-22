@@ -16,6 +16,7 @@ import {
   sendJson,
   watchRestartSignal,
 } from './shared.mjs';
+import { createUpdateHandler, getBearerToken, requestNodeUpdate } from './update-core.mjs';
 
 class SlidingWindowLimiter {
   constructor({ windowMs, maxRequests, maxConcurrent }) {
@@ -64,6 +65,26 @@ async function loadProxyNode(configFile, proxy) {
     ca: await readFile(configPath(configFile, proxy.ca)),
     cert: await readFile(configPath(configFile, proxy.clientCert)),
     key: await readFile(configPath(configFile, proxy.clientKey)),
+  };
+}
+
+async function loadUpdateNode(configFile, entry) {
+  if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string' || !entry.name.trim()) throw new Error('更新节点缺少名称');
+  const url = new URL(entry.url);
+  if (url.protocol !== 'https:') throw new Error(`更新节点 ${entry.name} 必须使用 HTTPS`);
+  const updatePassEnv = typeof entry.updatePassEnv === 'string' ? entry.updatePassEnv : '';
+  const updatePass = updatePassEnv ? process.env[updatePassEnv] : null;
+  if (!updatePass) throw new Error(`更新节点 ${entry.name} 缺少 updatePassEnv 对应环境变量`);
+  const ca = entry.ca ? await readFile(configPath(configFile, entry.ca)) : null;
+  const cert = entry.clientCert ? await readFile(configPath(configFile, entry.clientCert)) : null;
+  const key = entry.clientKey ? await readFile(configPath(configFile, entry.clientKey)) : null;
+  return {
+    name: entry.name,
+    url,
+    updatePass,
+    updateTimeoutMs: Number.isFinite(entry.updateTimeoutMs) ? entry.updateTimeoutMs : 60_000,
+    ca, cert, key,
+    serverName: typeof entry.serverName === 'string' ? entry.serverName : url.hostname,
   };
 }
 
@@ -118,14 +139,54 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
   const config = await readJsonFile(configFile);
   if (!Array.isArray(config.proxies) || config.proxies.length === 0) throw new Error('proxies 至少需要一个代理节点');
   const proxyPool = new ProxyPool(await Promise.all(config.proxies.map((proxy) => loadProxyNode(configFile, proxy))));
+  const updateNodes = Array.isArray(config.updateNodes) && config.updateNodes.length > 0
+    ? await Promise.all(config.updateNodes.map((entry) => loadUpdateNode(configFile, entry)))
+    : [];
   const allowedOrigins = new Set(config.cors.allowedOrigins);
   const acceptedVersions = new Set(config.acceptedClientVersions);
   if (acceptedVersions.size === 0) throw new Error('acceptedClientVersions 不能为空');
   const limiter = new SlidingWindowLimiter(config.rateLimit);
+  const updateProjectRoot = config.update?.projectRoot ?? process.cwd();
+  const updateHandler = createUpdateHandler(config.update, updateProjectRoot, (message) => logEvent('info', 'update_log', { message }));
 
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
     if (url.pathname === '/healthz') return sendJson(response, 200, { ok: true, service: 'majo-main' });
+    // 更新路由：自更新 + 命令所有代理更新（独立认证，不走 CORS/限流）
+    if (url.pathname === '/update') {
+      if (request.method !== 'POST') return sendJson(response, 405, { error: 'method_not_allowed' });
+      const provided = getBearerToken(request);
+      const mainUpdatePass = config.update && typeof config.update.passEnv === 'string'
+        ? process.env[config.update.passEnv] : null;
+      const proxyUpdatePass = typeof config.proxyUpdatePassEnv === 'string'
+        ? process.env[config.proxyUpdatePassEnv] : null;
+      // 命令所有代理更新（使用独立管理密钥）
+      if (proxyUpdatePass && provided === proxyUpdatePass && updateNodes.length > 0) {
+        const results = [];
+        let allOk = true;
+        for (const node of updateNodes) {
+          try {
+            const result = await requestNodeUpdate(node);
+            results.push({ name: node.name, status: result.statusCode, body: result.parsed ?? result.body.slice(0, 200) });
+            if (result.statusCode < 200 || result.statusCode >= 300) allOk = false;
+            logEvent('info', 'proxy_update_request', { proxy: node.name, status: result.statusCode });
+          } catch (error) {
+            allOk = false;
+            results.push({ name: node.name, error: error.message });
+            logEvent('warn', 'proxy_update_error', { proxy: node.name, message: error.message });
+          }
+        }
+        return sendJson(response, allOk ? 200 : 502, { ok: allOk, results });
+      }
+      // main 自更新（使用自身 update pass）
+      if (mainUpdatePass && provided === mainUpdatePass) {
+        if (updateHandler) {
+          return updateHandler(request, response, url);
+        }
+        return sendJson(response, 503, { error: 'update_not_configured' });
+      }
+      return sendJson(response, 401, { error: 'invalid_update_request' });
+    }
     if (!PUBLIC_PATHS.has(url.pathname)) return sendJson(response, 404, { error: 'not_found' });
     const cors = corsHeaders(request.headers.origin, allowedOrigins);
     if (request.method === 'OPTIONS') return cors ? sendJson(response, 204, {}, cors) : sendJson(response, 403, { error: 'origin_denied' });

@@ -14,5 +14,35 @@
     }
   ],
   "rateLimit": { "windowMs": 60000, "maxRequests": 20, "maxConcurrent": 2 },
-  "acceptedClientVersions": ["2.3.1"]
+  "acceptedClientVersions": ["2.3.2"],
+  "proxyUpdatePassEnv": "MAJO_PROXY_UPDATE_PASS",
+  "updateNodes": [
+    {
+      "name": "proxy-primary",
+      "url": "https://127.0.0.1:34023/update",
+      "ca": "../certs/ca.crt",
+      "clientCert": "../certs/main-client.crt",
+      "clientKey": "../certs/main-client.key",
+      "serverName": "proxy.internal",
+      "updatePassEnv": "MAJO_PROXY_UPDATE_PASS",
+      "updateTimeoutMs": 60000
+    }
+  ],
+  "update": {
+    "passEnv": "MAJO_MAIN_UPDATE_PASS",
+    "source": "https://raw.githubusercontent.com/liuziheng20091106/witch-wolfgame/main/{file}",
+    "files": [
+      "server/gameProtocol.mjs",
+      "server/main.mjs",
+      "server/shared.mjs",
+      "server/update-core.mjs"
+    ],
+    "projectRoot": ".",
+    "downloadTimeoutMs": 30000,
+    "downloadAttempts": 3,
+    "retryDelayMs": 500,
+    "maxRedirects": 5,
+    "restartSignalFile": ".runtime/restart-token",
+    "restartOnSuccess": "code0"
+  }
 }
