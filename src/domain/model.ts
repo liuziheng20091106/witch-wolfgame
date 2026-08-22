@@ -61,6 +61,7 @@ export type SkillTiming =
   | 'after-speech'
   | 'on-mention'
   | 'before-vote'
+  | 'after-vote'
   | 'after-runoff';
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };

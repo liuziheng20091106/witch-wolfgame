@@ -6,7 +6,7 @@
     "key": "../certs/proxy-server.key"
   },
   "connectionPasswordEnv": "MAJO_PROXY_PASSWORD_PRIMARY",
-  "acceptedClientVersions": ["2.3.1"],
+  "acceptedClientVersions": ["2.3.2"],
   "providersFile": "./providers.json",
   "update": {
     "passEnv": "MAJO_UPDATE_PASS",

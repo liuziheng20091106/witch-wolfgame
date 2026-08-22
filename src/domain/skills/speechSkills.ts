@@ -16,6 +16,7 @@ import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events'
 import { chooseWithState } from '../engine/random';
 import { getAlivePlayerIds, getPlayer, getRoleAssignment } from '../engine/selectors';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
+import { getVisionSkillDecision } from './nightSkills';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return characterById[getPlayer(state, playerId).characterId].name;
@@ -26,15 +27,12 @@ export function getNextDayStartSkillDecision(state: GameState): PendingDecision 
   const skills = state.skillInstances
     .filter((skill) => skill.status === 'ready' && !wasOffered(skill, key))
     .filter((skill) => getPlayer(state, skill.ownerPlayerId).alive)
-    .filter((skill) => skill.definitionId === 'speech-restrain' || skill.definitionId === 'ignition')
+    .filter((skill) => skill.definitionId === 'speech-restrain')
     .sort((left, right) => left.ownerPlayerId - right.ownerPlayerId);
   for (const skill of skills) {
     const candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== skill.ownerPlayerId);
     if (candidates.length === 0) {
       continue;
-    }
-    if (skill.definitionId === 'ignition') {
-      return makeSkillDecision(state, skill, '点火', '公开随机一名其他存活者的阵营。', candidates, 'ignition');
     }
     return makeSkillDecision(state, skill, '力气大', '指定一名其他存活者，她今天无法发言。', candidates, 'optional-target');
   }
@@ -58,6 +56,11 @@ export function getNextDayStartSkillDecision(state: GameState): PendingDecision 
         return makeSkillDecision(state, gaze, '视线诱导-目标', '选择诱导对象：被诱导者今天的发言必须提及她。你可以选择自己——你渴望被人注视。', candidates, 'target');
       }
     }
+  }
+  // 幻视（奈叶香，主动技，每天一次）：触碰一名未查看过的存活者，概率看到其夜间行动轨迹
+  const vision = getVisionSkillDecision(state);
+  if (vision) {
+    return vision;
   }
   return null;
 }
@@ -103,7 +106,7 @@ export function getAfterSpeechSkillDecision(state: GameState, actorId: PlayerId)
     const player = getPlayer(state, playerId);
     return { playerId, name: nameOf(state, playerId), speechStyle: characterById[player.characterId].speechStyle.slice(0, 300) };
   });
-  const decision = makeSkillDecision(state, skill, '声音模仿', '选择一名尚未发言者，并伪造一段不超过 100 字的内容。伪造内容必须完全模仿所选目标本人的说话风格与语气，禁止使用你自己的说话风格。', candidates, 'voice-mimic', { mimicVoices });
+  const decision = makeSkillDecision(state, skill, '声音模仿', '选择一名尚未发言者，并伪造一段内容。伪造内容必须尽量简短、不超过 50 字，且完全模仿所选目标本人的说话风格与语气，禁止使用你自己的说话风格。', candidates, 'voice-mimic', { mimicVoices });
   // 视线诱导为主动技（指定被诱导者），不再全局强制提及持有者；
   // 伪造内容挂在被模仿者名下，若被模仿者是被诱导者，其约束在 applySpeechSkillDecision 中按目标校验。
   return decision;
@@ -127,19 +130,6 @@ export function applySpeechSkillDecision(state: GameState, pending: PendingDecis
   const use = (decision as OptionalTargetDecision | IgnitionDecision).use;
   if (!use) {
     addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
-    return;
-  }
-
-  if (skill.definitionId === 'ignition') {
-    const choice = chooseWithState(pending.candidates, state.rngState);
-    state.rngState = choice.state;
-    const alignment = roleAlignment[getRoleAssignment(state, choice.item).roleId];
-    addPublicEvent(state, 'trial-by-fire', `火焰审判指向 ${nameOf(state, choice.item)}：她属于${alignment === 'wolf' ? '狼人' : '好人'}阵营。`, {
-      actorPlayerId: skill.ownerPlayerId,
-      targetPlayerIds: [choice.item],
-      data: { alignment },
-    });
-    exhaustSkill(skill);
     return;
   }
 
@@ -168,8 +158,8 @@ export function applySpeechSkillDecision(state: GameState, pending: PendingDecis
   }
   if (skill.definitionId === 'voice-mimic') {
     const forgedSpeech = (decision as VoiceMimicDecision).forgedSpeech?.trim() ?? '';
-    if (forgedSpeech.length === 0 || forgedSpeech.length > 100) {
-      throw new Error('伪造发言必须为 1–100 字');
+    if (forgedSpeech.length === 0 || forgedSpeech.length > 50) {
+      throw new Error('伪造发言必须为 1–50 字');
     }
     // 视线诱导约束只作用于被诱导者本人的真实发言（publishSpeech 校验）；
     // 伪造内容由模仿者书写，无法预知被模仿者是否被诱导，不在此校验视线诱导。
@@ -363,6 +353,11 @@ export function publishSpeech(state: GameState, actorId: PlayerId, decision: Spe
   );
   const forgedSpeech = typeof mimic?.data.forgedSpeech === 'string' ? mimic.data.forgedSpeech : '';
   const merged = [speech || '（保持沉默）', forgedSpeech].filter(Boolean).join(' ');
+  // 声音模仿合并后总长限制：真发言（≤100）+ 伪造（≤50）合计不得超过 150 字，
+  // 防止被模仿者"说"出超长发言而露馅或破坏发言长度规则
+  if (forgedSpeech && merged.length > 150) {
+    throw new Error(`合并后的发言不能超过 150 字（当前 ${merged.length} 字）`);
+  }
   const event = addPublicEvent(state, 'speech', merged, {
     actorPlayerId: actorId,
     targetPlayerIds: [actorId],

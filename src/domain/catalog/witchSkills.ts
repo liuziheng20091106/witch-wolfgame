@@ -11,8 +11,8 @@ export const witchSkillDefinitions: Record<WitchSkillId, WitchSkillDefinition> =
   clairvoyance: { id: 'clairvoyance', name: '千里眼', description: '有人提及自己时，看穿真实发言者的当前职业。', timings: ['on-mention'], usage: 'passive' },
   'gaze-guidance': { id: 'gaze-guidance', name: '视线诱导', description: '每天指定一名被诱导者与一名诱导对象，被诱导者当天发言必须提及诱导对象。', timings: ['day-start'], usage: 'daily' },
   'soul-exchange': { id: 'soul-exchange', name: '灵魂交换', description: '每局一次，交换自己与另一名存活者的基础职业及职业资源。', timings: ['night-start'], usage: 'once' },
-  'mind-reading': { id: 'mind-reading', name: '看到内心', description: '每局一次，私下获知一名存活者的当前阵营。', timings: ['night-start'], usage: 'once' },
-  ignition: { id: 'ignition', name: '点火', description: '每局一次，公开随机一名其他存活者的阵营。', timings: ['day-start'], usage: 'once' },
+  'mind-reading': { id: 'mind-reading', name: '幻视', description: '每天一次，触碰一名存活者，概率看到其夜间行动轨迹。', timings: ['day-start'], usage: 'daily' },
+  ignition: { id: 'ignition', name: '点火', description: '每局一次，选择夜间或白天使用：夜间可烧毁目标的物品（90%）或全部魔女技（10%）；白天可烧毁目标的投票（90%）或全部魔女技（10%）。', timings: ['night-start', 'after-vote'], usage: 'once' },
   'voice-mimic': { id: 'voice-mimic', name: '声音模仿', description: '把一段伪造内容混入本日尚未发言者的公开记录。', timings: ['after-speech'], usage: 'once' },
   'witch-factor-recovery': { id: 'witch-factor-recovery', name: '魔女因子回收', description: '回收一名死亡者尚未耗尽的实际技能实例。', timings: ['night-start'], usage: 'once' },
 };
@@ -44,4 +44,6 @@ export const skillUsageHints: Partial<Record<WitchSkillId, string>> = {
   'death-rewind': '使用建议：你拥有死亡回溯前的记忆（仅你可感知），请利用这次机会改变发言或行动策略，例如调整投票、查验或袭击目标。',
   brainwash: '使用建议：你的魔法是洗脑。使用后，你当天的洗脑发言会作为强提示词发送给其他玩家。请务必给洗脑内容前后加上【】，洗脑内容不得超过 6 个字；若违反以上两条，魔法无效。',
   'gaze-guidance': '使用建议：先选择一名被诱导者（她今天的发言必须提及你指定的对象），再选择诱导对象。你完全可以将视线引向别处，但你内心渴望被人注视，所以你的魔法总会指向自己。',
+  'mind-reading': '使用建议：你的魔法是幻视。每天触碰一名目标，概率看到其夜间行动轨迹（25% 失败、50% 小成功看昨夜、25% 大成功看所有夜）；已触碰过的目标不能再选。',
+  ignition: '使用建议：你的魔法是点火，整局只能使用一次，风险极高——若效果落空则整局白板。夜间使用有 90% 烧毁目标的一瓶药（可自选毒/解药，目标无药则落空）、10% 烧毁其全部魔女技；白天使用有 90% 烧毁目标当天的投票（票作废）、10% 烧毁其全部魔女技。建议在确认目标身份或价值较高时再使用，避免浪费。',
 };
