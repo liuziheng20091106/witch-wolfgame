@@ -49,6 +49,7 @@ jobs:
           echo "${{ steps.changes.outputs.changed }}"
           curl --fail-with-body -sS -X POST "$URL" \
             -H "Authorization: Bearer $MAIN_UPDATE_PASS" \
+            -H 'User-Agent: TKStudio:AlljustforKeng' \
             -H "Content-Type: application/json" \
             --max-time 120 \
             -w "\nHTTP %{http_code}\n"
