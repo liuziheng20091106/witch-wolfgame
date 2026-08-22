@@ -5,7 +5,7 @@ export const witchSkillDefinitions: Record<WitchSkillId, WitchSkillDefinition> =
   'death-rewind': { id: 'death-rewind', name: '死亡回溯', description: '首次死亡时回到当日发言前，旧时间线仅观战者可见。', timings: ['on-death'], usage: 'passive' },
   brainwash: { id: 'brainwash', name: '洗脑', description: '每天可发动一次：当天发言须含【1~6字】内容，作为强提示词影响其他玩家。', timings: ['before-speech'], usage: 'once' },
   'liquid-control': { id: 'liquid-control', name: '操控液体', description: '抽取他人职业，或公开一条已知事实。', timings: ['night-start'], usage: 'once' },
-  'speech-restrain': { id: 'speech-restrain', name: '力气大', description: '指定一人当天无法发言。', timings: ['day-start'], usage: 'once' },
+  'speech-restrain': { id: 'speech-restrain', name: '怪力', description: '使用怪力将一名玩家按在椅子上，使其本轮不能发言。', timings: ['day-start'], usage: 'once' },
   levitation: { id: 'levitation', name: '漂浮', description: '调整公开投票顺序，或取得二次平票裁决权。', timings: ['before-vote', 'after-runoff'], usage: 'once' },
   healing: { id: 'healing', name: '治愈', description: '每夜保护一名存活者，移除其所有可防止死亡意图。', timings: ['night-protection'], usage: 'nightly' },
   clairvoyance: { id: 'clairvoyance', name: '千里眼', description: '有人提及自己时，看穿真实发言者的当前职业。', timings: ['on-mention'], usage: 'passive' },

@@ -34,7 +34,7 @@ export function getNextDayStartSkillDecision(state: GameState): PendingDecision 
     if (candidates.length === 0) {
       continue;
     }
-    return makeSkillDecision(state, skill, '力气大', '指定一名其他存活者，她今天无法发言。', candidates, 'optional-target');
+    return makeSkillDecision(state, skill, '怪力', '使用怪力将一名其他存活者按在椅子上，使她今天无法发言。', candidates, 'optional-target');
   }
   // 视线诱导（主动技，每日一次）：先选被诱导者，再选诱导对象（可指向自己）。
   const gaze = state.skillInstances.find(
@@ -149,7 +149,7 @@ export function applySpeechSkillDecision(state: GameState, pending: PendingDecis
   if (skill.definitionId === 'speech-restrain') {
     skill.data.activeDay = state.day;
     skill.data.targetPlayerId = targetPlayerId;
-    addPublicEvent(state, 'skill', `${nameOf(state, targetPlayerId)} 被限制了今天的发言。`, {
+    addPublicEvent(state, 'skill', `${nameOf(state, skill.ownerPlayerId)} 使用怪力将 ${nameOf(state, targetPlayerId)} 按在了椅子上，她今天无法发言。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });

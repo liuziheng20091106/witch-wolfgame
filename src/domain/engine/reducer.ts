@@ -244,7 +244,7 @@ function advanceSpeeches(state: GameState): GameState {
     state.phase = 'vote-skills';
     return state;
   }
-  // 禁言检查先于发言前技能：被"力气大"禁言者今天无法发言，不应被询问洗脑等发言前技能
+  // 禁言检查先于发言前技能：被"怪力"禁言者今天无法发言，不应被询问洗脑等发言前技能
   if (isRestrainedToday(state, actorId)) {
     addPublicEvent(state, 'restrained', `${nameOf(state, actorId)} 受到限制，无法发言。`, {
       actorPlayerId: actorId,
