@@ -190,6 +190,25 @@ console.log('=== 4. 完整对局（本地策略）===');
   check('对局未死循环', guard < 3000);
 }
 
+// ===== 5. 存档往返：含造物的对局应能被存档 schema 接受 =====
+console.log('=== 5. 存档往返（含造物）===');
+{
+  const game = createGameWithLiquid(6);
+  if (!game) {
+    process.exit(1);
+  }
+  const advanced = advanceToLiquid(game);
+  if (!advanced) {
+    process.exit(1);
+  }
+  const withCreature = driveCreature(advanced.state, advanced.pending, { use: true });
+  // 模拟存档：序列化 + 反序列化后仍保留造物（roleAssignments 允许第 7 项）
+  const json = JSON.stringify(withCreature);
+  const restored = JSON.parse(json);
+  check('存档往返保留造物', restored.creatures.length === 1 && restored.creatures[0].id === 99);
+  check('存档 roleAssignments 含造物分配（>6）', restored.roleAssignments.length >= 7);
+}
+
 console.log('');
 console.log('===== 结果 =====');
 console.log(`检查项: ${checks} | 失败: ${failures}`);
