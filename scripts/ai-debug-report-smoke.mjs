@@ -258,6 +258,24 @@ assert.equal(calls.length, 0, '预先取消不应调用 fetch');
 assert.equal(requestError.kind, 'cancelled');
 assert.equal(requestError.debugReport, null);
 
+const cancelledAfterBody = new AbortController();
+calls = installFetch([() => ({
+  ok: true,
+  status: 200,
+  async text() {
+    cancelledAfterBody.abort();
+    return JSON.stringify({ choices: [{ message: { content: '{"targetPlayerId":1}' } }] });
+  },
+})]);
+requestError = await captureError(() => requestDecision(
+  { ...request, sessionId: 'cancelled-after-body' },
+  freeConfig,
+  cancelledAfterBody.signal,
+));
+assert.equal(calls.length, 1, '响应体读取后取消不应重试');
+assert.equal(requestError.kind, 'cancelled');
+assert.equal(requestError.debugReport, null);
+
 calls = installFetch([
   chatResponse('not valid decision JSON'),
   chatResponse('{"targetPlayerId":1}'),

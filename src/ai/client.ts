@@ -94,6 +94,7 @@ async function requestContent(
       signal: timeoutController.signal,
     });
     const responseText = await response.text();
+    if (signal.aborted) throw new AiCommandError('cancelled', 'AI 请求已取消');
     if (!response.ok) {
       throw new AiCommandError('http', `AI 服务返回 HTTP ${response.status}`, {
         status: response.status,
