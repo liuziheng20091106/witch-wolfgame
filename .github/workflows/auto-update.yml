@@ -43,6 +43,7 @@ jobs:
           if [ -z "$MAIN_UPDATE_PASS" ]; then
             echo "::error::MAIN_UPDATE_PASS secret 未配置，无法执行自动更新"
             exit 1
+          fi
           if [ -z "$PROXY_UPDATE_PASS" ]; then
             echo "::error::PROXY_UPDATE_PASS secret 未配置，无法执行自动更新"
             exit 1
