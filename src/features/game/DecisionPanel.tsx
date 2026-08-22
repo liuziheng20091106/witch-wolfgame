@@ -1,8 +1,15 @@
-import { AlertTriangle, Clipboard, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
+import { AlertTriangle, Clipboard, Download, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { aiDebugReportFilename, formatAiDebugReport } from '../../ai/debugReport';
 import type { AiCommandError } from '../../ai/types';
+import { copyTextToClipboard } from '../../app/clipboard';
 import type { GameObservation, PendingDecision, SubmittedDecision } from '../../domain/model';
 import styles from './DecisionPanel.module.css';
+
+function formatPayloadSize(text: string): string {
+  const bytes = new TextEncoder().encode(text).byteLength;
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
 
 interface DecisionPanelProps {
   observation: GameObservation;
@@ -17,11 +24,39 @@ interface DecisionPanelProps {
 }
 
 export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, decisionError, onSubmit, onRetry, onLocal, onSettings }: DecisionPanelProps) {
-  const [copied, setCopied] = useState(false);
-  const copyRawOutput = async () => {
-    if (!aiError?.rawOutput) return;
-    try { await navigator.clipboard.writeText(aiError.rawOutput); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
-    catch { setCopied(false); }
+  const [debugExportStatus, setDebugExportStatus] = useState<'idle' | 'copied' | 'downloaded' | 'failed'>('idle');
+  const [debugExportError, setDebugExportError] = useState<string | null>(null);
+  const debugReportText = aiError?.debugReport ? formatAiDebugReport(aiError.debugReport) : null;
+  const debugReportSize = debugReportText ? formatPayloadSize(debugReportText) : null;
+  const copyDebugReport = async () => {
+    if (!debugReportText) return;
+    try {
+      await copyTextToClipboard(debugReportText, { verify: true });
+      setDebugExportStatus('copied');
+      setDebugExportError(null);
+    } catch (error) {
+      setDebugExportStatus('failed');
+      setDebugExportError(error instanceof Error ? `复制失败，剪贴板未更新：${error.message}` : '复制失败，剪贴板未更新。请改用下载。');
+    }
+  };
+  const downloadDebugReport = () => {
+    if (!aiError?.debugReport || !debugReportText) return;
+    try {
+      const url = URL.createObjectURL(new Blob([debugReportText], { type: 'application/json;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = aiDebugReportFilename(aiError.debugReport);
+      link.hidden = true;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setDebugExportStatus('downloaded');
+      setDebugExportError(null);
+    } catch (error) {
+      setDebugExportStatus('failed');
+      setDebugExportError(error instanceof Error ? `下载调试信息失败：${error.message}` : '下载调试信息失败，请重试。');
+    }
   };
   const pending = observation.pendingDecision;
   const humanDecision = pending !== null && observation.viewerPlayerId === pending.actorId;
@@ -45,6 +80,11 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
     setForgedSpeech('');
   }, [pending?.id]);
 
+  useEffect(() => {
+    setDebugExportStatus('idle');
+    setDebugExportError(null);
+  }, [aiError]);
+
   const candidateNames = useMemo(() => new Map(observation.players.map((player) => [player.id, player.name])), [observation.players]);
   const requiredMention = typeof pending?.options.requiredMention === 'string' ? pending.options.requiredMention : null;
   const requiredSeatLabel = typeof pending?.options.requiredSeatLabel === 'string' ? pending.options.requiredSeatLabel : null;
@@ -54,7 +94,11 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
     return <section className={styles.panel} aria-live="polite">
       <div className={styles.errorHead}><AlertTriangle /><div><span>AI COMMAND PAUSED</span><h2>{aiError ? 'AI 决策失败' : '已恢复待处理决策'}</h2></div></div>
       <p>{aiError?.message ?? '为避免刷新后自动重复产生费用，本次 AI 请求等待你的确认。'}</p>
-      {aiError?.rawOutput && <button type="button" className={styles.copyOutput} onClick={copyRawOutput}><Clipboard />{copied ? '已复制模型原始输出' : '复制模型原始输出'}</button>}
+      {debugReportText && debugReportSize && <div className={styles.debugActions}>
+        <button type="button" onClick={copyDebugReport}><Clipboard />{debugExportStatus === 'copied' ? `已复制 ${debugReportSize}` : `复制调试信息 · ${debugReportSize}`}</button>
+        <button type="button" onClick={downloadDebugReport}><Download />{debugExportStatus === 'downloaded' ? `已下载 ${debugReportSize}` : `下载调试信息 · ${debugReportSize}`}</button>
+      </div>}
+      {debugExportError && <p className={styles.debugError} role="status">{debugExportError}</p>}
       <div className={styles.errorActions}>
         <button type="button" onClick={onRetry}><RefreshCcw />重试</button>
         <button type="button" onClick={onLocal}><WifiOff />本局改用本地策略</button>

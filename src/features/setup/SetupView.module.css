@@ -1,74 +1,669 @@
-.page { min-height: 100vh; background: var(--paper); color: var(--ink); }
-.masthead { min-height: 104px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 18px; padding: 20px clamp(18px, 4vw, 64px); border-bottom: 4px solid var(--ink); }
-.brandMark { width: 58px; height: 58px; object-fit: contain; }
-.intro span, .sectionHeading span, .confirmDialog > span { color: var(--verdict); font-family: var(--sans); font-size: 11px; font-weight: 900; }
-.settingsButton { min-height: 46px; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; border: 1px solid var(--ink); background: transparent; font-family: var(--sans); font-weight: 800; }
-.settingsButton svg { width: 19px; }
-.commandBand { display: grid; grid-template-columns: minmax(220px, .85fr) minmax(360px, 1.4fr) minmax(150px, .45fr); gap: 26px; align-items: end; padding: 34px clamp(18px, 4vw, 64px); background: var(--ink-surface); color: #fffefa; }
-.intro h2 { margin: 5px 0 0; font-size: 30px; }
-.modeSwitch { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid rgb(255 255 255 / 32%); }
-.modeSwitch button { min-height: 58px; display: inline-flex; justify-content: center; align-items: center; gap: 9px; border: 0; background: transparent; color: var(--ink-on-surface); font-family: var(--sans); font-weight: 800; }
-.modeSwitch button + button { border-left: 1px solid rgb(255 255 255 / 32%); }
-.modeSwitch .activeMode { background: var(--verdict); color: #19181c; }
-.modeSwitch svg { width: 20px; }
-.seedField { display: grid; gap: 7px; color: var(--paper-dim); font-family: var(--sans); font-size: 12px; font-weight: 800; }
-.seedField input { width: 100%; min-height: 48px; padding: 8px 12px; border: 1px solid rgb(255 255 255 / 35%); background: transparent; color: white; }
-.seedField input::placeholder { color: var(--paper-dim); opacity: 0.8; }
-.seedControls { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
-.seedRandomButton, .seedRandomButtonActive { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; border: 1px solid rgb(255 255 255 / 35%); background: transparent; color: var(--paper-bright); font-family: var(--sans); font-weight: 800; }
-.seedRandomButton svg, .seedRandomButtonActive svg { width: 16px; }
-.seedRandomButtonActive { border-color: var(--verdict); background: var(--verdict); color: white; }
-.characterSection { padding: 34px clamp(18px, 4vw, 64px) 42px; border-bottom: 1px solid var(--line); }
-.sectionHeading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
-.sectionHeading h2 { margin: 4px 0 0; font-size: 27px; }
-.sectionHeading p { margin: 0; color: var(--muted); font-family: var(--sans); font-size: 14px; }
-.characterGrid { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); gap: 10px; }
-.character, .selectedCharacter { position: relative; min-width: 0; min-height: 218px; display: grid; grid-template-rows: 1fr auto auto; padding: 0 0 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 2px; background: var(--paper-bright); color: var(--ink); text-align: left; }
-.character:hover, .selectedCharacter { border-color: var(--verdict); box-shadow: inset 0 -4px var(--verdict); }
-.character:focus-visible, .selectedCharacter:focus-visible { outline: 3px solid var(--intel); outline-offset: 2px; }
-.character img, .selectedCharacter img { width: 100%; aspect-ratio: 1; object-fit: cover; object-position: top center; }
-.seatNumber { position: absolute; top: 7px; left: 7px; z-index: 1; padding: 3px 6px; background: var(--ink-surface); color: var(--ink-on-surface); font-family: var(--sans); font-size: 10px; font-weight: 900; }
-.characterName { padding: 10px 9px 2px; font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.trait { padding: 0 9px; color: var(--muted); font-family: var(--sans); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.check { position: absolute; top: 7px; right: 7px; display: grid; width: 28px; height: 28px; place-items: center; background: var(--verdict); color: white; }
-.check svg { width: 17px; }
-.launchBand { display: grid; grid-template-columns: minmax(280px, 1fr) auto; gap: 20px 34px; align-items: center; padding: 26px clamp(18px, 4vw, 64px) 42px; }
-.aiStatus { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
-.aiIcon { width: 44px; height: 44px; display: grid; place-items: center; overflow: hidden; background: var(--intel-soft); color: var(--intel-dark); }
-.aiIcon svg { width: 24px; height: 24px; padding: 0; }
-.aiStatus > div { min-width: 0; display: grid; gap: 2px; align-content: center; }
-.aiStatus strong { display: block; line-height: 1.2; font-size: 17px; }
-.aiStatus span { display: block; color: var(--muted); font-family: var(--sans); font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
-.aiStatus button { min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 0 10px; border: 0; background: transparent; color: var(--intel-dark); font-weight: 800; }
-.aiStatus button svg { width: 17px; }
-.launchActions { display: flex; gap: 12px; align-items: stretch; }
-.savedRun { display: grid; grid-template-columns: auto auto 44px; grid-template-rows: auto auto; align-items: center; column-gap: 10px; padding: 8px 8px 8px 14px; border: 1px solid var(--line-strong); }
-.savedRun > span { grid-column: 1 / 3; color: var(--muted); font-family: var(--sans); font-size: 11px; }
-.savedRun strong { font-size: 14px; }
-.savedRun button { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; font-weight: 800; }
-.savedRun button svg { width: 17px; }
-.savedRun .deleteButton { grid-column: 3; grid-row: 1 / 3; width: 44px; justify-content: center; color: var(--verdict); }
-.startButton { min-width: 168px; min-height: 64px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; background: var(--verdict); color: white; font-weight: 900; }
-.startButton:disabled { background: var(--line-strong); color: var(--muted); cursor: not-allowed; }
-.startButton svg { width: 20px; }
-.storageError { grid-column: 1 / -1; margin: 0; padding: 10px 12px; background: var(--verdict-soft); color: var(--verdict-dark); }
-.storageErrorAction { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 10px 12px; background: var(--verdict-soft); color: var(--verdict-dark); }
-.storageErrorAction button { min-height: 36px; padding: 0 10px; border: 1px solid var(--verdict); background: transparent; color: var(--verdict); font-weight: 800; }
-.confirmBackdrop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 18px; background: rgb(23 22 26 / 70%); }
-.confirmDialog { width: min(440px, 100%); padding: 28px; border-top: 6px solid var(--verdict); background: var(--paper-bright); box-shadow: 0 22px 60px rgb(0 0 0 / 36%); }
-.confirmDialog h2 { margin: 5px 0 8px; font-size: 28px; }
-.confirmDialog p { color: var(--muted); }
-.confirmDialog div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
-.confirmDialog button { min-height: 46px; padding: 0 18px; border: 1px solid var(--ink); background: transparent; font-weight: 800; }
-.confirmDialog .danger { border-color: var(--verdict); background: var(--verdict); color: white; }
-.historySection { padding: 26px clamp(18px, 4vw, 64px) 42px; border-bottom: 1px solid var(--line); }
-.historyList { display: grid; gap: 8px; margin-top: 16px; }
-.historyEntry { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 14px; padding: 10px 12px; border: 1px solid var(--line); }
-.historyEntry strong { font-size: 15px; }
-.historyEntry span { color: var(--muted); font-family: var(--sans); font-size: 12px; }
-.copyButton { min-height: 36px; display: inline-flex; align-items: center; gap: 5px; padding: 0 12px; border: 1px solid var(--verdict); background: transparent; color: var(--verdict); font-weight: 800; }
-.copyButton svg { width: 15px; }
-.copyButton:focus-visible, .storageErrorAction button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-@media (max-width: 719px) { .historyEntry { grid-template-columns: 1fr auto; } .historyEntry span { grid-column: 1 / -1; } }
-@media (max-width: 1099px) { .characterGrid { grid-template-columns: repeat(4, minmax(110px, 1fr)); } .commandBand { grid-template-columns: 1fr 1.3fr; } .seedField { grid-column: 2; } .launchBand { grid-template-columns: 1fr; } .launchActions { justify-content: flex-end; } }
-@media (max-width: 719px) { .masthead { min-height: 82px; padding: 14px 16px; } .brandMark { width: 48px; height: 48px; } .masthead h1 { font-size: 22px; } .kicker { display: none; } .settingsButton { width: 44px; padding: 0; justify-content: center; font-size: 0; } .commandBand { grid-template-columns: 1fr; padding: 24px 16px; } .seedField { grid-column: auto; } .intro h2 { font-size: 25px; } .modeSwitch button { min-height: 56px; font-size: 13px; } .characterSection { padding: 26px 16px 32px; } .sectionHeading { align-items: flex-start; flex-direction: column; } .characterGrid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 10px; } .character, .selectedCharacter { flex: 0 0 142px; scroll-snap-align: start; } .launchBand { padding: 22px 16px 32px; } .aiStatus { grid-template-columns: 44px 1fr; } .aiStatus button { grid-column: 2; justify-self: start; padding: 0; } .launchActions { flex-direction: column; } .savedRun { width: 100%; } .startButton { width: 100%; } }
+.page {
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.masthead {
+  min-height: 104px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 18px;
+  padding: 20px clamp(18px, 4vw, 64px);
+  border-bottom: 4px solid var(--ink);
+}
+
+.brandMark {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+}
+
+.intro span,
+.sectionHeading span,
+.confirmDialog>span {
+  color: var(--verdict);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.settingsButton {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  font-family: var(--sans);
+  font-weight: 800;
+}
+
+.settingsButton svg {
+  width: 19px;
+}
+
+.commandBand {
+  display: grid;
+  grid-template-columns: minmax(220px, .85fr) minmax(360px, 1.4fr) minmax(150px, .45fr);
+  gap: 26px;
+  align-items: end;
+  padding: 34px clamp(18px, 4vw, 64px);
+  background: var(--ink-surface);
+  color: #fffefa;
+}
+
+.intro h2 {
+  margin: 5px 0 0;
+  font-size: 30px;
+}
+
+.modeSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid rgb(255 255 255 / 32%);
+}
+
+.modeSwitch button {
+  min-height: 58px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-on-surface);
+  font-family: var(--sans);
+  font-weight: 800;
+}
+
+.modeSwitch button+button {
+  border-left: 1px solid rgb(255 255 255 / 32%);
+}
+
+.modeSwitch .activeMode {
+  background: var(--verdict);
+  color: #19181c;
+}
+
+.modeSwitch svg {
+  width: 20px;
+}
+
+.seedField {
+  display: grid;
+  gap: 7px;
+  color: var(--paper-dim);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.seedField input {
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid rgb(255 255 255 / 35%);
+  background: transparent;
+  color: white;
+}
+
+.seedField input::placeholder {
+  color: var(--paper-dim);
+  opacity: 0.8;
+}
+
+.seedControls {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.seedRandomButton,
+.seedRandomButtonActive {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid rgb(255 255 255 / 35%);
+  background: transparent;
+  color: var(--paper-bright);
+  font-family: var(--sans);
+  font-weight: 800;
+}
+
+.seedRandomButton svg,
+.seedRandomButtonActive svg {
+  width: 16px;
+}
+
+.seedRandomButtonActive {
+  border-color: var(--verdict);
+  background: var(--verdict);
+  color: white;
+}
+
+.characterSection {
+  padding: 34px clamp(18px, 4vw, 64px) 42px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.sectionHeading h2 {
+  margin: 4px 0 0;
+  font-size: 27px;
+}
+
+.sectionHeading p {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 14px;
+}
+
+.characterGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.character,
+.selectedCharacter {
+  position: relative;
+  min-width: 0;
+  min-height: 218px;
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  padding: 0 0 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--paper-bright);
+  color: var(--ink);
+  text-align: left;
+}
+
+.character:hover,
+.selectedCharacter {
+  border-color: var(--verdict);
+  box-shadow: inset 0 -4px var(--verdict);
+}
+
+.character:focus-visible,
+.selectedCharacter:focus-visible {
+  outline: 3px solid var(--intel);
+  outline-offset: 2px;
+}
+
+.character img,
+.selectedCharacter img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  object-position: top center;
+}
+
+.seatNumber {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 1;
+  padding: 3px 6px;
+  background: var(--ink-surface);
+  color: var(--ink-on-surface);
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.characterName {
+  padding: 10px 9px 2px;
+  font-size: 16px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trait {
+  padding: 0 9px;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.check {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  background: var(--verdict);
+  color: white;
+}
+
+.check svg {
+  width: 17px;
+}
+
+.launchBand {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto;
+  gap: 20px 34px;
+  align-items: center;
+  padding: 26px clamp(18px, 4vw, 64px) 42px;
+}
+
+.aiStatus {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aiSummary {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aiIcon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--intel-soft);
+  color: var(--intel-dark);
+}
+
+.aiIcon svg {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.aiCopy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  align-content: center;
+}
+
+.aiCopy strong {
+  display: block;
+  line-height: 1.2;
+  font-size: 17px;
+}
+
+.aiCopy span {
+  display: block;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.aiStatus button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--intel-dark);
+  font-weight: 800;
+}
+
+.aiStatus button svg {
+  width: 17px;
+}
+
+.launchActions {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.savedRun {
+  display: grid;
+  grid-template-columns: auto auto 44px;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--line-strong);
+}
+
+.savedRun>span {
+  grid-column: 1 / 3;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 11px;
+}
+
+.savedRun strong {
+  font-size: 14px;
+}
+
+.savedRun button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  font-weight: 800;
+}
+
+.savedRun button svg {
+  width: 17px;
+}
+
+.savedRun .deleteButton {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  width: 44px;
+  justify-content: center;
+  color: var(--verdict);
+}
+
+.startButton {
+  min-width: 168px;
+  min-height: 64px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 0;
+  background: var(--verdict);
+  color: white;
+  font-weight: 900;
+}
+
+.startButton:disabled {
+  background: var(--line-strong);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.startButton svg {
+  width: 20px;
+}
+
+.storageError {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--verdict-soft);
+  color: var(--verdict-dark);
+}
+
+.storageErrorAction {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--verdict-soft);
+  color: var(--verdict-dark);
+}
+
+.storageErrorAction button {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--verdict);
+  background: transparent;
+  color: var(--verdict);
+  font-weight: 800;
+}
+
+.confirmBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(23 22 26 / 70%);
+}
+
+.confirmDialog {
+  width: min(440px, 100%);
+  padding: 28px;
+  border-top: 6px solid var(--verdict);
+  background: var(--paper-bright);
+  box-shadow: 0 22px 60px rgb(0 0 0 / 36%);
+}
+
+.confirmDialog h2 {
+  margin: 5px 0 8px;
+  font-size: 28px;
+}
+
+.confirmDialog p {
+  color: var(--muted);
+}
+
+.confirmDialog div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.confirmDialog button {
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  font-weight: 800;
+}
+
+.confirmDialog .danger {
+  border-color: var(--verdict);
+  background: var(--verdict);
+  color: white;
+}
+
+.historySection {
+  padding: 26px clamp(18px, 4vw, 64px) 42px;
+  border-bottom: 1px solid var(--line);
+}
+
+.historyList {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.historyEntry {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+}
+
+.historyEntry strong {
+  font-size: 15px;
+}
+
+.historyEntry span {
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+.copyButton {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  border: 1px solid var(--verdict);
+  background: transparent;
+  color: var(--verdict);
+  font-weight: 800;
+}
+
+.copyButton svg {
+  width: 15px;
+}
+
+.copyButton:focus-visible,
+.storageErrorAction button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (max-width: 719px) {
+  .historyEntry {
+    grid-template-columns: 1fr auto;
+  }
+
+  .historyEntry span {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1099px) {
+  .characterGrid {
+    grid-template-columns: repeat(4, minmax(110px, 1fr));
+  }
+
+  .commandBand {
+    grid-template-columns: 1fr 1.3fr;
+  }
+
+  .seedField {
+    grid-column: 2;
+  }
+
+  .launchBand {
+    grid-template-columns: 1fr;
+  }
+
+  .launchActions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 719px) {
+  .masthead {
+    min-height: 82px;
+    padding: 14px 16px;
+  }
+
+  .brandMark {
+    width: 48px;
+    height: 48px;
+  }
+
+  .masthead h1 {
+    font-size: 22px;
+  }
+
+  .kicker {
+    display: none;
+  }
+
+  .settingsButton {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
+  .commandBand {
+    grid-template-columns: 1fr;
+    padding: 24px 16px;
+  }
+
+  .seedField {
+    grid-column: auto;
+  }
+
+  .intro h2 {
+    font-size: 25px;
+  }
+
+  .modeSwitch button {
+    min-height: 56px;
+    font-size: 13px;
+  }
+
+  .characterSection {
+    padding: 26px 16px 32px;
+  }
+
+  .sectionHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .characterGrid {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 10px;
+  }
+
+  .character,
+  .selectedCharacter {
+    flex: 0 0 142px;
+    scroll-snap-align: start;
+  }
+
+  .launchBand {
+    padding: 22px 16px 32px;
+  }
+
+  .aiStatus {
+    display: grid;
+    gap: 4px;
+  }
+
+  .aiStatus button {
+    justify-self: start;
+    margin-left: 56px;
+    padding: 0;
+  }
+
+  .launchActions {
+    flex-direction: column;
+  }
+
+  .savedRun {
+    width: 100%;
+  }
+
+  .startButton {
+    width: 100%;
+  }
+}
