@@ -1,5 +1,7 @@
 export {
+  applyLevitation,
   getHealingDecision,
+  getLevitationDecision,
   getNextNightSkillDecision,
   applyNightSkillDecision,
   getVisionSkillDecision,
@@ -11,6 +13,7 @@ export {
   getDayIgnitionDecision,
   applyDayIgnition,
   burnedVoters,
+  isFloatingActive,
 } from './nightSkills';
 export {
   applySpeechSkillDecision,

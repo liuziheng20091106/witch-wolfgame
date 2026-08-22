@@ -93,7 +93,7 @@ export const WITCH_SKILL_CATALOG = freeze([
  freeze({ id: 'brainwash', name: '洗脑', description: '每天可发动一次：当天发言须含【1~6字】内容，作为强提示词影响其他玩家。', timings: freeze(/** @type {const} */(['before-speech'])), usage: 'once' }),
  freeze({ id: 'liquid-control', name: '操控液体', description: '抽取他人职业，或公开一条已知事实。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
  freeze({ id: 'speech-restrain', name: '怪力', description: '使用怪力将一名玩家按在椅子上，使其本轮不能发言。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
- freeze({ id: 'levitation', name: '漂浮', description: '调整公开投票顺序，或取得二次平票裁决权。', timings: freeze(/** @type {const} */(['before-vote', 'after-runoff'])), usage: 'once' }),
+ freeze({ id: 'levitation', name: '漂浮', description: '每局一次，夜间发动隐藏自己的脚印：直到第二天白天结束，你的行动不留任何可追溯记录，也无法被选中（女巫药、灵魂交换等失效）。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
  freeze({ id: 'healing', name: '治愈', description: '每夜保护一名存活者，移除其所有可防止死亡意图。', timings: freeze(/** @type {const} */(['night-protection'])), usage: 'nightly' }),
  freeze({ id: 'clairvoyance', name: '千里眼', description: '有人提及自己时，看穿真实发言者的当前职业。', timings: freeze(/** @type {const} */(['on-mention'])), usage: 'passive' }),
  freeze({ id: 'gaze-guidance', name: '视线诱导', description: '每天指定一名被诱导者与一名诱导对象，被诱导者当天发言必须提及诱导对象。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'daily' }),
