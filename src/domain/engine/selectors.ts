@@ -118,7 +118,9 @@ export function selectObservation(
     const ownerName = getName(state, creature.ownerPlayerId);
     const assignment = getRoleAssignment(state, creature.id);
     const showWolfTeammate = viewerRole === 'wolf' && assignment.roleId === 'wolf';
-    const showPrivate = omniscient || showWolfTeammate;
+    // 造物自己或主人查看时，能看到造物的职业（造物决策需要知道自己的身份）
+    const viewerIsCreatureOrOwner = creature.id === viewerPlayerId || creature.ownerPlayerId === viewerPlayerId;
+    const showPrivate = omniscient || viewerIsCreatureOrOwner || showWolfTeammate;
     const ownerCharacter = characterById[getPlayer(state, creature.ownerPlayerId).characterId];
     players.push({
       id: creature.id,

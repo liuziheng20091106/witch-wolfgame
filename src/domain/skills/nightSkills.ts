@@ -652,6 +652,10 @@ export function burnedVoters(state: GameState): Set<PlayerId> {
 
 function createCreature(state: GameState, skill: WitchSkillInstance): void {
   const ownerId = skill.ownerPlayerId;
+  // 防御：同一局只允许存在一个造物（防止重复创建导致状态错乱）
+  if (state.creatures.some((creature) => creature.id === 99)) {
+    throw new Error('造物已存在，不能重复创建');
+  }
   const owner = getPlayer(state, ownerId);
   const roleId = getRoleAssignment(state, ownerId).roleId;
   // 造物拥有独立的职业分配（同一职业，独立资源）
