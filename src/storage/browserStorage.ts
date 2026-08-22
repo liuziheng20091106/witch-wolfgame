@@ -38,7 +38,7 @@ export type StorageResult<T> =
   | { ok: true; value: T | null }
   | { ok: false; error: string };
 
-const playerIdSchema = z.custom<PlayerId>((value) => typeof value === 'number' && PLAYER_IDS.includes(value as PlayerId));
+const playerIdSchema = z.custom<PlayerId>((value) => typeof value === 'number' && (PLAYER_IDS.includes(value as 0 | 1 | 2 | 3 | 4 | 5) || value === 99));
 const roleIdSchema = z.enum(ROLE_IDS);
 const skillIdSchema = z.enum(WITCH_SKILL_IDS);
 

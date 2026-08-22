@@ -9,7 +9,9 @@ import {
   WITCH_SKILL_IDS,
 } from '../../shared/gamePromptContract.js';
 
-export type PlayerId = (typeof PLAYER_IDS)[number];
+export type PlayerId = (typeof PLAYER_IDS)[number] | CreatureId;
+/** 造物专用 id 段（诺亚的忆灵，避开 0-5 玩家座位） */
+export type CreatureId = 99;
 export type CharacterId = (typeof CHARACTER_IDS)[number];
 export type RoleId = (typeof ROLE_IDS)[number];
 export type Alignment = (typeof ALIGNMENTS)[number];
@@ -55,6 +57,17 @@ export interface PlayerState {
   roleAssignmentId: string;
   skillInstanceId: string | null;
   alive: boolean;
+}
+
+/** 诺亚的造物（忆灵）：液态分身，继承诺亚的基础职业，不继承魔女技。 */
+export interface CreatureState {
+  id: CreatureId;
+  ownerPlayerId: PlayerId;
+  characterId: CharacterId;
+  roleAssignmentId: string;
+  alive: boolean;
+  /** 造物持有的药（创造时诺亚二选一给解药/毒药） */
+  resources: RoleResources;
 }
 
 export interface RoleResources {
@@ -225,6 +238,7 @@ export interface GameState {
   day: number;
   phase: GamePhase;
   players: PlayerState[];
+  creatures: CreatureState[];
   roleAssignments: RoleAssignmentState[];
   skillInstances: WitchSkillInstance[];
   knowledgeByPlayer: Record<PlayerId, KnowledgeFact[]>;

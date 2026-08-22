@@ -7,10 +7,10 @@ import { AiCommandError } from './types';
 // z.object 会在解析时自动剥离未知键（且不修改输入对象），schema 本身即是唯一的字段白名单，
 // 避免手写白名单与 schema 双重定义导致的漂移。必填缺失/类型错误仍会被拦截。
 export const speechDecisionSchema = z.object({ speech: z.string().max(100) });
-export const targetDecisionSchema = z.object({ targetPlayerId: z.number().int().min(0).max(5).nullable() });
+export const targetDecisionSchema = z.object({ targetPlayerId: z.number().int().min(0).max(99).nullable() });
 export const optionalTargetDecisionSchema = z.object({
   use: z.boolean(),
-  targetPlayerId: z.number().int().min(0).max(5).nullable(),
+  targetPlayerId: z.number().int().min(0).max(99).nullable(),
 }).superRefine((value, context) => {
   if (value.use !== (value.targetPlayerId !== null)) {
     context.addIssue({ code: 'custom', message: 'use 与 targetPlayerId 必须一致' });
@@ -18,12 +18,12 @@ export const optionalTargetDecisionSchema = z.object({
 });
 export const witchDecisionSchema = z.object({
   save: z.boolean(),
-  poisonTargetPlayerId: z.number().int().min(0).max(5).nullable(),
+  poisonTargetPlayerId: z.number().int().min(0).max(99).nullable(),
 });
 export const liquidControlDecisionSchema = z.object({
   use: z.boolean(),
   mode: z.enum(['extract', 'spread']).nullable(),
-  targetPlayerId: z.number().int().min(0).max(5).nullable(),
+  targetPlayerId: z.number().int().min(0).max(99).nullable(),
   factId: z.string().nullable(),
 }).superRefine((value, context) => {
   const valid = !value.use
@@ -36,7 +36,7 @@ export const liquidControlDecisionSchema = z.object({
 export const levitationDecisionSchema = z.object({
   use: z.boolean(),
   mode: z.enum(['move-first', 'move-last', 'tie-break']).nullable(),
-  targetPlayerId: z.number().int().min(0).max(5).nullable(),
+  targetPlayerId: z.number().int().min(0).max(99).nullable(),
 }).superRefine((value, context) => {
   const valid = !value.use
     ? value.mode === null && value.targetPlayerId === null
@@ -47,7 +47,7 @@ export const levitationDecisionSchema = z.object({
 });
 export const voiceMimicDecisionSchema = z.object({
   use: z.boolean(),
-  targetPlayerId: z.number().int().min(0).max(5).nullable(),
+  targetPlayerId: z.number().int().min(0).max(99).nullable(),
   forgedSpeech: z.string().min(1).max(50).nullable(),
 }).superRefine((value, context) => {
   const valid = value.use
