@@ -1,5 +1,5 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
-import { access, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { basename, dirname, resolve, sep } from 'node:path';
@@ -178,7 +178,9 @@ async function archiveBackup(backupPath, file, backupsRoot, transactionId, log) 
   const destination = resolve(backupsRoot, transactionId, file);
   try {
     await mkdir(dirname(destination), { recursive: true });
-    await rename(backupPath, destination);
+    // 代码目录与备份目录可能位于不同挂载卷（Docker），rename 跨设备会报 EXDEV，改用复制后删除
+    await copyFile(backupPath, destination);
+    await rm(backupPath, { force: true });
     log(`[update] 备份已归档: ${file} -> ${transactionId}/${file}`);
   } catch (error) {
     log(`[update] 备份归档失败: ${file}: ${error.message}`);

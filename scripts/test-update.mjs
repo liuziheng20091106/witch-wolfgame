@@ -108,6 +108,15 @@ try {
     const archived = await readFile(join(backupsRoot, latestTransaction, file), 'utf8');
     assert.equal(archived, oldContent, '归档备份应是更新前的旧版本内容');
   }
+  // 归档采用复制+删除（跨设备卷兼容），源备份文件应已被清理
+  const leftoverBackups = [];
+  for (const dirName of ['server', 'proxy']) {
+    const names = await readdir(join(root, dirName));
+    for (const name of names) {
+      if (name.includes('.backup-')) leftoverBackups.push(`${dirName}/${name}`);
+    }
+  }
+  assert.deepEqual(leftoverBackups, [], '归档后源备份文件应被清理');
 
   const noHeader = responseRecorder();
   await handler(updateRequest('POST', null), noHeader);
