@@ -1,4 +1,3 @@
-import { characterById } from '../catalog/characters';
 import { roleAlignment, roleNames } from '../catalog/roles';
 import { witchSkillDefinitions } from '../catalog/witchSkills';
 import type {
@@ -16,7 +15,7 @@ import type {
 } from '../model';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events';
 import { chooseWithState } from '../engine/random';
-import { getAlivePlayerIds, getPlayer, getPlayerAlignment, getRoleAssignment, getSkillInstance } from '../engine/selectors';
+import { getAlivePlayerIds, getName, getPlayer, getPlayerAlignment, getRoleAssignment, getSkillInstance } from '../engine/selectors';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
 
 const priority: Record<string, number> = {
@@ -29,7 +28,7 @@ const priority: Record<string, number> = {
 };
 
 function nameOf(state: GameState, playerId: PlayerId): string {
-  return characterById[getPlayer(state, playerId).characterId].name;
+  return getName(state, playerId);
 }
 
 function updateSelfRoleKnowledge(state: GameState, playerId: PlayerId, sourceEventId: string): void {
@@ -200,6 +199,9 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
     }
     const owner = getPlayer(state, skill.ownerPlayerId);
     const target = getPlayer(state, targetPlayerId);
+    // 交换前记录双方原职业（用于造物跟随灵魂）
+    const ownerRoleBefore = getRoleAssignment(state, owner.id).roleId;
+    const targetRoleBefore = getRoleAssignment(state, target.id).roleId;
     const ownerAssignmentId = owner.roleAssignmentId;
     owner.roleAssignmentId = target.roleAssignmentId;
     target.roleAssignmentId = ownerAssignmentId;
@@ -215,6 +217,21 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
     // 自身份事实使用稳定 ID；交换后只更新内容，避免删除后按数组长度重新编号。
     updateSelfRoleKnowledge(state, owner.id, exchangeEvent.id);
     updateSelfRoleKnowledge(state, target.id, exchangeEvent.id);
+    // 造物随灵魂走：诺亚的造物绑定"诺亚原职业的灵魂"。
+    // 交换前诺亚持有 ownerRoleBefore（若诺亚=owner）或 targetRoleBefore（若诺亚=target）。
+    // 交换后，原职业在对方身上，造物主人改为对方。
+    for (const creature of state.creatures) {
+      if (!creature.alive) {
+        continue;
+      }
+      if (creature.ownerPlayerId === owner.id) {
+        // 造物主人是 owner：其灵魂（ownerRoleBefore）交换后去了 target
+        creature.ownerPlayerId = target.id;
+      } else if (creature.ownerPlayerId === target.id) {
+        // 造物主人是 target：其灵魂（targetRoleBefore）交换后去了 owner
+        creature.ownerPlayerId = owner.id;
+      }
+    }
     exhaustSkill(skill);
     return;
   }
@@ -757,11 +774,14 @@ function applyCreaturePotion(state: GameState, skill: WitchSkillInstance, pendin
     throw new Error('造物不存在');
   }
   const ownerAssignment = getRoleAssignment(state, skill.ownerPlayerId);
+  // 给药写入造物的职业分配资源（applyRoleDecision 读的是 roleAssignment.resources）
+  const creatureAssignment = getRoleAssignment(state, 99);
   if (targetPlayerId === 0) {
     if (ownerAssignment.resources.antidote !== 1) {
       throw new Error('解药不可用');
     }
     ownerAssignment.resources.antidote = 0;
+    creatureAssignment.resources.antidote = 1;
     creature.resources.antidote = 1;
     addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你把解药交给了造物。`, { actorPlayerId: skill.ownerPlayerId });
   } else if (targetPlayerId === 1) {
@@ -769,6 +789,7 @@ function applyCreaturePotion(state: GameState, skill: WitchSkillInstance, pendin
       throw new Error('毒药不可用');
     }
     ownerAssignment.resources.poison = 0;
+    creatureAssignment.resources.poison = 1;
     creature.resources.poison = 1;
     addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你把毒药交给了造物。`, { actorPlayerId: skill.ownerPlayerId });
   } else {

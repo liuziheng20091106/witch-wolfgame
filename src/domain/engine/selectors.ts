@@ -21,6 +21,20 @@ export function getCreature(state: GameState): CreatureState | null {
   return creature ?? null;
 }
 
+/** 玩家/造物通用名：造物显示为「诺亚的造物」。 */
+export function getName(state: GameState, playerId: PlayerId): string {
+  if (playerId === CREATURE_ID) {
+    const creature = getCreature(state);
+    const ownerName = creature ? getName(state, creature.ownerPlayerId) : '诺亚';
+    return `${ownerName}的造物`;
+  }
+  const player = state.players.find((entry) => entry.id === playerId);
+  if (!player) {
+    throw new Error(`找不到座位 ${playerId}`);
+  }
+  return characterById[player.characterId].name;
+}
+
 /** 把造物适配成"影子玩家"形态，使 getPlayer/getRoleAssignment 等对 99 号透明。 */
 export function creatureAsPlayer(state: GameState, creature: CreatureState): PlayerState {
   return {
