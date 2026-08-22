@@ -496,10 +496,11 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
   } else if (pending.kind === 'seer-action') {
     const targetId = targetPlayerId as PlayerId;
     if (isFloatingActive(state, targetId, state.day)) {
-      // 漂浮隐匿：查验不到任何痕迹，结果为空（照常消耗本夜查验）
+      // 漂浮隐匿：查验不到任何痕迹，结果为空（照常消耗本夜查验，标记已行动避免死循环）
       addPrivateEvent(state, [pending.actorId], 'seer-check', `你查验了 ${nameOf(state, targetId)}，但在现场什么都没有看见。`, {
         actorPlayerId: pending.actorId,
         targetPlayerIds: [targetId],
+        data: { actionKind: 'seer-action' },
       });
       return state;
     }

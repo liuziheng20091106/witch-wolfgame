@@ -132,6 +132,11 @@ console.log('=== 2. 预言家查验免疫 ===');
   const newEvents = after.privateEvents.slice(eventsBefore);
   const seerFeedback = newEvents.find((e) => e.actorPlayerId === seerId);
   check('预言家看到"什么都没有看见"', seerFeedback !== undefined && seerFeedback.text.includes('什么都没有看见'));
+  // 回归：查验失败必须标记已行动（actionKind: seer-action），否则会无限重复查验
+  const seerCheckCount = after.privateEvents.filter(
+    (e) => e.actorPlayerId === seerId && e.text.includes('查验'),
+  ).length;
+  check('预言家仅查验一次（无死循环）', seerCheckCount === 1, `实际 ${seerCheckCount} 次`);
 }
 
 // ===== 3. 女巫毒漂浮者：落空 =====
