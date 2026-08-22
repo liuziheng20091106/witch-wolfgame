@@ -110,6 +110,26 @@ export function selectObservation(
       isSelf: player.id === viewerPlayerId,
     };
   });
+  // 造物作为可观察单位加入（供 AI 决策视角与目标池呈现）
+  for (const creature of state.creatures) {
+    if (!creature.alive) {
+      continue;
+    }
+    const ownerName = getName(state, creature.ownerPlayerId);
+    const assignment = getRoleAssignment(state, creature.id);
+    const showWolfTeammate = viewerRole === 'wolf' && assignment.roleId === 'wolf';
+    const showPrivate = omniscient || showWolfTeammate;
+    players.push({
+      id: creature.id,
+      characterId: creature.characterId,
+      name: `${ownerName}的造物`,
+      avatarUrl: '',
+      alive: true,
+      roleId: showPrivate ? assignment.roleId : null,
+      skillId: null,
+      isSelf: false,
+    });
+  }
 
   const publicEvents = omniscient
     ? state.publicEvents
