@@ -7,9 +7,11 @@ const server = await createServer({ root, server: { middlewareMode: true }, appT
 let addKnowledge;
 let applyNightSkillDecision;
 let getNextNightSkillDecision;
+let getRoleAssignment;
 try {
   ({ addKnowledge } = await server.ssrLoadModule('/src/domain/engine/events.ts'));
   ({ applyNightSkillDecision, getNextNightSkillDecision } = await server.ssrLoadModule('/src/domain/skills/nightSkills.ts'));
+  ({ getRoleAssignment } = await server.ssrLoadModule('/src/domain/engine/selectors.ts'));
 } finally {
   await server.close();
 }
@@ -75,6 +77,7 @@ function makeState() {
       data: {},
     })),
     knowledgeByPlayer: Object.fromEntries(characterIds.map((_, playerId) => [playerId, initialKnowledge(gameId, playerId)])),
+    creatures: [],
     speechOrder: [0, 1, 2, 3, 4, 5],
     publicEvents: [],
     privateEvents: [],
@@ -123,22 +126,15 @@ function soulExchangePending() {
 
   const liquidPending = getNextNightSkillDecision(state);
   assert.equal(liquidPending?.skillInstanceId, 'skill-1');
-  assert.deepEqual(liquidPending?.options.factIds, targetFacts.map((fact) => fact.id));
+  assert.equal(liquidPending?.schemaKey, 'ignition');
+  assert.equal(liquidPending?.title, '操控液体');
 
-  const spreadState = structuredClone(state);
-  applyNightSkillDecision(spreadState, liquidPending, {
-    use: true,
-    mode: 'spread',
-    targetPlayerId: null,
-    factId: `${state.gameId}-fact-1-self`,
-  });
-  const spreadEvent = spreadState.publicEvents.at(-1);
-  assert.deepEqual(spreadEvent?.targetPlayerIds, [1]);
-  assert.match(spreadEvent?.text ?? '', /是狼人/);
-
-  const duplicateState = structuredClone(state);
-  duplicateState.knowledgeByPlayer[1].at(-1).id = `${state.gameId}-fact-1-self`;
-  assert.throws(() => getNextNightSkillDecision(duplicateState), /知识事实 ID 冲突/);
+  const creatureState = structuredClone(state);
+  applyNightSkillDecision(creatureState, liquidPending, { use: true });
+  assert.equal(creatureState.creatures.length, 1);
+  assert.equal(creatureState.creatures[0].id, 99);
+  assert.equal(creatureState.creatures[0].ownerPlayerId, 1);
+  assert.equal(getRoleAssignment(creatureState, 99).roleId, 'wolf');
 }
 
 {

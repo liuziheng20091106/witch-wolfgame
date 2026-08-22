@@ -1,6 +1,7 @@
 import { characterById } from '../catalog/characters';
 import { roleAlignment } from '../catalog/roles';
 import type {
+  CreatureState,
   GameObservation,
   GameState,
   PlayerId,
@@ -9,7 +10,50 @@ import type {
   WitchSkillInstance,
 } from '../model';
 
+export const CREATURE_ID = 99;
+
+export function isCreatureId(playerId: PlayerId): boolean {
+  return playerId === CREATURE_ID;
+}
+
+export function getCreature(state: GameState): CreatureState | null {
+  const creature = state.creatures.find((entry) => entry.id === CREATURE_ID);
+  return creature ?? null;
+}
+
+/** 玩家/造物通用名：造物显示为「诺亚的造物」。 */
+export function getName(state: GameState, playerId: PlayerId): string {
+  if (playerId === CREATURE_ID) {
+    const creature = getCreature(state);
+    const ownerName = creature ? getName(state, creature.ownerPlayerId) : '诺亚';
+    return `${ownerName}的造物`;
+  }
+  const player = state.players.find((entry) => entry.id === playerId);
+  if (!player) {
+    throw new Error(`找不到座位 ${playerId}`);
+  }
+  return characterById[player.characterId].name;
+}
+
+/** 把造物适配成"影子玩家"形态，使 getPlayer/getRoleAssignment 等对 99 号透明。 */
+export function creatureAsPlayer(state: GameState, creature: CreatureState): PlayerState {
+  return {
+    id: creature.id,
+    characterId: creature.characterId,
+    roleAssignmentId: creature.roleAssignmentId,
+    skillInstanceId: null,
+    alive: creature.alive,
+  };
+}
+
 export function getPlayer(state: GameState, playerId: PlayerId): PlayerState {
+  if (playerId === CREATURE_ID) {
+    const creature = getCreature(state);
+    if (!creature) {
+      throw new Error('找不到造物 99');
+    }
+    return creatureAsPlayer(state, creature);
+  }
   const player = state.players.find((entry) => entry.id === playerId);
   if (!player) {
     throw new Error(`找不到座位 ${playerId}`);
@@ -35,7 +79,11 @@ export function getSkillInstance(state: GameState, playerId: PlayerId): WitchSki
 }
 
 export function getAlivePlayerIds(state: GameState): PlayerId[] {
-  return state.players.filter((player) => player.alive).map((player) => player.id);
+  const playerIds = state.players.filter((player) => player.alive).map((player) => player.id);
+  if (state.creatures.some((creature) => creature.alive)) {
+    playerIds.push(CREATURE_ID);
+  }
+  return playerIds;
 }
 
 export function selectObservation(
@@ -62,6 +110,29 @@ export function selectObservation(
       isSelf: player.id === viewerPlayerId,
     };
   });
+  // 造物作为可观察单位加入（供 AI 决策视角与目标池呈现）；暂无专属立绘，沿用当前主人的立绘
+  for (const creature of state.creatures) {
+    if (!creature.alive) {
+      continue;
+    }
+    const ownerName = getName(state, creature.ownerPlayerId);
+    const assignment = getRoleAssignment(state, creature.id);
+    const showWolfTeammate = viewerRole === 'wolf' && assignment.roleId === 'wolf';
+    // 造物自己或主人查看时，能看到造物的职业（造物决策需要知道自己的身份）
+    const viewerIsCreatureOrOwner = creature.id === viewerPlayerId || creature.ownerPlayerId === viewerPlayerId;
+    const showPrivate = omniscient || viewerIsCreatureOrOwner || showWolfTeammate;
+    const ownerCharacter = characterById[getPlayer(state, creature.ownerPlayerId).characterId];
+    players.push({
+      id: creature.id,
+      characterId: creature.characterId,
+      name: `${ownerName}的造物`,
+      avatarUrl: ownerCharacter.avatarUrl,
+      alive: true,
+      roleId: showPrivate ? assignment.roleId : null,
+      skillId: null,
+      isSelf: false,
+    });
+  }
 
   const publicEvents = omniscient
     ? state.publicEvents

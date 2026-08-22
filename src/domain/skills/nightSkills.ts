@@ -1,21 +1,21 @@
-import { characterById } from '../catalog/characters';
 import { roleAlignment, roleNames } from '../catalog/roles';
 import { witchSkillDefinitions } from '../catalog/witchSkills';
 import type {
   GameState,
   IgnitionDecision,
-  LiquidControlDecision,
   OptionalTargetDecision,
   PendingDecision,
   PlayerId,
+  RoleAssignmentState,
   SubmittedDecision,
   TargetDecision,
   TimelineEvent,
   WitchSkillId,
+  WitchSkillInstance,
 } from '../model';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events';
 import { chooseWithState } from '../engine/random';
-import { getAlivePlayerIds, getPlayer, getPlayerAlignment, getRoleAssignment, getSkillInstance } from '../engine/selectors';
+import { getAlivePlayerIds, getName, getPlayer, getPlayerAlignment, getRoleAssignment, getSkillInstance } from '../engine/selectors';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
 
 const priority: Record<string, number> = {
@@ -27,15 +27,7 @@ const priority: Record<string, number> = {
 };
 
 function nameOf(state: GameState, playerId: PlayerId): string {
-  return characterById[getPlayer(state, playerId).characterId].name;
-}
-
-function uniqueKnowledgeFactIds(state: GameState, playerId: PlayerId): string[] {
-  const factIds = state.knowledgeByPlayer[playerId].map((fact) => fact.id);
-  if (new Set(factIds).size !== factIds.length) {
-    throw new Error(`座位 ${playerId} 的知识事实 ID 冲突`);
-  }
-  return factIds;
+  return getName(state, playerId);
 }
 
 function updateSelfRoleKnowledge(state: GameState, playerId: PlayerId, sourceEventId: string): void {
@@ -62,6 +54,10 @@ function candidatesForNightSkill(state: GameState, skillId: string, ownerId: Pla
       .map((player) => player.id);
   }
   const aliveOthers = getAlivePlayerIds(state).filter((playerId) => playerId !== ownerId);
+  if (skillId === 'soul-exchange') {
+    // 灵魂交换无法选中造物（保持造物与主人同身份，简化维护）
+    return aliveOthers.filter((playerId) => playerId !== 99);
+  }
   if (skillId === 'witch-killer' && getPlayerAlignment(state, ownerId) === 'wolf') {
     // 狼人持有魔女杀手时，禁止标记狼队友为精准击杀（此前候选含全部存活者，
     // AI 或本地策略可能刀到狼队友；灵魂交换后阵营随新职业，此处按当前阵营过滤）。
@@ -80,14 +76,26 @@ export function getNextNightSkillDecision(state: GameState): PendingDecision | n
     .sort((left, right) => (priority[left.definitionId] ?? 99) - (priority[right.definitionId] ?? 99) || left.ownerPlayerId - right.ownerPlayerId);
 
   for (const skill of candidates) {
+    if (skill.definitionId === 'liquid-control') {
+      // 防重复创建：已创建过造物（含魔女因子回收恢复后的场景）则跳过，不再询问
+      if (skill.data.creatureCreated === true || state.creatures.some((creature) => creature.id === 99)) {
+        markOffered(skill, key);
+        continue;
+      }
+      // 操控液体：创造造物（use-only，无需目标，继承诺亚职业）
+      const ownerName = nameOf(state, skill.ownerPlayerId);
+      return makeSkillDecision(
+        state,
+        skill,
+        '操控液体',
+        `创造诺亚的造物吗？【选择：是/否】\n造物是液态分身，继承你的基础职业与阵营（不继承魔女技），拥有独立意志，不参与白天发言。每局限一次。`,
+        [],
+        'ignition',
+      );
+    }
     const targets = candidatesForNightSkill(state, skill.definitionId, skill.ownerPlayerId);
     if (targets.length === 0) {
       continue;
-    }
-    if (skill.definitionId === 'liquid-control') {
-      return makeSkillDecision(state, skill, '操控液体', '抽取一名角色的职业，或公开一条你已知的事实。', targets, 'liquid-control', {
-        factIds: uniqueKnowledgeFactIds(state, skill.ownerPlayerId),
-      });
     }
     if (skill.definitionId === 'ignition') {
       return getNightIgnitionDecision(state);
@@ -126,7 +134,11 @@ function requireTarget(decision: SubmittedDecision, candidates: PlayerId[]): Pla
 
 export function applyNightSkillDecision(state: GameState, pending: PendingDecision, decision: SubmittedDecision): void {
   const skill = state.skillInstances.find((entry) => entry.id === pending.skillInstanceId);
-  if (!skill || skill.ownerPlayerId !== pending.actorId || skill.status === 'exhausted') {
+  if (!skill || skill.ownerPlayerId !== pending.actorId) {
+    throw new Error('技能实例不可用');
+  }
+  // 造物-给药是创造流程的延续，允许 skill 已 exhausted
+  if (skill.status === 'exhausted' && pending.title !== '造物-给药') {
     throw new Error('技能实例不可用');
   }
   const key = offerKey(state, skill.definitionId === 'healing' ? 'night-protection' : 'night-start');
@@ -144,40 +156,23 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
   }
 
   const optional = decision as OptionalTargetDecision;
-  if (!optional.use) {
+  if (pending.schemaKey === 'optional-target' && !optional.use) {
     addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
     return;
   }
 
   if (skill.definitionId === 'liquid-control') {
-    const liquid = decision as LiquidControlDecision;
-    if (liquid.mode === 'extract') {
-      const targetPlayerId = requireTarget(liquid, pending.candidates);
-      const roleId = getRoleAssignment(state, targetPlayerId).roleId;
-      const event = addPrivateEvent(state, [skill.ownerPlayerId], 'knowledge', `你抽取到 ${nameOf(state, targetPlayerId)} 的当前职业：${roleNames[roleId]}。`, {
-        actorPlayerId: skill.ownerPlayerId,
-        targetPlayerIds: [targetPlayerId],
-      });
-      addKnowledge(state, skill.ownerPlayerId, { subjectPlayerId: targetPlayerId, kind: 'role', value: roleId, observedDay: state.day }, event.id);
-    } else if (liquid.mode === 'spread' && liquid.factId) {
-      const fact = state.knowledgeByPlayer[skill.ownerPlayerId].find((entry) => entry.id === liquid.factId);
-      if (!fact) {
-        throw new Error('只能传播已经获得的事实');
-      }
-      const valueText = fact.kind === 'role'
-        ? `是${roleNames[fact.value as keyof typeof roleNames]}`
-        : fact.kind === 'skill'
-          ? `的魔法技是${witchSkillDefinitions[fact.value as WitchSkillId].name}`
-          : fact.value === 'wolf' ? '是狼人阵营' : '是好人阵营';
-      addPublicEvent(state, 'knowledge', `${nameOf(state, skill.ownerPlayerId)} 公开事实：${nameOf(state, fact.subjectPlayerId)} ${valueText}。`, {
-        actorPlayerId: skill.ownerPlayerId,
-        targetPlayerIds: [fact.subjectPlayerId],
-        data: { factId: fact.id },
-      });
-    } else {
-      throw new Error('操控液体的模式与事实不合法');
+    if (pending.title === '造物-给药') {
+      applyCreaturePotion(state, skill, pending, decision);
+      return;
     }
-    exhaustSkill(skill);
+    // 创造决策（ignition use-only）
+    const ignition = decision as IgnitionDecision;
+    if (!ignition.use) {
+      addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你保留了操控液体。', { actorPlayerId: skill.ownerPlayerId });
+      return;
+    }
+    createCreature(state, skill);
     return;
   }
 
@@ -194,6 +189,9 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
   if (skill.definitionId === 'soul-exchange') {
     const owner = getPlayer(state, skill.ownerPlayerId);
     const target = getPlayer(state, targetPlayerId);
+    // 交换前记录双方原职业（用于造物跟随灵魂）
+    const ownerRoleBefore = getRoleAssignment(state, owner.id).roleId;
+    const targetRoleBefore = getRoleAssignment(state, target.id).roleId;
     const ownerAssignmentId = owner.roleAssignmentId;
     owner.roleAssignmentId = target.roleAssignmentId;
     target.roleAssignmentId = ownerAssignmentId;
@@ -209,6 +207,21 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
     // 自身份事实使用稳定 ID；交换后只更新内容，避免删除后按数组长度重新编号。
     updateSelfRoleKnowledge(state, owner.id, exchangeEvent.id);
     updateSelfRoleKnowledge(state, target.id, exchangeEvent.id);
+    // 造物随灵魂走：诺亚的造物绑定"诺亚原职业的灵魂"。
+    // 交换前诺亚持有 ownerRoleBefore（若诺亚=owner）或 targetRoleBefore（若诺亚=target）。
+    // 交换后，原职业在对方身上，造物主人改为对方。
+    for (const creature of state.creatures) {
+      if (!creature.alive) {
+        continue;
+      }
+      if (creature.ownerPlayerId === owner.id) {
+        // 造物主人是 owner：其灵魂（ownerRoleBefore）交换后去了 target
+        creature.ownerPlayerId = target.id;
+      } else if (creature.ownerPlayerId === target.id) {
+        // 造物主人是 target：其灵魂（targetRoleBefore）交换后去了 owner
+        creature.ownerPlayerId = owner.id;
+      }
+    }
     exhaustSkill(skill);
     return;
   }
@@ -590,9 +603,15 @@ export function applyDayIgnition(state: GameState, pending: PendingDecision, dec
   if (targetPlayerId === null || !pending.candidates.includes(targetPlayerId)) {
     throw new Error('点火目标不合法');
   }
-  const roll = chooseWithState([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], state.rngState);
-  state.rngState = roll.state;
-  if (roll.item === 0) {
+  const targetIsCreature = targetPlayerId === 99;
+  // 造物没有魔女技可烧：对造物点火 100% 烧掉它的投票（造物的票跟随诺亚，存在即可被烧）
+  let burnVote = true;
+  if (!targetIsCreature) {
+    const roll = chooseWithState([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], state.rngState);
+    state.rngState = roll.state;
+    burnVote = roll.item !== 0;
+  }
+  if (!burnVote) {
     // 10% 烧技能
     burnAllSkills(state, targetPlayerId);
     const targetName = nameOf(state, targetPlayerId);
@@ -605,7 +624,7 @@ export function applyDayIgnition(state: GameState, pending: PendingDecision, dec
       targetPlayerIds: [targetPlayerId],
     });
   } else {
-    // 90% 烧投票：标记目标当天投票作废
+    // 烧投票：标记目标当天投票作废（造物票亦计入 burnedVoters 过滤）
     skill.data.burnedVoteDay = state.day;
     skill.data.burnedVoteTarget = targetPlayerId;
     const targetName = nameOf(state, targetPlayerId);
@@ -630,4 +649,86 @@ export function burnedVoters(state: GameState): Set<PlayerId> {
     }
   }
   return set;
+}
+
+// ===== 诺亚的造物（忆灵）：操控液体重构 =====
+// 造物 id 固定 99，继承诺亚的基础职业（不继承魔女技），可被给予解药/毒药，
+// 拥有独立意志（可独立决策，甚至毒杀主人诺亚），不参与白天发言与社交目标池。
+
+function createCreature(state: GameState, skill: WitchSkillInstance): void {
+  const ownerId = skill.ownerPlayerId;
+  // 防御：同一局只允许存在一个造物（防止重复创建导致状态错乱）
+  if (state.creatures.some((creature) => creature.id === 99)) {
+    throw new Error('造物已存在，不能重复创建');
+  }
+  const owner = getPlayer(state, ownerId);
+  const roleId = getRoleAssignment(state, ownerId).roleId;
+  // 造物拥有独立的职业分配（同一职业，独立资源）
+  const assignment: RoleAssignmentState = {
+    id: `creature-role-${ownerId}`,
+    ownerPlayerId: 99,
+    roleId,
+    resources: {},
+  };
+  state.roleAssignments.push(assignment);
+  state.creatures.push({
+    id: 99,
+    ownerPlayerId: ownerId,
+    characterId: owner.characterId,
+    roleAssignmentId: assignment.id,
+    alive: true,
+    resources: {},
+  });
+  skill.data.creatureCreated = true;
+  exhaustSkill(skill);
+  addPublicEvent(state, 'skill', `${nameOf(state, ownerId)}的造物在圆桌上凝聚成形——液态分身悄然成型！`, {
+    actorPlayerId: ownerId,
+    targetPlayerIds: [ownerId],
+    data: { creatureId: 99 },
+  });
+  // 给药二级决策：仅在诺亚有可用药时触发
+  if (roleId === 'witch') {
+    const resources = getRoleAssignment(state, ownerId).resources;
+    const potionCandidates: PlayerId[] = [];
+    if (resources.antidote === 1) {
+      potionCandidates.push(0);
+    }
+    if (resources.poison === 1) {
+      potionCandidates.push(1);
+    }
+    if (potionCandidates.length > 0) {
+      const potionPending = makeSkillDecision(state, skill, '造物-给药', '选择给造物哪瓶药（0=解药 1=毒药）。造物可独立决定对谁使用。', potionCandidates, 'target');
+      state.pendingDecision = potionPending;
+    }
+  }
+}
+
+function applyCreaturePotion(state: GameState, skill: WitchSkillInstance, pending: PendingDecision, decision: SubmittedDecision): void {
+  const targetPlayerId = requireTarget(decision, pending.candidates);
+  const creature = state.creatures.find((entry) => entry.id === 99);
+  if (!creature) {
+    throw new Error('造物不存在');
+  }
+  const ownerAssignment = getRoleAssignment(state, skill.ownerPlayerId);
+  // 给药写入造物的职业分配资源（applyRoleDecision 读的是 roleAssignment.resources）
+  const creatureAssignment = getRoleAssignment(state, 99);
+  if (targetPlayerId === 0) {
+    if (ownerAssignment.resources.antidote !== 1) {
+      throw new Error('解药不可用');
+    }
+    ownerAssignment.resources.antidote = 0;
+    creatureAssignment.resources.antidote = 1;
+    creature.resources.antidote = 1;
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你把解药交给了造物。`, { actorPlayerId: skill.ownerPlayerId });
+  } else if (targetPlayerId === 1) {
+    if (ownerAssignment.resources.poison !== 1) {
+      throw new Error('毒药不可用');
+    }
+    ownerAssignment.resources.poison = 0;
+    creatureAssignment.resources.poison = 1;
+    creature.resources.poison = 1;
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你把毒药交给了造物。`, { actorPlayerId: skill.ownerPlayerId });
+  } else {
+    throw new Error('造物给药选择不合法');
+  }
 }
