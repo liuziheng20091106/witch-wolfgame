@@ -7,6 +7,7 @@ import { confirmNodeUpdate, createUpdateHandler, recoverInterruptedUpdate } from
 import { watchRestartSignal } from '../server/shared.mjs';
 
 const sourceFiles = new Map([
+  ['shared/gamePromptContract.js', '// 新共享契约 v2'],
   ['server/gameProtocol.mjs', '// 新协议内容 v2'],
   ['proxy/server.mjs', '// 新代理内容 v2'],
 ]);
@@ -70,8 +71,10 @@ try {
 
   const root = await mkdtemp(join(tmpdir(), 'update-test-'));
   roots.push(root);
+  await mkdir(join(root, 'shared'), { recursive: true });
   await mkdir(join(root, 'server'), { recursive: true });
   await mkdir(join(root, 'proxy'), { recursive: true });
+  await writeFile(join(root, 'shared/gamePromptContract.js'), '// 旧共享契约 v1');
   await writeFile(join(root, 'server/gameProtocol.mjs'), '// 旧协议 v1');
   await writeFile(join(root, 'proxy/server.mjs'), '// 旧代理 v1');
 
@@ -83,7 +86,7 @@ try {
     downloadAttempts: 3,
     retryDelayMs: 1,
     maxRedirects: 3,
-  }, root, () => {});
+  }, root, () => { });
   assert.ok(handler);
 
   const success = responseRecorder();
@@ -101,6 +104,7 @@ try {
   assert.ok(backupTransactions.length >= 1, '成功更新后应保留版本备份');
   const latestTransaction = backupTransactions[backupTransactions.length - 1];
   const oldContents = new Map([
+    ['shared/gamePromptContract.js', '// 旧共享契约 v1'],
     ['server/gameProtocol.mjs', '// 旧协议 v1'],
     ['proxy/server.mjs', '// 旧代理 v1'],
   ]);
@@ -110,7 +114,7 @@ try {
   }
   // 归档采用复制+删除（跨设备卷兼容），源备份文件应已被清理
   const leftoverBackups = [];
-  for (const dirName of ['server', 'proxy']) {
+  for (const dirName of ['shared', 'server', 'proxy']) {
     const names = await readdir(join(root, dirName));
     for (const name of names) {
       if (name.includes('.backup-')) leftoverBackups.push(`${dirName}/${name}`);
@@ -130,20 +134,23 @@ try {
 
   const partialRoot = await mkdtemp(join(tmpdir(), 'update-partial-'));
   roots.push(partialRoot);
+  await mkdir(join(partialRoot, 'shared'), { recursive: true });
   await mkdir(join(partialRoot, 'server'), { recursive: true });
   await mkdir(join(partialRoot, 'proxy'), { recursive: true });
+  await writeFile(join(partialRoot, 'shared/gamePromptContract.js'), '// 旧共享契约 v1');
   await writeFile(join(partialRoot, 'server/gameProtocol.mjs'), '// 旧协议 v1');
   await writeFile(join(partialRoot, 'proxy/server.mjs'), '// 旧代理 v1');
   const partialHandler = createUpdateHandler({
     passEnv: 'MAJO_UPDATE_PASS',
     source: `http://127.0.0.1:${port}/download/{file}`,
-    files: ['server/gameProtocol.mjs', 'proxy/missing.mjs'],
+    files: ['shared/gamePromptContract.js', 'server/gameProtocol.mjs', 'proxy/missing.mjs'],
     restartOnSuccess: false,
     downloadAttempts: 1,
-  }, partialRoot, () => {});
+  }, partialRoot, () => { });
   const partial = responseRecorder();
   await partialHandler(updateRequest(), partial);
   assert.equal(partial.status, 502);
+  assert.equal(await readFile(join(partialRoot, 'shared/gamePromptContract.js'), 'utf8'), '// 旧共享契约 v1');
   assert.equal(await readFile(join(partialRoot, 'server/gameProtocol.mjs'), 'utf8'), '// 旧协议 v1');
   assert.equal(await readFile(join(partialRoot, 'proxy/server.mjs'), 'utf8'), '// 旧代理 v1');
 
@@ -158,7 +165,7 @@ try {
     source: `http://127.0.0.1:${port}/download/{file}`,
     files: ['server/gameProtocol.mjs'],
     restartOnSuccess: false,
-  }, crashRoot, () => {});
+  }, crashRoot, () => { });
   assert.equal(crashRecovery.removedTemp, 1, '应清理中断残留的临时文件');
   assert.equal(crashRecovery.restored, 1, '目标缺失时应从备份恢复');
   assert.equal(await readFile(join(crashRoot, 'server/gameProtocol.mjs'), 'utf8'), '// 旧协议 v1');
@@ -174,7 +181,7 @@ try {
     source: `http://127.0.0.1:${port}/download/{file}`,
     files: ['server/gameProtocol.mjs'],
     restartOnSuccess: false,
-  }, archiveRoot, () => {});
+  }, archiveRoot, () => { });
   assert.equal(archiveRecovery.restored, 0, '目标存在时不应覆盖回旧版');
   assert.equal(await readFile(join(archiveRoot, 'server/gameProtocol.mjs'), 'utf8'), '// 新版 v2');
   const archiveBackups = await readdir(join(archiveRoot, '.runtime', 'update-backups'));
@@ -220,7 +227,7 @@ try {
     source: `http://127.0.0.1:${port}/slow/{file}`,
     files: ['proxy/server.mjs'],
     restartOnSuccess: false,
-  }, concurrentRoot, () => {});
+  }, concurrentRoot, () => { });
   const first = responseRecorder();
   const firstUpdate = concurrentHandler(updateRequest(), first);
   await slowStarted;
@@ -235,7 +242,7 @@ try {
   const signalPath = join(signalRoot, 'restart-token');
   let signalReceived;
   const received = new Promise((resolvePromise) => { signalReceived = resolvePromise; });
-  const stopWatching = await watchRestartSignal(signalPath, signalReceived, () => {});
+  const stopWatching = await watchRestartSignal(signalPath, signalReceived, () => { });
   await writeFile(signalPath, 'transaction-1');
   await Promise.race([
     received,

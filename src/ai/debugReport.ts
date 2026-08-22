@@ -1,16 +1,18 @@
 import { APP_VERSION } from '../config/version';
 import type { GameObservation } from '../domain/model';
 import type { PromptMessage } from './prompts';
-import { FREE_PROVIDER_ENDPOINT, type AiCommandError, type AiDecisionRequest, type AiProviderConfig } from './types';
+import { FREE_PROVIDER_ENDPOINT, isRetryableAiError, type AiCommandError, type AiDecisionRequest, type AiProviderConfig } from './types';
 
 export interface AiDebugReport {
-  formatVersion: 1;
+  formatVersion: 2;
   generatedAt: string;
   appVersion: string;
   error: {
     kind: AiCommandError['kind'];
     message: string;
     status: number | null;
+    remoteError: AiCommandError['remoteError'];
+    retryable: boolean;
     attempt: number;
     maxAttempts: number;
   };
@@ -92,13 +94,15 @@ export function buildAiDebugReport(options: BuildAiDebugReportOptions): AiDebugR
   const { request, config, messages, error } = options;
   const observation = request.observation;
   return {
-    formatVersion: 1,
+    formatVersion: 2,
     generatedAt: (options.generatedAt ?? new Date()).toISOString(),
     appVersion: APP_VERSION,
     error: {
       kind: error.kind,
       message: error.message,
       status: error.status,
+      remoteError: error.remoteError ? { ...error.remoteError } : null,
+      retryable: isRetryableAiError(error),
       attempt: options.attempt,
       maxAttempts: options.maxAttempts,
     },

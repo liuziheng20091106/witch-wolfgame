@@ -1,56 +1,23 @@
-export type PlayerId = 0 | 1 | 2 | 3 | 4 | 5;
-export type CharacterId =
-  | 'soul-0'
-  | 'soul-1'
-  | 'soul-2'
-  | 'soul-3'
-  | 'soul-4'
-  | 'soul-5'
-  | 'soul-6'
-  | 'soul-7'
-  | 'soul-8'
-  | 'soul-9'
-  | 'soul-10'
-  | 'soul-11'
-  | 'soul-12'
-  | 'soul-13';
-export type RoleId = 'wolf' | 'seer' | 'witch' | 'villager';
-export type Alignment = 'wolf' | 'good';
-export type WitchSkillId =
-  | 'witch-killer'
-  | 'death-rewind'
-  | 'brainwash'
-  | 'liquid-control'
-  | 'speech-restrain'
-  | 'levitation'
-  | 'healing'
-  | 'clairvoyance'
-  | 'gaze-guidance'
-  | 'soul-exchange'
-  | 'mind-reading'
-  | 'ignition'
-  | 'voice-mimic'
-  | 'witch-factor-recovery';
+import {
+  ALIGNMENTS,
+  CHARACTER_IDS,
+  DECISION_KIND_SCHEMAS,
+  DECISION_SCHEMA_KEYS,
+  GAME_PHASES,
+  PLAYER_IDS,
+  ROLE_IDS,
+  WITCH_SKILL_IDS,
+} from '../../shared/gamePromptContract.js';
+
+export type PlayerId = (typeof PLAYER_IDS)[number];
+export type CharacterId = (typeof CHARACTER_IDS)[number];
+export type RoleId = (typeof ROLE_IDS)[number];
+export type Alignment = (typeof ALIGNMENTS)[number];
+export type WitchSkillId = (typeof WITCH_SKILL_IDS)[number];
 
 export type GameMode = 'spectator' | 'player';
 export type AutomationMode = 'remote' | 'local';
-export type GamePhase =
-  | 'first-night'
-  | 'night-skills'
-  | 'wolf-suggestions'
-  | 'wolf-decision'
-  | 'witch-action'
-  | 'seer-action'
-  | 'night-protection'
-  | 'night-resolution'
-  | 'dawn'
-  | 'day-skills'
-  | 'speeches'
-  | 'vote-skills'
-  | 'voting'
-  | 'runoff'
-  | 'day-resolution'
-  | 'ended';
+export type GamePhase = (typeof GAME_PHASES)[number];
 
 export type SkillTiming =
   | 'night-start'
@@ -178,27 +145,9 @@ export interface DeathIntent {
   preventable: boolean;
 }
 
-export type DecisionSchemaKey =
-  | 'speech'
-  | 'target'
-  | 'optional-target'
-  | 'witch'
-  | 'liquid-control'
-  | 'levitation'
-  | 'voice-mimic'
-  | 'ignition';
+export type DecisionSchemaKey = (typeof DECISION_SCHEMA_KEYS)[number];
 
-export type PendingDecisionKind =
-  | 'skill'
-  | 'wolf-suggestion'
-  | 'wolf-decision'
-  | 'witch-action'
-  | 'seer-action'
-  | 'healing'
-  | 'speech'
-  | 'vote'
-  | 'runoff'
-  | 'tie-break';
+export type PendingDecisionKind = keyof typeof DECISION_KIND_SCHEMAS;
 
 export interface PendingDecision {
   id: string;

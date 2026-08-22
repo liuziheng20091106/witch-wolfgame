@@ -2,8 +2,13 @@
   "compilerOptions": {
     "target": "ES2024",
     "useDefineForClassFields": true,
-    "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "allowJs": false,
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "allowJs": true,
+    "checkJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
@@ -17,7 +22,14 @@
     "jsx": "react-jsx",
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "types": ["vite/client", "node"]
+    "types": [
+      "vite/client",
+      "node"
+    ]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": [
+    "src",
+    "shared/gamePromptContract.js",
+    "vite.config.ts"
+  ]
 }

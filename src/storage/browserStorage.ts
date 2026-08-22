@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { CharacterId, GameMode, GamePhase, GameState, PlayerId, RoleId, WitchSkillId } from '../domain/model';
+import { BOARD_DESCRIPTION, CHARACTER_IDS, GAME_PHASES, PLAYER_IDS, ROLE_IDS, WITCH_SKILL_IDS } from '../../shared/gamePromptContract.js';
+import type { CharacterId, GameMode, GameState, PlayerId } from '../domain/model';
 import type { AiProviderConfig } from '../ai/types';
 
 export const SETTINGS_KEY = 'majo-wolf.settings.v1';
@@ -37,21 +38,9 @@ export type StorageResult<T> =
   | { ok: true; value: T | null }
   | { ok: false; error: string };
 
-const characterIds = [
-  'soul-0', 'soul-1', 'soul-2', 'soul-3', 'soul-4', 'soul-5', 'soul-6',
-  'soul-7', 'soul-8', 'soul-9', 'soul-10', 'soul-11', 'soul-12', 'soul-13',
-] as const;
-const phases = [
-  'first-night', 'night-skills', 'wolf-suggestions', 'wolf-decision', 'witch-action', 'seer-action',
-  'night-protection', 'night-resolution', 'dawn', 'day-skills', 'speeches', 'vote-skills', 'voting',
-  'runoff', 'day-resolution', 'ended',
-] as const satisfies readonly GamePhase[];
-const playerIdSchema = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]);
-const roleIdSchema = z.enum(['wolf', 'seer', 'witch', 'villager'] satisfies RoleId[]);
-const skillIdSchema = z.enum([
-  'witch-killer', 'death-rewind', 'brainwash', 'liquid-control', 'speech-restrain', 'levitation', 'healing',
-  'clairvoyance', 'gaze-guidance', 'soul-exchange', 'mind-reading', 'ignition', 'voice-mimic', 'witch-factor-recovery',
-] satisfies WitchSkillId[]);
+const playerIdSchema = z.custom<PlayerId>((value) => typeof value === 'number' && PLAYER_IDS.includes(value as PlayerId));
+const roleIdSchema = z.enum(ROLE_IDS);
+const skillIdSchema = z.enum(WITCH_SKILL_IDS);
 
 const freeSettingsSchema = z.object({
   provider: z.literal('free'),
@@ -75,14 +64,14 @@ const legacySettingsSchema = z.object({
 }).passthrough();
 const setupSchema = z.strictObject({
   mode: z.enum(['spectator', 'player']),
-  humanCharacterId: z.enum(characterIds).nullable(),
+  humanCharacterId: z.enum(CHARACTER_IDS).nullable(),
   seed: z.number().int().min(0).max(0xffff_ffff),
   randomSeed: z.boolean().default(true),
 });
 const stateSchema = z.object({
   schemaVersion: z.literal(1),
   gameId: z.string().min(1),
-  board: z.string().default('6人局：狼人×2、预言家×1、女巫×1、村民×2'),
+  board: z.string().default(BOARD_DESCRIPTION),
   mode: z.enum(['spectator', 'player']),
   automationMode: z.enum(['remote', 'local']),
   usedFreeProvider: z.boolean().default(false),
@@ -90,10 +79,10 @@ const stateSchema = z.object({
   seed: z.number().int().min(0).max(0xffff_ffff),
   rngState: z.number().int().min(0).max(0xffff_ffff),
   day: z.number().int().min(0),
-  phase: z.enum(phases),
+  phase: z.enum(GAME_PHASES),
   players: z.array(z.object({
     id: playerIdSchema,
-    characterId: z.enum(characterIds),
+    characterId: z.enum(CHARACTER_IDS),
     roleAssignmentId: z.string(),
     skillInstanceId: z.string().nullable(),
     alive: z.boolean(),

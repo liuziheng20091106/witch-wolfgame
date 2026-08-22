@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import https from 'node:https';
 import { resolve } from 'node:path';
+import { INVALID_GAME_REQUEST_MESSAGE } from '../shared/gamePromptContract.js';
 import { validateChatCompletionsResponse, validateProviderResponse, validatePublicPayload } from '../server/gameProtocol.mjs';
 import { INTERNAL_PATH, configPath, logEvent, parseJsonBody, pruneNonces, readBody, readJsonFile, requireEnv, sendJson, verifySignedRequest, watchRestartSignal } from '../server/shared.mjs';
 import { createUpdateHandler, recoverInterruptedUpdate } from './update.mjs';
@@ -310,8 +311,23 @@ export async function startProxyServer(configFile = process.env.MAJO_PROXY_CONFI
       if (!verifySignedRequest(password, request, url.pathname, body, nonceStore)) return sendJson(response, 401, { error: 'invalid_internal_signature' });
       const payload = parseJsonBody(body);
       sessionId = request.headers['x-majo-wolf-session'] ?? null;
-      const validationError = validatePublicPayload(payload, acceptedVersions);
-      if (validationError) return sendJson(response, 400, { error: 'invalid_game_request', message: validationError });
+      const validation = validatePublicPayload(payload, acceptedVersions);
+      if (!validation.ok) {
+        logEvent('warn', 'proxy_error', {
+          sessionId,
+          status: 400,
+          durationMs: Date.now() - startedAt,
+          code: 'invalid_game_request',
+          reason: validation.reason,
+          path: validation.path,
+        });
+        return sendJson(response, 400, {
+          error: 'invalid_game_request',
+          message: INVALID_GAME_REQUEST_MESSAGE,
+          reason: validation.reason,
+          path: validation.path,
+        });
+      }
       logEvent('info', 'proxy_request', { sessionId, bytes: body.length });
       const result = await pool.request(payload, sessionId);
       logEvent('info', 'proxy_success', { sessionId, provider: result.providerName, durationMs: Date.now() - startedAt });

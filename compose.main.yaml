@@ -18,6 +18,7 @@ services:
       - "127.0.0.1:34022:34022"
     volumes:
       - ./app/server:/app/server:rw
+      - ./app/shared:/app/shared:rw
       - ./main.config.json:/data/main.config.json:ro
       - ./certs/ca.crt:/certs/ca.crt:ro
       - ./certs/main-client.crt:/certs/main-client.crt:ro

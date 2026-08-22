@@ -1,3 +1,4 @@
+import { buildGameSystemPrompt, formatPublicSkill, isAllowedDecisionPair } from '../../shared/gamePromptContract.js';
 import { characterById } from '../domain/catalog/characters';
 import { roleDescriptions, roleNames } from '../domain/catalog/roles';
 import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
@@ -8,19 +9,12 @@ export interface PromptMessage {
   content: string;
 }
 
-const exampleBySchema = {
-  speech: '{"speech":"我会根据公开记录继续判断。"}',
-  target: '{"targetPlayerId":2}',
-  'optional-target': '{"use":true,"targetPlayerId":2}',
-  witch: '{"save":true,"poisonTargetPlayerId":null}',
-  'liquid-control': '{"use":true,"mode":"extract","targetPlayerId":2,"factId":null}',
-  levitation: '{"use":true,"mode":"move-last","targetPlayerId":2}',
-  'voice-mimic': '{"use":true,"targetPlayerId":2,"forgedSpeech":"我暂时相信3号。"}',
-  ignition: '{"use":true}',
-} as const;
 
 export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[] {
   const { observation, pendingDecision } = request;
+  if (!isAllowedDecisionPair(pendingDecision.kind, pendingDecision.schemaKey)) {
+    throw new Error('当前决策不属于受支持的提示词契约');
+  }
   const actor = observation.players.find((player) => player.id === pendingDecision.actorId);
   if (!actor) {
     throw new Error('观察视图缺少当前行动者');
@@ -64,10 +58,11 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
     }));
   // 公开技能按角色默认技生成：与开局公开播报一致，始终恰好 6 项且唯一；
   // 魔女因子回收等技能转移通过公开事件（factor-recovered）向 AI 呈现。
-  const publicSkills = observation.players.map((player) => {
-    const definition = witchSkillDefinitions[defaultSkillByCharacterId[player.characterId]];
-    return { playerId: player.id, name: player.name, skill: `${definition.name}：${definition.description}` };
-  });
+  const publicSkills = observation.players.map((player) => ({
+    playerId: player.id,
+    name: player.name,
+    skill: formatPublicSkill(defaultSkillByCharacterId[player.characterId]),
+  }));
   const visibleRole = actor.roleId ? `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}` : '未公开';
   const visibleSkill = actor.skillId
     ? `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}${skillUsageHints[actor.skillId] ?? ''}`
@@ -80,7 +75,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
   return [
     {
       role: 'system',
-      content: `你正在进行六人魔女狼人杀。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${exampleBySchema[pendingDecision.schemaKey]}`,
+      content: buildGameSystemPrompt(pendingDecision.schemaKey),
     },
     {
       role: 'user',
