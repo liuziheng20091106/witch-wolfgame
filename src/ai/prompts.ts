@@ -104,7 +104,15 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
       return { playerId, name: playerId === 0 ? '解药' : '毒药' };
     }
     const player = observation.players.find((entry) => entry.id === playerId);
-    return { playerId, name: player?.name ?? `${playerId + 1}号` };
+    const name = player?.name ?? `${playerId + 1}号`;
+    // 声音模仿：把每个候选的说话风格直接附在候选上，避免 AI 混淆"发言顺序"与"座位号"而用错人设
+    if (pendingDecision.schemaKey === 'voice-mimic' && Array.isArray(pendingDecision.options.mimicVoices)) {
+      const voice = (pendingDecision.options.mimicVoices as Array<{ playerId: number; speechStyle: string }>).find((entry) => entry.playerId === playerId);
+      if (voice) {
+        return { playerId, name, speechStyle: voice.speechStyle };
+      }
+    }
+    return { playerId, name };
   });
 
   return [
