@@ -69,8 +69,9 @@ export function applyPostGameSpeech(state: GameState, pending: PendingDecision, 
   if (speech.length > 100) {
     throw new Error('赛后发言不能超过 100 字');
   }
-  // 文本只保留发言内容：UI 已通过 displayAuthorPlayerId 渲染头像与名字，无需在文本中重复
-  const text = speech.length > 0 ? speech : `${nameOf(state, pending.actorId)} 没有留下赛后感想。`;
+  // 文本只保留发言内容：UI 已通过 displayAuthorPlayerId 渲染头像与名字，无需在文本中重复。
+  // 空发言使用不含作者名的固定占位文本，避免时间线重复显示作者、或被 AI 复盘误认为本人发言。
+  const text = speech.length > 0 ? speech : '（没有留下赛后感想）';
   addPublicEvent(state, 'post-game-speech', text, {
     actorPlayerId: pending.actorId,
     targetPlayerIds: [pending.actorId],
@@ -130,5 +131,25 @@ export function buildPostGameContext(observation: GameObservation): string {
       lines.push(`${dayOf(event)} 私密行动：${event.text}`);
     }
   }
-  return lines.join('\n');
+  // 限制复盘上下文长度：超长对局（反复平票/大量回溯归档）可能超出模型上下文上限。
+  // 按行保留末尾内容，避免从字符中间截断切断一句话，并标注较早记录被省略。
+  const maxContextLength = 24_000;
+  let context = lines.join('\n');
+  if (context.length > maxContextLength) {
+    const kept: string[] = [];
+    let keptLength = 0;
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      const line = lines[index];
+      if (line === undefined) {
+        continue;
+      }
+      if (keptLength + line.length + 1 > maxContextLength) {
+        break;
+      }
+      kept.unshift(line);
+      keptLength += line.length + 1;
+    }
+    context = `【较早记录因长度限制已省略，以下为最新时间线】\n${kept.join('\n')}`;
+  }
+  return context;
 }
