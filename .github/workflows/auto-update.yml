@@ -6,6 +6,7 @@ on:
     paths:
       - 'server/**'
       - 'proxy/**'
+      - 'shared/**'
   workflow_dispatch:
 
 jobs:
