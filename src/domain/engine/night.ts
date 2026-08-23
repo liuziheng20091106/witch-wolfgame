@@ -78,6 +78,19 @@ function rewindForDeath(state: GameState, deadPlayerIds: PlayerId[]): GameState 
   return restored;
 }
 
+export function finalizeGameIfWon(state: GameState): boolean {
+  if (state.result) {
+    state.phase = 'ended';
+    return true;
+  }
+  const result = checkWin(state);
+  if (!result) return false;
+  state.result = result;
+  state.phase = 'ended';
+  addPublicEvent(state, 'result', result.winner === 'wolf' ? '狼人达到人数优势，狼人阵营获胜。' : '所有狼人均已出局，好人阵营获胜。');
+  return true;
+}
+
 export function resolveDeathBatch(
   state: GameState,
   deaths: Array<{ playerId: PlayerId; sources: DeathIntent['source'][] }>,
@@ -107,12 +120,6 @@ export function resolveDeathBatch(
   const rewound = rewindForDeath(state, newlyDead);
   if (rewound) {
     return rewound;
-  }
-  const result = checkWin(state);
-  if (result) {
-    state.result = result;
-    state.phase = 'ended';
-    addPublicEvent(state, 'result', result.winner === 'wolf' ? '狼人达到人数优势，狼人阵营获胜。' : '所有狼人均已出局，好人阵营获胜。');
   }
   return state;
 }
@@ -153,7 +160,7 @@ export function resolveNight(state: GameState): GameState {
     }
     return !(intent.preventable && protectedTargets.has(intent.targetPlayerId));
   });
-  const grouped = new Map<PlayerId, DeathIntent['source'][] >();
+  const grouped = new Map<PlayerId, DeathIntent['source'][]>();
   for (const intent of survivingIntents) {
     const sources = grouped.get(intent.targetPlayerId) ?? [];
     if (!sources.includes(intent.source)) {
@@ -165,20 +172,18 @@ export function resolveNight(state: GameState): GameState {
     state,
     [...grouped.entries()].map(([playerId, sources]) => ({ playerId, sources })),
   );
-  if (resolved.phase === 'ended') {
-    return resolved;
-  }
+  // 死亡回溯返回晨间快照，当前死亡批次已被撤销，不进入遗言或胜负结算。
+  if (resolved !== state) return resolved;
   // 遗言：夜间死亡结算后，若有合格死者需要发布遗言，保持 night-resolution 阶段等待遗言决策。
-  // 多个死者时逐个询问：提交一次遗言后 advance 会再次进入本阶段，幂等重跑直至全部发完。
+  // 多个死者时逐个询问；只有全部遗言结束后才确认最终胜负。
   const lastWords = getNextLastWordsDecision(resolved);
   if (lastWords) {
     resolved.pendingDecision = lastWords;
     resolved.phase = 'night-resolution';
     return resolved;
   }
-  if (resolved === state) {
-    resolved.phase = 'dawn';
-  }
+  if (finalizeGameIfWon(resolved)) return resolved;
+  resolved.phase = 'dawn';
   return resolved;
 }
 

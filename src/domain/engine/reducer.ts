@@ -40,7 +40,7 @@ import {
   publishSpeech,
 } from '../skills/registry';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from './events';
-import { refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
+import { finalizeGameIfWon, refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
 import { getAlivePlayerIds, getName, getPlayer, getRoleAssignment, getSkillInstance } from './selectors';
 import { exhaustSkill } from '../skills/types';
 import { resolveVotes } from './vote';
@@ -448,11 +448,8 @@ function advanceDayResolution(state: GameState): GameState {
     const targetPlayerId = exile.data.exileTargetPlayerId as PlayerId;
     if (getPlayer(state, targetPlayerId).alive) {
       const resolved = resolveDeathBatch(state, [{ playerId: targetPlayerId, sources: [] }]);
-      // 死亡回溯：resolveDeathBatch 返回新状态（死者被救回），无需遗言，直接返回。
-      // 游戏结束：胜负已定，不询问遗言。
-      if (resolved !== state || resolved.phase === 'ended') {
-        return resolved;
-      }
+      // 死亡回溯返回新状态（死者被救回），当前放逐与遗言均被撤销。
+      if (resolved !== state) return resolved;
     }
   }
   // 遗言：白天放逐死亡结算后，若有合格死者需要发布遗言，保持 day-resolution 阶段等待遗言决策。
@@ -463,6 +460,7 @@ function advanceDayResolution(state: GameState): GameState {
     state.pendingDecision = lastWords;
     return state;
   }
+  if (finalizeGameIfWon(state)) return state;
   for (const skill of state.skillInstances) {
     if (skill.definitionId === 'brainwash' && skill.data.activeDay === state.day) {
       delete skill.data.activeDay;

@@ -26,13 +26,15 @@ const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
 
 let createGame, reduceGame, fallbackDecision, getRoleAssignment, getSkillInstance, getName;
-let applyNightSkillDecision, getNextNightSkillDecision;
+let applyNightSkillDecision, getNextNightSkillDecision, checkWin, loadGame, GAME_KEY;
 try {
   ({ createGame } = await server.ssrLoadModule('/src/domain/engine/createGame.ts'));
   ({ reduceGame } = await server.ssrLoadModule('/src/domain/engine/reducer.ts'));
   ({ fallbackDecision } = await server.ssrLoadModule('/src/ai/fallback.ts'));
   ({ getRoleAssignment, getSkillInstance, getName } = await server.ssrLoadModule('/src/domain/engine/selectors.ts'));
   ({ applyNightSkillDecision, getNextNightSkillDecision } = await server.ssrLoadModule('/src/domain/skills/nightSkills.ts'));
+  ({ checkWin } = await server.ssrLoadModule('/src/domain/engine/win.ts'));
+  ({ loadGame, GAME_KEY } = await server.ssrLoadModule('/src/storage/browserStorage.ts'));
 } finally {
   // 保持 server 打开
 }
@@ -107,6 +109,19 @@ function driveCreature(game, pending, decision) {
   return next;
 }
 
+function createCreatureWithRole(seedStart, roleId) {
+  for (let seed = seedStart; seed < seedStart + 800; seed += 1) {
+    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const ownerId = findLiquidOwner(game);
+    if (ownerId < 0 || getRoleAssignment(game, ownerId).roleId !== roleId) continue;
+    const advanced = advanceToLiquid(game);
+    if (!advanced) continue;
+    const withCreature = driveCreature(advanced.state, advanced.pending, { use: true });
+    if (getRoleAssignment(withCreature, 99).roleId === roleId) return withCreature;
+  }
+  return null;
+}
+
 // ===== 1. 创造造物 =====
 console.log('=== 1. 创造造物 ===');
 {
@@ -170,8 +185,37 @@ console.log('=== 3. 预言家造物 ===');
   check('造物是预言家', getRoleAssignment(after, 99).roleId === 'seer');
 }
 
-// ===== 4. 完整对局 =====
-console.log('=== 4. 完整对局（本地策略）===');
+// ===== 4. 造物计入胜负人数 =====
+console.log('=== 4. 造物计入胜负 ===');
+{
+  const goodCreatureGame = createCreatureWithRole(30, 'villager');
+  check('找到好人造物对局', goodCreatureGame !== null);
+  if (!goodCreatureGame) process.exit(1);
+  const ownerId = goodCreatureGame.creatures[0].ownerPlayerId;
+  const otherGood = goodCreatureGame.players.find(
+    (player) => player.id !== ownerId && getRoleAssignment(goodCreatureGame, player.id).roleId !== 'wolf',
+  );
+  if (!otherGood) process.exit(1);
+  for (const player of goodCreatureGame.players) {
+    const roleId = getRoleAssignment(goodCreatureGame, player.id).roleId;
+    player.alive = roleId === 'wolf' || player.id === ownerId || player.id === otherGood.id;
+  }
+  check('好人造物阻止狼人过早达到人数优势', checkWin(goodCreatureGame) === null);
+
+  const wolfCreatureGame = createCreatureWithRole(830, 'wolf');
+  check('找到狼人造物对局', wolfCreatureGame !== null);
+  if (!wolfCreatureGame) process.exit(1);
+  for (const player of wolfCreatureGame.players) {
+    player.alive = getRoleAssignment(wolfCreatureGame, player.id).roleId !== 'wolf';
+  }
+  check('狼人造物存活时不会误判狼人全灭', checkWin(wolfCreatureGame)?.winner !== 'good');
+  const livingGood = wolfCreatureGame.players.filter((player) => player.alive);
+  for (const player of livingGood.slice(1)) player.alive = false;
+  check('狼人造物参与人数优势计算', checkWin(wolfCreatureGame)?.winner === 'wolf');
+}
+
+// ===== 5. 完整对局 =====
+console.log('=== 5. 完整对局（本地策略）===');
 {
   let game = createGameWithLiquid(42);
   if (!game) {
@@ -192,8 +236,8 @@ console.log('=== 4. 完整对局（本地策略）===');
   check('对局未死循环', guard < 3000);
 }
 
-// ===== 5. 存档往返：含造物的对局应能被存档 schema 接受 =====
-console.log('=== 5. 存档往返（含造物）===');
+// ===== 6. 存档往返：含造物的对局应能被存档 schema 接受 =====
+console.log('=== 6. 存档往返（含造物）===');
 {
   const game = createGameWithLiquid(6);
   if (!game) {
@@ -209,6 +253,28 @@ console.log('=== 5. 存档往返（含造物）===');
   const restored = JSON.parse(json);
   check('存档往返保留造物', restored.creatures.length === 1 && restored.creatures[0].id === 99);
   check('存档 roleAssignments 含造物分配（>6）', restored.roleAssignments.length >= 7);
+}
+
+// ===== 7. 旧回溯检查点迁移 =====
+console.log('=== 7. 旧回溯检查点迁移 ===');
+{
+  const legacyGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 1001 >>> 0 });
+  delete legacyGame.creatures;
+  delete legacyGame.knowledgeByPlayer[99];
+  delete legacyGame.morningCheckpoint.creatures;
+  delete legacyGame.morningCheckpoint.knowledgeByPlayer[99];
+  const raw = JSON.stringify({ schemaVersion: 1, savedAt: new Date().toISOString(), state: legacyGame });
+  const previousLocalStorage = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem(key) { return key === GAME_KEY ? raw : null; },
+    setItem() { },
+    removeItem() { },
+  };
+  const loaded = loadGame();
+  check('旧存档顶层补齐造物字段', loaded.ok && Array.isArray(loaded.value?.state.creatures) && Array.isArray(loaded.value?.state.knowledgeByPlayer[99]));
+  check('旧存档回溯检查点补齐造物字段', loaded.ok && Array.isArray(loaded.value?.state.morningCheckpoint?.creatures) && Array.isArray(loaded.value?.state.morningCheckpoint?.knowledgeByPlayer[99]));
+  if (previousLocalStorage === undefined) delete globalThis.localStorage;
+  else globalThis.localStorage = previousLocalStorage;
 }
 
 console.log('');

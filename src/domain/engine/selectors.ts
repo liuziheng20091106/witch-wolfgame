@@ -1,3 +1,4 @@
+import { CREATURE_ID, formatCreatureName } from '../../../shared/gamePromptContract.js';
 import { characterById } from '../catalog/characters';
 import { roleAlignment } from '../catalog/roles';
 import type {
@@ -9,8 +10,6 @@ import type {
   RoleAssignmentState,
   WitchSkillInstance,
 } from '../model';
-
-export const CREATURE_ID = 99;
 
 export function isCreatureId(playerId: PlayerId): boolean {
   return playerId === CREATURE_ID;
@@ -26,7 +25,7 @@ export function getName(state: GameState, playerId: PlayerId): string {
   if (playerId === CREATURE_ID) {
     const creature = getCreature(state);
     const ownerName = creature ? getName(state, creature.ownerPlayerId) : '诺亚';
-    return `${ownerName}的造物`;
+    return formatCreatureName(ownerName);
   }
   const player = state.players.find((entry) => entry.id === playerId);
   if (!player) {
@@ -125,7 +124,7 @@ export function selectObservation(
     players.push({
       id: creature.id,
       characterId: creature.characterId,
-      name: `${ownerName}的造物`,
+      name: formatCreatureName(ownerName),
       avatarUrl: ownerCharacter.avatarUrl,
       alive: true,
       roleId: showPrivate ? assignment.roleId : null,

@@ -2,6 +2,19 @@ const freeze = Object.freeze;
 
 export const PLAYER_IDS = freeze(/** @type {const} */([0, 1, 2, 3, 4, 5]));
 
+export const CREATURE_ID = 99;
+export const GAME_ENTITY_IDS = freeze([...PLAYER_IDS, CREATURE_ID]);
+
+export const POTION_CHOICE_CATALOG = freeze([
+ freeze(/** @type {const} */({ playerId: 0, name: '解药' })),
+ freeze(/** @type {const} */({ playerId: 1, name: '毒药' })),
+]);
+
+/** @param {string} ownerName */
+export function formatCreatureName(ownerName) {
+ return `${ownerName}的造物`;
+}
+
 export const ROLE_CATALOG = freeze([
  freeze(/** @type {const} */({ id: 'wolf', name: '狼人', description: '与狼队协作，每夜选择一名好人袭击。狼人达到好人人数时获胜。', alignment: 'wolf' })),
  freeze(/** @type {const} */({ id: 'seer', name: '预言家', description: '每夜查验一名其他存活者的当前职业。', alignment: 'good' })),
@@ -135,8 +148,8 @@ export const PROMPT_LIMITS = freeze(/** @type {const} */({
  dayMin: 0,
  dayMax: 100,
  alivePlayersMinItems: 1,
- alivePlayersMaxItems: 6,
- legalCandidatesMaxItems: 6,
+ alivePlayersMaxItems: 7,
+ legalCandidatesMaxItems: 7,
  optionsMaxJsonLength: 8_000,
  currentDaySpeechesMaxItems: 6,
  historicalSpeechesMaxItems: 12,

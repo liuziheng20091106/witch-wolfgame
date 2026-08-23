@@ -1,6 +1,7 @@
 import { Eye, Skull, Sparkles, UserRound } from 'lucide-react';
 import { roleNames } from '../../domain/catalog/roles';
 import { witchSkillDefinitions } from '../../domain/catalog/witchSkills';
+import { isCreatureId } from '../../domain/engine/selectors';
 import type { GameObservation, PlayerId } from '../../domain/model';
 import styles from './PlayerRoster.module.css';
 
@@ -11,11 +12,12 @@ interface PlayerRosterProps {
 }
 
 export function PlayerRoster({ observation, currentActorId, onSelect }: PlayerRosterProps) {
+  const hasCreature = observation.players.some((player) => isCreatureId(player.id));
   return <section className={styles.roster} aria-labelledby="roster-title">
-    <header><span>CAST / 06</span><h2 id="roster-title">出庭席位</h2></header>
-    <div className={styles.list}>
+    <header><span>{hasCreature ? 'CAST / 06 + 01' : 'CAST / 06'}</span><h2 id="roster-title">{hasCreature ? '出庭席位 / 造物' : '出庭席位'}</h2></header>
+    <div className={`${styles.list} ${hasCreature ? styles.listWithCreature : ''}`}>
       {observation.players.map((player) => <button key={player.id} type="button" className={`${styles.player} ${!player.alive ? styles.dead : ''} ${currentActorId === player.id ? styles.current : ''}`} onClick={() => onSelect(player.id)}>
-        <span className={styles.number}>{player.id + 1}</span>
+        <span className={styles.number}>{isCreatureId(player.id) ? '造物' : player.id + 1}</span>
         <img src={player.avatarUrl} alt="" />
         <span className={styles.identity}>
           <strong>{player.name}</strong>

@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 /**
  * 验证遗言决策在 AI 提示词链路的兼容性：
- * 1. isAllowedDecisionPair('speech', 'speech') 通过（后端契约校验等价）
+ * 1. isAllowedDecisionPair('speech', 'speech') 通过
  * 2. buildDecisionPrompt 能为死者 actor 组装提示词（无异常）
- * 3. parseDecision 能解析 AI 返回的 {speech}
+ * 3. 真实消息通过后端 validateGamePrompt
+ * 4. parseDecision 能解析 AI 返回的 {speech}
  */
 import { createServer } from 'vite';
 import { resolve } from 'node:path';
+import { validateGamePrompt } from '../server/gameProtocol.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
@@ -92,6 +94,8 @@ if (prompt) {
   check('action.title 为遗言', payload.action.title === '遗言');
   check('actor 是死者', payload.actor.playerId === pending.actorId);
   check('alivePlayers 不含死者', !payload.alivePlayers.some((p) => p.playerId === pending.actorId));
+  const validation = validateGamePrompt(prompt);
+  check('真实遗言提示词通过后端验证', validation.ok, JSON.stringify(validation));
 }
 
 // parseDecision 解析 AI 返回

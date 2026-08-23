@@ -1,5 +1,6 @@
 import {
   ALIGNMENTS,
+  CREATURE_ID,
   CHARACTER_IDS,
   DECISION_KIND_SCHEMAS,
   DECISION_SCHEMA_KEYS,
@@ -9,9 +10,8 @@ import {
   WITCH_SKILL_IDS,
 } from '../../shared/gamePromptContract.js';
 
+export type CreatureId = typeof CREATURE_ID;
 export type PlayerId = (typeof PLAYER_IDS)[number] | CreatureId;
-/** 造物专用 id 段（诺亚的忆灵，避开 0-5 玩家座位） */
-export type CreatureId = 99;
 export type CharacterId = (typeof CHARACTER_IDS)[number];
 export type RoleId = (typeof ROLE_IDS)[number];
 export type Alignment = (typeof ALIGNMENTS)[number];

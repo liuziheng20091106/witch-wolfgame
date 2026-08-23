@@ -1,28 +1,35 @@
 import {
   ALIGNMENTS,
   BOARD_DESCRIPTION,
+  CREATURE_ID,
   buildGameSystemPrompt,
   CHARACTER_CATALOG,
   DECISION_SCHEMA_KEYS,
   FREE_CLIENT_PROTOCOL,
+  GAME_ENTITY_IDS,
   GAME_PHASES,
   PLAYER_IDS,
+  POTION_CHOICE_CATALOG,
   PROMPT_FIELD_KEYS,
   PROMPT_LIMITS,
   ROLE_IDS,
   WITCH_SKILL_IDS,
   formatPublicSkill,
+  formatCreatureName,
   isAllowedDecisionPair,
 } from '../shared/gamePromptContract.js';
 
 const SCHEMAS = new Set(DECISION_SCHEMA_KEYS);
 const PHASES = new Set(GAME_PHASES);
 const CHARACTER_NAMES = new Set(CHARACTER_CATALOG.map((character) => character.name));
+const CREATURE_NAMES = new Set(CHARACTER_CATALOG.map((character) => formatCreatureName(character.name)));
 const BOARD_DESCRIPTIONS = new Set([BOARD_DESCRIPTION]);
 const PUBLIC_SKILLS = new Set(WITCH_SKILL_IDS.map((skillId) => formatPublicSkill(skillId)));
 const ROLE_VALUES = new Set(ROLE_IDS);
 const ALIGNMENT_VALUES = new Set(ALIGNMENTS);
 const PLAYER_ID_VALUES = new Set(PLAYER_IDS);
+const ENTITY_ID_VALUES = new Set(GAME_ENTITY_IDS);
+const POTION_CHOICE_NAMES = new Map(POTION_CHOICE_CATALOG.map((choice) => [choice.playerId, choice.name]));
 const PAYLOAD_KEYS = new Set(PROMPT_FIELD_KEYS.payload);
 const CLIENT_KEYS = new Set(PROMPT_FIELD_KEYS.client);
 const MESSAGE_KEYS = new Set(PROMPT_FIELD_KEYS.message);
@@ -54,21 +61,32 @@ function boundedStrings(value, maxItems, maxLength) {
   return Array.isArray(value) && value.length <= maxItems && value.every((entry) => typeof entry === 'string' && entry.length <= maxLength);
 }
 
-function validPlayerId(value) {
-  return PLAYER_ID_VALUES.has(value);
+function validEntityId(value) {
+  return ENTITY_ID_VALUES.has(value);
+}
+
+function validEntityName(playerId, name) {
+  if (playerId === CREATURE_ID) return CREATURE_NAMES.has(name);
+  return PLAYER_ID_VALUES.has(playerId) && CHARACTER_NAMES.has(name);
 }
 
 function validObservedPlayer(value) {
   return isObject(value)
     && hasOnlyKeys(value, OBSERVED_PLAYER_KEYS)
-    && validPlayerId(value.playerId)
-    && CHARACTER_NAMES.has(value.name);
+    && validEntityId(value.playerId)
+    && validEntityName(value.playerId, value.name);
+}
+
+function validPotionChoice(value) {
+  return isObject(value)
+    && hasOnlyKeys(value, OBSERVED_PLAYER_KEYS)
+    && POTION_CHOICE_NAMES.get(value.playerId) === value.name;
 }
 
 function validPublicSkill(value) {
   return isObject(value)
     && hasOnlyKeys(value, PUBLIC_SKILL_KEYS)
-    && validPlayerId(value.playerId)
+    && PLAYER_ID_VALUES.has(value.playerId)
     && CHARACTER_NAMES.has(value.name)
     && PUBLIC_SKILLS.has(value.skill);
 }
@@ -117,7 +135,7 @@ export function validateGamePrompt(messages) {
   if (!isObject(prompt.actor) || !hasOnlyKeys(prompt.actor, ACTOR_KEYS)) {
     return invalidResult('actor_keys', 'actor');
   }
-  if (!validPlayerId(prompt.actor.playerId) || !CHARACTER_NAMES.has(prompt.actor.name)) {
+  if (!validEntityId(prompt.actor.playerId) || !validEntityName(prompt.actor.playerId, prompt.actor.name)) {
     return invalidResult('actor_identity', 'actor');
   }
   if (typeof prompt.actor.personality !== 'string'
@@ -162,9 +180,12 @@ export function validateGamePrompt(messages) {
   if (new Set(prompt.alivePlayers.map((entry) => entry.playerId)).size !== prompt.alivePlayers.length) {
     return invalidResult('alive_players_unique', 'alivePlayers.playerId');
   }
+  const validLegalCandidate = isObject(prompt.options) && prompt.options.potionChoice === true
+    ? validPotionChoice
+    : validObservedPlayer;
   if (!Array.isArray(prompt.legalCandidates)
     || prompt.legalCandidates.length > PROMPT_LIMITS.legalCandidatesMaxItems
-    || !prompt.legalCandidates.every(validObservedPlayer)) {
+    || !prompt.legalCandidates.every(validLegalCandidate)) {
     return invalidResult('legal_candidates_shape', 'legalCandidates');
   }
   if (new Set(prompt.legalCandidates.map((entry) => entry.playerId)).size !== prompt.legalCandidates.length) {
@@ -193,7 +214,7 @@ export function validateGamePrompt(messages) {
   }
   if (!prompt.privateKnowledge.every((fact) => isObject(fact)
     && hasOnlyKeys(fact, PRIVATE_KNOWLEDGE_KEYS)
-    && validPlayerId(fact.subjectPlayerId)
+    && validEntityId(fact.subjectPlayerId)
     && ((fact.kind === 'role' && ROLE_VALUES.has(fact.value)) || (fact.kind === 'alignment' && ALIGNMENT_VALUES.has(fact.value)))
     && Number.isInteger(fact.observedDay)
     && fact.observedDay >= PROMPT_LIMITS.dayMin

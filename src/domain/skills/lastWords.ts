@@ -9,7 +9,7 @@ import type {
 import { addPublicEvent } from '../engine/events';
 import { getName } from '../engine/selectors';
 import { exhaustSkill } from './types';
-import { isRestrainedToday } from './speechSkills';
+import { attachBrainwashSuggestion, isRestrainedToday } from './speechSkills';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return getName(state, playerId);
@@ -48,7 +48,7 @@ function canGiveLastWords(state: GameState, playerId: PlayerId, death: TimelineE
 
 /** 构造遗言决策：复用 speech schema（{speech: ≤100 字}），options.lastWords 标记区分。 */
 function makeLastWordsDecision(state: GameState, actorId: PlayerId): PendingDecision {
-  return {
+  const pending: PendingDecision = {
     id: `${state.gameId}-decision-${state.day}-last-words-${actorId}`,
     kind: 'speech',
     schemaKey: 'speech',
@@ -60,6 +60,8 @@ function makeLastWordsDecision(state: GameState, actorId: PlayerId): PendingDeci
     skillInstanceId: null,
     options: { lastWords: true },
   };
+  attachBrainwashSuggestion(state, pending);
+  return pending;
 }
 
 /**

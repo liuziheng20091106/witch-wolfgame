@@ -68,6 +68,10 @@ function findGameWithSkill(definitionId, seedStart) {
   return null;
 }
 
+function hasDeathRewind(game, playerId) {
+  return game.skillInstances.some((skill) => skill.definitionId === 'death-rewind' && skill.ownerPlayerId === playerId);
+}
+
 /** 注入一条夜间死亡意图（狼刀/毒药/精准击杀），resolveNight 会据此结算。 */
 function injectNightDeath(game, targetPlayerId, source, actorPlayerId) {
   let kind = 'skill';
@@ -194,6 +198,32 @@ console.log('=== 2. 首夜多死者 → 逐个遗言 ===');
   check('两名死者都已发布遗言', lastWordsEvents(afterSecond).filter((e) => e.actorPlayerId === goodVictim.id || e.actorPlayerId === wolfVictim.id).length === 2);
 }
 
+// ===== 2b. 首夜双死触发狼人优势 → 两人遗言后才终局 =====
+console.log('=== 2b. 首夜双死触发胜负 → 遗言后终局 ===');
+{
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 912 >>> 0 });
+  const wolf = game.players.find((player) => getRoleAssignment(game, player.id).roleId === 'wolf');
+  const victims = game.players
+    .filter((player) => getRoleAssignment(game, player.id).roleId !== 'wolf' && !hasDeathRewind(game, player.id))
+    .slice(0, 2);
+  check('找到两名不会回溯的首夜好人死者', wolf !== undefined && victims.length === 2);
+  if (!wolf || victims.length !== 2) process.exit(1);
+  injectNightDeath(game, victims[0].id, 'wolf', wolf.id);
+  injectNightDeath(game, victims[1].id, 'poison', wolf.id);
+  let current = resolveNight(game);
+  check('触发人数优势后仍先询问首个遗言', current.result === null && current.pendingDecision?.options.lastWords === true);
+  const firstActor = current.pendingDecision?.actorId;
+  current = submitPendingLastWords(current, '第一位死者遗言。');
+  current = reduceGame(current, { type: 'advance' });
+  check('首个遗言后继续询问第二个死者', current.result === null && current.pendingDecision?.options.lastWords === true && current.pendingDecision.actorId !== firstActor);
+  current = submitPendingLastWords(current, '第二位死者遗言。');
+  check('全部遗言提交前不写入胜负', current.result === null);
+  current = reduceGame(current, { type: 'advance' });
+  check('全部遗言完成后狼人才获胜', current.phase === 'ended' && current.result?.winner === 'wolf');
+  const eventKinds = current.publicEvents.map((event) => event.kind);
+  check('结果事件位于两条遗言之后', eventKinds.lastIndexOf('result') > eventKinds.lastIndexOf('last-words') && lastWordsEvents(current).length === 2);
+}
+
 // ===== 3. 第二夜狼刀死亡 → 无遗言 =====
 console.log('=== 3. 第二夜（day 1）夜晚死亡 → 无遗言 ===');
 {
@@ -225,6 +255,26 @@ console.log('=== 4. 白天放逐 → 遗言 ===');
     const submitted = submitPendingLastWords(after, '我是村民，狼是3号！');
     check('放逐遗言发布为公开事件', lastWordsEvents(submitted).some((e) => e.actorPlayerId === villagerId.id));
   }
+}
+
+// ===== 4b. 白天放逐触发人数优势 → 放逐者遗言后才终局 =====
+console.log('=== 4b. 白天放逐触发胜负 → 遗言后终局 ===');
+{
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 913 >>> 0 });
+  game.day = 1;
+  const safeGood = game.players.filter(
+    (player) => getRoleAssignment(game, player.id).roleId !== 'wolf' && !hasDeathRewind(game, player.id),
+  );
+  check('找到两名不会回溯的白天好人', safeGood.length >= 2);
+  if (safeGood.length < 2) process.exit(1);
+  safeGood[0].alive = false;
+  let current = injectDayExile(game, safeGood[1].id);
+  check('放逐触发人数优势后仍出现遗言', current.result === null && current.pendingDecision?.actorId === safeGood[1].id && current.pendingDecision.options.lastWords === true);
+  current = submitPendingLastWords(current, '放逐者最后陈述。');
+  check('遗言提交后等待结算推进', current.result === null && current.phase === 'day-resolution');
+  current = reduceGame(current, { type: 'advance' });
+  check('放逐遗言后狼人才获胜', current.phase === 'ended' && current.result?.winner === 'wolf');
+  check('放逐遗言早于结果事件', current.publicEvents.findIndex((event) => event.kind === 'last-words') < current.publicEvents.findIndex((event) => event.kind === 'result'));
 }
 
 // ===== 5. 魔女杀手（precise-kill）→ 无遗言 =====
@@ -292,22 +342,40 @@ console.log('=== 7. 禁言者放逐 → 无遗言 ===');
 // ===== 8. 遗言洗脑联动：安安在遗言中发动洗脑 =====
 console.log('=== 8. 遗言洗脑（夏目安安）===');
 {
-  const game = findGameWithSkill('brainwash', 600);
-  check('找到含洗脑的对局', game !== null);
-  if (!game) process.exit(1);
-  const ananId = findSkillOwner(game, 'brainwash');
-  const wolfId = game.players.find((p) => getRoleAssignment(game, p.id).roleId === 'wolf');
-  injectNightDeath(game, ananId, 'wolf', wolfId.id);
-  const resolved = resolveNight(game);
-  const pending = resolved.pendingDecision;
-  check('安安首夜死亡有遗言决策', pending !== null && pending.actorId === ananId && pending.options.lastWords === true);
-  if (pending) {
-    const after = submitPendingLastWords(resolved, '【投票给1号】我认狼了。');
-    const brainwash = after.skillInstances.find((s) => s.definitionId === 'brainwash');
-    check('遗言锁定洗脑内容', brainwash?.data.brainwashContent === '投票给1号');
-    check('遗言洗脑标记生效（不受存活限制）', brainwash?.data.lastWordsBrainwash === true);
-    check('遗言洗脑技能已耗尽', brainwash?.status === 'exhausted');
+  let game = null;
+  let ananId = -1;
+  let secondVictim = null;
+  for (let seed = 600; seed < 1600 && !game; seed += 1) {
+    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const ownerId = findSkillOwner(candidate, 'brainwash');
+    const other = candidate.players.find(
+      (player) => player.id !== ownerId
+        && getRoleAssignment(candidate, player.id).roleId !== 'wolf'
+        && !hasDeathRewind(candidate, player.id),
+    );
+    if (ownerId >= 0 && other) {
+      game = candidate;
+      ananId = ownerId;
+      secondVictim = other;
+    }
   }
+  check('找到含洗脑和第二名首夜死者的对局', game !== null && secondVictim !== null);
+  if (!game || !secondVictim) process.exit(1);
+  const wolfId = game.players.find((player) => getRoleAssignment(game, player.id).roleId === 'wolf');
+  const witchId = game.players.find((player) => getRoleAssignment(game, player.id).roleId === 'witch');
+  if (!wolfId || !witchId) process.exit(1);
+  injectNightDeath(game, ananId, 'poison', witchId.id);
+  injectNightDeath(game, secondVictim.id, 'wolf', wolfId.id);
+  let current = resolveNight(game);
+  check('安安是首个遗言行动者', current.pendingDecision?.actorId === ananId && current.pendingDecision.options.lastWords === true);
+  current = submitPendingLastWords(current, '【投票给1号】我认狼了。');
+  const brainwash = current.skillInstances.find((skill) => skill.definitionId === 'brainwash');
+  check('遗言锁定洗脑内容', brainwash?.data.brainwashContent === '投票给1号');
+  check('遗言洗脑标记生效（不受存活限制）', brainwash?.data.lastWordsBrainwash === true);
+  check('遗言洗脑技能已耗尽', brainwash?.status === 'exhausted');
+  current = reduceGame(current, { type: 'advance' });
+  check('第二名死者继续获得遗言决策', current.pendingDecision?.actorId === secondVictim.id && current.pendingDecision.options.lastWords === true);
+  check('后续遗言收到洗脑提示', typeof current.pendingDecision?.options.brainwashHint === 'string' && current.pendingDecision.options.brainwashHint.includes('投票给1号'));
 }
 
 // ===== 9. 遗言不受视线诱导（本地策略不补提及）=====
@@ -396,14 +464,6 @@ console.log('=== 10. 回收洗脑后遗言洗脑（月代雪）===');
   check('回收后洗脑仍 ready（可用）', recoveredBrainwash?.status === 'ready');
 
   // 白天放逐月代雪 → 遗言带【】洗脑内容。
-  // 说明：此前首夜只死安安一人，放逐月代雪后 2 狼 vs 2 好会触发狼人优势直接结束。
-  // 为避免 parity 干扰本场景（本场景验证"回收者遗言洗脑"，非胜负结算），
-  // 先"复活"安安（把死亡事件移除），使放逐月代雪后好人仍占优。
-  current.publicEvents = current.publicEvents.filter((e) => !(e.kind === 'death' && e.targetPlayerIds.includes(ananId)));
-  const ananPlayer = current.players.find((p) => p.id === ananId);
-  if (ananPlayer) {
-    ananPlayer.alive = true;
-  }
   current.day = 2;
   const exiled = injectDayExile(current, mayukiId);
   const mayukiLastWords = exiled.pendingDecision;
