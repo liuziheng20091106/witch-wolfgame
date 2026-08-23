@@ -601,6 +601,12 @@
     background: var(--magic-soft);
   }
 
+  .archive h4 {
+    margin: 12px 0 5px;
+    font-size: 14px;
+    color: var(--magic-dark);
+  }
+
   .result {
     bottom: 174px;
     grid-template-columns: 42px 1fr;

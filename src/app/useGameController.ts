@@ -170,11 +170,11 @@ export function useGameController(): GameController {
 
   useEffect(() => {
     if (view !== 'game' || !game || paused || aiError || awaitingRetry) return;
-    // 对局结束：仅当尚未进入赛后阶段且胜负已结算时，派发一次 advance 切入 post-game；
-    // 赛后阶段完成（postGameDone）后停止驱动。
+    // 对局结束：等待结果面板淡出周期（4 秒）结束后再派发 advance 切入 post-game，
+    // 保证玩家先看到胜负结果，再进入赛后复盘；赛后阶段完成（postGameDone）后停止驱动。
     if (game.phase === 'ended') {
       if (game.result) {
-        const timer = window.setTimeout(() => dispatch({ type: 'advance' }), 600);
+        const timer = window.setTimeout(() => dispatch({ type: 'advance' }), 4500);
         return () => window.clearTimeout(timer);
       }
       return;
