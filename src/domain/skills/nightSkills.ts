@@ -494,6 +494,8 @@ export function getNightIgnitionPotionDecision(state: GameState, targetPlayerId:
   const decision = makeSkillDecision(state, skill, '点火-烧药', '选择烧毁哪瓶药（0=解药 1=毒药）。', candidates, 'target');
   // 药选择标记：candidates 是药索引（0=解药 1=毒药），不是玩家 id，UI/AI 据此正确渲染
   decision.options.potionChoice = true;
+  // 决策 id 加后缀保持唯一：点火主决策与烧药决策用同一 skill，id 相同会导致 UI 不重置 target
+  decision.id = `${decision.id}-potion`;
   return decision;
 }
 
@@ -778,6 +780,8 @@ function createCreature(state: GameState, skill: WitchSkillInstance): void {
       const potionPending = makeSkillDecision(state, skill, '造物-给药', '选择给造物哪瓶药（0=解药 1=毒药）。造物可独立决定对谁使用。', potionCandidates, 'target');
       // 药选择标记：candidates 是药索引（0=解药 1=毒药），不是玩家 id，UI/AI 据此正确渲染
       potionPending.options.potionChoice = true;
+      // 决策 id 加后缀保持唯一：创造决策与给药决策用同一 skill，id 相同会导致 UI 不重置 target
+      potionPending.id = `${potionPending.id}-potion`;
       state.pendingDecision = potionPending;
     }
   }
