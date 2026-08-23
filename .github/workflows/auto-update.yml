@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'server/**'
-      - 'proxy/**'
-      - 'shared/**'
+      - "server/**"
+      - "proxy/**"
+      - "shared/**"
   workflow_dispatch:
 
 jobs:
@@ -50,26 +50,28 @@ jobs:
             exit 1
           fi
           URL="${MAIN_UPDATE_URL:-https://freeapi.majowolf.tkcloud.online/update}"
-          echo "Triggering update at $URL"
           echo "Changed paths:"
           echo "${{ steps.changes.outputs.changed }}"
-          curl --fail-with-body -sS -X POST "$URL" \
-            -H "Authorization: Bearer $PROXY_UPDATE_PASS" \
-            -H 'User-Agent: TKStudio:AlljustforKeng' \
-            -H "Content-Type: application/json" \
-            --max-time 120 \
-            -w "\nHTTP %{http_code}\n"
-          if [ $? -ne 0 ]; then
-            echo "::error::更新请求失败，详见上方响应"
-            exit 1
-          fi
-          curl --fail-with-body -sS -X POST "$URL" \
-            -H "Authorization: Bearer $MAIN_UPDATE_PASS" \
-            -H 'User-Agent: TKStudio:AlljustforKeng' \
-            -H "Content-Type: application/json" \
-            --max-time 120 \
-            -w "\nHTTP %{http_code}\n"
-          if [ $? -ne 0 ]; then
-            echo "::error::更新请求失败，详见上方响应"
-            exit 1
-          fi
+
+          trigger_update() {
+            local service_name="$1"
+            local password="$2"
+            echo "Triggering $service_name update at $URL"
+            # curl 默认只重试瞬时 HTTP 状态；连接拒绝需显式加入。不要重试所有 4xx。
+            if ! curl --fail-with-body -sS -X POST "$URL" \
+              -H "Authorization: Bearer $password" \
+              -H 'User-Agent: TKStudio:AlljustforKeng' \
+              -H "Content-Type: application/json" \
+              --max-time 120 \
+              --retry 2 \
+              --retry-connrefused \
+              --retry-delay 5 \
+              --retry-max-time 300 \
+              -w "\nHTTP %{http_code}\n"; then
+              echo "::error::$service_name 更新请求在有限重试后仍失败，详见上方响应"
+              return 1
+            fi
+          }
+
+          trigger_update "代理服务" "$PROXY_UPDATE_PASS"
+          trigger_update "主服务" "$MAIN_UPDATE_PASS"
