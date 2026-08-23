@@ -1,12 +1,11 @@
-import { characterById } from '../catalog/characters';
 import type { DeathIntent, GameState, PlayerId, RoleAssignmentState, WitchSkillInstance } from '../model';
 import { addPublicEvent } from './events';
 import { createRewindSnapshot } from './createGame';
-import { getPlayer } from './selectors';
+import { getName, getPlayer } from './selectors';
 import { checkWin } from './win';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
-  return characterById[getPlayer(state, playerId).characterId].name;
+  return getName(state, playerId);
 }
 
 function sourceLabel(source: DeathIntent['source']): string {
@@ -88,7 +87,15 @@ export function resolveDeathBatch(
     if (!player.alive) {
       continue;
     }
-    player.alive = false;
+    if (death.playerId === 99) {
+      // 造物死亡：写入 creature.alive（影子玩家不可变）
+      const creature = state.creatures.find((entry) => entry.id === 99);
+      if (creature) {
+        creature.alive = false;
+      }
+    } else {
+      player.alive = false;
+    }
     newlyDead.push(player.id);
     const reason = death.sources.length > 0 ? death.sources.map(sourceLabel).join('、') : '白天放逐';
     addPublicEvent(state, 'death', `${nameOf(state, player.id)} 死亡。原因：${reason}。`, {

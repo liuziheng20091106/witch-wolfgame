@@ -10,8 +10,8 @@
     "诺亚，很擅长画蝴蝶的画哦。"
   ],
   "decision_traits": {
-    "conservative": 0.6,
+    "conservative": 0.5,
     "trusting": 0.5,
-    "aggressive": 0.3
+    "aggressive": 0.5
   }
 }

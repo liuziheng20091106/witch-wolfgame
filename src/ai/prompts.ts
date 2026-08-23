@@ -9,6 +9,37 @@ export interface PromptMessage {
   content: string;
 }
 
+const CREATURE_PERSONALITY = '你是诺亚用魔法创造出来的造物，你拥有和她一样的基础身份和阵营，但不拥有她的魔法。除了每天的投票权（跟随诺亚）以外，你的所有行动可以独立决策；如果你想制造混乱，也可以用毒药毒死主人（但这对你并没有好处）。';
+
+/** 组装 actor 负载：造物（id=99）使用专属提示词，否则用角色原始数据。 */
+function buildActorPayload(actor: { id: number; name: string }, character: { personality: string; speechStyle: string; decisionTraits: { conservative: number; trusting: number; aggressive: number } }, visibleRole: string, visibleSkill: string) {
+  if (actor.id === 99) {
+    return {
+      playerId: actor.id,
+      name: actor.name,
+      personality: CREATURE_PERSONALITY,
+      speechStyle: '你不说话，只默默行动。',
+      decisionTraits: { conservative: 0.4, trusting: 0.3, aggressive: 0.5 },
+      role: visibleRole,
+      skill: '无可见技能',
+    };
+  }
+  // 诺亚（操控液体持有者）作为预言家时：提示她拥有自己与造物的双重查验结果
+  let personality = character.personality;
+  if (visibleRole.includes('预言家') && visibleSkill.includes('操控液体')) {
+    personality = `${personality}你作为预言家，拥有自己和造物的查验结果，请善加利用这两条情报。`;
+  }
+  return {
+    playerId: actor.id,
+    name: actor.name,
+    personality,
+    speechStyle: character.speechStyle,
+    decisionTraits: character.decisionTraits,
+    role: visibleRole,
+    skill: visibleSkill,
+  };
+}
+
 
 export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[] {
   const { observation, pendingDecision } = request;
@@ -81,15 +112,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
       role: 'user',
       content: JSON.stringify({
         action: { kind: pendingDecision.kind, title: pendingDecision.title, description: pendingDecision.description, schema: pendingDecision.schemaKey },
-        actor: {
-          playerId: actor.id,
-          name: actor.name,
-          personality: character.personality,
-          speechStyle: character.speechStyle,
-          decisionTraits: character.decisionTraits,
-          role: visibleRole,
-          skill: visibleSkill,
-        },
+        actor: buildActorPayload(actor, character, visibleRole, visibleSkill),
         phase: observation.phase,
         day: observation.day,
         board: observation.board,
