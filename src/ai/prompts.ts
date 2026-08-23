@@ -99,6 +99,10 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
     ? `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}${skillUsageHints[actor.skillId] ?? ''}`
     : '无可见技能';
   const legalCandidates = pendingDecision.candidates.map((playerId) => {
+    if (pendingDecision.options.potionChoice === true) {
+      // 药选择：candidates 是药索引（0=解药 1=毒药），不是玩家 id
+      return { playerId, name: playerId === 0 ? '解药' : '毒药' };
+    }
     const player = observation.players.find((entry) => entry.id === playerId);
     return { playerId, name: player?.name ?? `${playerId + 1}号` };
   });
