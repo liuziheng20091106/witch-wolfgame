@@ -4,14 +4,20 @@ import { createServer } from 'vite';
 
 const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
+let AiCommandError;
 let addKnowledge;
 let applyNightSkillDecision;
 let getNextNightSkillDecision;
 let getRoleAssignment;
+let reduceGame;
+let parseDecision;
 try {
+  ({ AiCommandError } = await server.ssrLoadModule('/src/ai/types.ts'));
   ({ addKnowledge } = await server.ssrLoadModule('/src/domain/engine/events.ts'));
   ({ applyNightSkillDecision, getNextNightSkillDecision } = await server.ssrLoadModule('/src/domain/skills/nightSkills.ts'));
   ({ getRoleAssignment } = await server.ssrLoadModule('/src/domain/engine/selectors.ts'));
+  ({ reduceGame } = await server.ssrLoadModule('/src/domain/engine/reducer.ts'));
+  ({ parseDecision } = await server.ssrLoadModule('/src/ai/schemas.ts'));
 } finally {
   await server.close();
 }
@@ -90,6 +96,31 @@ function makeState() {
   };
 }
 
+function wolfAttackEvent(day, targetPlayerId) {
+  return {
+    id: `wolf-attack-${day}-${targetPlayerId}`,
+    kind: 'wolf-attack',
+    day,
+    phase: 'wolf-decision',
+    text: '狼队完成袭击选择。',
+    actorPlayerId: 0,
+    targetPlayerIds: [targetPlayerId],
+    displayAuthorPlayerId: null,
+    actualAuthorPlayerId: null,
+    data: { actionKind: 'wolf-decision', targetPlayerId },
+    viewerPlayerIds: [0, 5],
+  };
+}
+
+function assertTargetError(run, message) {
+  assert.throws(run, (caught) => {
+    assert.ok(caught instanceof AiCommandError);
+    assert.equal(caught.kind, 'target');
+    assert.equal(caught.message, message);
+    return true;
+  });
+}
+
 function soulExchangePending() {
   return {
     id: 'soul-exchange-decision',
@@ -148,6 +179,69 @@ function soulExchangePending() {
   }, 'replacement-role-event');
   assert.equal(added.id, `${state.gameId}-fact-2-7`);
   assert.equal(new Set(state.knowledgeByPlayer[2].map((fact) => fact.id)).size, state.knowledgeByPlayer[2].length);
+}
+
+{
+  const witchPending = {
+    id: 'witch-contract-validation',
+    kind: 'witch-action',
+    schemaKey: 'witch',
+    actorId: 2,
+    title: '女巫行动',
+    description: '验证女巫行动契约',
+    candidates: [1, 2],
+    allowAbstain: true,
+    skillInstanceId: null,
+    options: { attackedPlayerId: 1, canSave: false, canPoison: false },
+  };
+  assertTargetError(
+    () => parseDecision(witchPending, { save: true, poisonTargetPlayerId: null }),
+    '当前决策不能使用解药',
+  );
+  assertTargetError(
+    () => parseDecision(witchPending, { save: false, poisonTargetPlayerId: 2 }),
+    '当前决策不能使用毒药',
+  );
+  assertTargetError(
+    () => parseDecision(
+      { ...witchPending, options: { attackedPlayerId: 1, canSave: true, canPoison: true } },
+      { save: true, poisonTargetPlayerId: 1 },
+    ),
+    '不能同时救下并毒杀同一目标',
+  );
+}
+
+{
+  const state = makeState();
+  state.phase = 'witch-action';
+  state.roleAssignments[2].resources = { antidote: 1, poison: 0 };
+  const next = reduceGame(state, { type: 'advance' });
+  assert.equal(next.pendingDecision, null, '无狼刀且仅有解药时不应生成空女巫决策');
+  assert.equal(next.phase, 'seer-action');
+}
+
+{
+  const state = makeState();
+  state.phase = 'witch-action';
+  state.roleAssignments[2].resources = { antidote: 1, poison: 0 };
+  state.privateEvents.push(wolfAttackEvent(state.day, 1));
+  const next = reduceGame(state, { type: 'advance' });
+  assert.equal(next.pendingDecision?.kind, 'witch-action');
+  assert.deepEqual(next.pendingDecision?.candidates, [], '毒药不可用时不应暴露毒药目标候选');
+  assert.deepEqual(next.pendingDecision?.options, { attackedPlayerId: 1, canSave: true, canPoison: false });
+  assert.match(next.pendingDecision?.description ?? '', /解药可用/);
+  assert.match(next.pendingDecision?.description ?? '', /毒药不可用/);
+}
+
+{
+  const state = makeState();
+  state.phase = 'witch-action';
+  state.roleAssignments[2].resources = { antidote: 0, poison: 1 };
+  const next = reduceGame(state, { type: 'advance' });
+  assert.deepEqual(next.pendingDecision?.candidates, [0, 1, 3, 4, 5]);
+  assert.deepEqual(next.pendingDecision?.options, { attackedPlayerId: null, canSave: false, canPoison: true });
+  assert.match(next.pendingDecision?.description ?? '', /解药不可用/);
+  assert.match(next.pendingDecision?.description ?? '', /毒药可用/);
 }
 
 console.log('Knowledge fact smoke tests passed');

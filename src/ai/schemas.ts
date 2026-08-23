@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { PendingDecision, PlayerId, SubmittedDecision } from '../domain/model';
+import type { PendingDecision, PlayerId, SubmittedDecision, WitchDecision } from '../domain/model';
 import { AiCommandError } from './types';
 
 // 注意：使用 z.object（默认 strip 未知键）而非 z.strictObject。
@@ -88,8 +88,28 @@ export function parseDecision(pending: PendingDecision, value: unknown): Submitt
     throw new AiCommandError('schema', `AI JSON 不符合 ${pending.schemaKey} 契约：${result.error.issues[0]?.message ?? '未知结构错误'}`);
   }
   const decision = result.data as SubmittedDecision;
+  validateWitchDecision(pending, decision);
   validateDecisionTargets(pending, decision);
   return decision;
+}
+
+function validateWitchDecision(pending: PendingDecision, decision: SubmittedDecision): void {
+  if (pending.schemaKey !== 'witch') return;
+  const witchDecision = decision as WitchDecision;
+  const attackedPlayerId = typeof pending.options.attackedPlayerId === 'number'
+    ? pending.options.attackedPlayerId as PlayerId
+    : null;
+  if (witchDecision.save && pending.options.canSave !== true) {
+    throw new AiCommandError('target', '当前决策不能使用解药');
+  }
+  if (witchDecision.poisonTargetPlayerId !== null && pending.options.canPoison !== true) {
+    throw new AiCommandError('target', '当前决策不能使用毒药');
+  }
+  if (witchDecision.save
+    && witchDecision.poisonTargetPlayerId !== null
+    && witchDecision.poisonTargetPlayerId === attackedPlayerId) {
+    throw new AiCommandError('target', '不能同时救下并毒杀同一目标');
+  }
 }
 
 function validateDecisionTargets(pending: PendingDecision, decision: SubmittedDecision): void {

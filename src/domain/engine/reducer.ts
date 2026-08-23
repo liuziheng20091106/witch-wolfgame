@@ -177,29 +177,33 @@ function advanceWitch(state: GameState): GameState {
       continue;
     }
     const resources = getRoleAssignment(state, witch).resources;
-    if (resources.antidote !== 1 && resources.poison !== 1) {
+    const canSave = resources.antidote === 1 && attackedPlayerId !== null;
+    let candidates: PlayerId[] = [];
+    if (resources.poison === 1) {
+      candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== witch);
+      if (witch !== 99) {
+        // 玩家女巫不能对自己的造物用药（分身无意义）；造物保留毒主人的可能（失控设定）
+        candidates = candidates.filter((playerId) => playerId !== 99 || !state.creatures.some((creature) => creature.id === 99 && creature.ownerPlayerId === witch));
+      }
+    }
+    const canPoison = candidates.length > 0;
+    if (!canSave && !canPoison) {
       continue;
     }
-    let candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== witch);
-    if (witch !== 99) {
-      // 玩家女巫不能对自己的造物用药（分身无意义）；造物保留毒主人的可能（失控设定）
-      candidates = candidates.filter((playerId) => playerId !== 99 || !state.creatures.some((creature) => creature.id === 99 && creature.ownerPlayerId === witch));
-    }
-    let title = '女巫行动';
-    let description = '今晚没有可见的狼刀。';
-    if (attackedPlayerId !== null) {
-      description = `${nameOf(state, attackedPlayerId)} 遭到狼刀。可使用解药，并可对另一人用毒。`;
-    }
-    if (witch === 99) {
-      title = '造物用药';
-      description = '你是诺亚的造物，继承女巫的药。你可独立决定用药对象——甚至可以对诺亚使用毒药（但这对你并无好处）。';
+    const title = witch === 99 ? '造物用药' : '女巫行动';
+    let description = witch === 99 ? '你是诺亚的造物，继承女巫的药并独立行动。' : '';
+    description += attackedPlayerId === null ? '今晚没有可见的狼刀。' : `${nameOf(state, attackedPlayerId)} 遭到狼刀。`;
+    description += canSave ? `解药可用，只能救下 ${nameOf(state, attackedPlayerId as PlayerId)}。` : '解药不可用。';
+    description += canPoison ? '毒药可用，目标必须从候选中选择。' : '毒药不可用。';
+    if (canSave && canPoison) {
+      description += '同时用药时，不能毒杀被救者。';
     }
     state.pendingDecision = {
       ...makeRoleDecision(state, 'witch-action', witch, title, description, candidates, true, 'witch'),
       options: {
         attackedPlayerId,
-        canSave: resources.antidote === 1 && attackedPlayerId !== null,
-        canPoison: resources.poison === 1,
+        canSave,
+        canPoison,
       },
     };
     return state;
