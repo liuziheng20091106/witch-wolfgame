@@ -164,14 +164,13 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   const payload = JSON.parse(prompt[1].content);
   check('AI 提示含 postGameContext', typeof payload.postGameContext === 'string' && payload.postGameContext.length > 0);
   check('AI 提示 action.title 为赛后复盘', payload.action.title === '赛后复盘');
-  // 长度上限：构造超长上下文不应超过上限，且保留较新记录
+  // 全知原则：超长上下文也不截断（赛后必须完整复盘），契约 userContentMaxLength 才是最终防线
   const bigObservation = structuredClone(observation);
   for (let i = 0; i < 200; i += 1) {
     bigObservation.publicEvents.push({ kind: 'system', day: 1, phase: 'post-game', text: 'x'.repeat(500), actorPlayerId: null, targetPlayerIds: [], displayAuthorPlayerId: null, actualAuthorPlayerId: null, data: {} });
   }
   const bigContext = buildPostGameContext(bigObservation);
-  check('复盘上下文长度受上限约束', bigContext.length <= 25000, `len=${bigContext.length}`);
-  check('超长时标注省略提示', bigContext.startsWith('【较早记录因长度限制已省略') || bigContext.length <= 24000, '缺少省略提示');
+  check('超长上下文不截断（保持全知）', bigContext.includes('x'.repeat(500)), '上下文被截断');
 }
 
 // ===== 5. 死亡回溯的旧时间线进入复盘上下文 =====
