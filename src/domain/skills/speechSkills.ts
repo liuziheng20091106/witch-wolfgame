@@ -90,7 +90,7 @@ export function getBeforeSpeechSkillDecision(state: GameState, actorId: PlayerId
     return null;
   }
   // 洗脑不再指定怀疑焦点：使用后，当天的发言需包含【1~6字】洗脑内容才会生效
-  return makeSkillDecision(state, skill, '洗脑', '是否使用洗脑？使用后，你当天的发言必须包含【内容】形式的洗脑内容（1~6 字），它将作为强提示词影响其他玩家。', [], 'ignition');
+  return makeSkillDecision(state, skill, '洗脑', '是否使用洗脑？使用后，你当天的发言必须包含【内容】形式的洗脑内容（1~6 字），它将作为强提示词影响其他玩家。内容必须是明确指令或断言（如【投票给1号】【1号是狼人】【说爱我】），不要使用【愚蠢】这类无意义词浪费魔法。', [], 'ignition');
 }
 
 export function getAfterSpeechSkillDecision(state: GameState, actorId: PlayerId): PendingDecision | null {
