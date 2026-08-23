@@ -353,7 +353,7 @@ content = """\
 organization_name = ""
 max_lines_allowed = 800
 enable_global_best_practices = false
-o
+
 [auto_best_practices]
 enable_auto_best_practices = true # public - general flag to disable all auto best practices usage
 utilize_auto_best_practices = true # public - disable usage of auto best practices in the 'improve' tool
