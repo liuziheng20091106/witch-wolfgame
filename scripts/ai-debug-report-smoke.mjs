@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { createServer } from 'vite';
 import {
   BOARD_DESCRIPTION,
+  buildGameSystemPrompt,
   CREATURE_ID,
   CHARACTER_CATALOG,
   DECISION_KIND_SCHEMAS,
@@ -128,6 +129,8 @@ assert.equal(sanitizeAiBaseUrl('not a URL'), '[invalid endpoint]');
 for (const forbidden of [secret, 'private-api.example.com', 'debug-user', 'debug-pass', 'query-secret', 'fragment-secret', request.sessionId]) {
   assert.equal(text.includes(forbidden), false, `debug report leaked ${forbidden}`);
 }
+
+assert.match(buildGameSystemPrompt('target'), /legalCandidates 是唯一合法目标集合/);
 
 for (const [kind, schemaKeys] of Object.entries(DECISION_KIND_SCHEMAS)) {
   for (const schemaKey of schemaKeys) {
@@ -339,6 +342,28 @@ calls = installFetch([
 const schemaDecision = await requestDecision({ ...request, sessionId: 'schema-retry' }, { ...config, retryCount: 1 }, new AbortController().signal);
 assert.equal(calls.length, 2, '模型 schema 错误应按配置重试');
 assert.equal(schemaDecision.targetPlayerId, 1);
+
+calls = installFetch([
+  chatResponse('{"targetPlayerId":0}'),
+  chatResponse('{"targetPlayerId":1}'),
+]);
+const correctedTargetDecision = await requestDecision(
+  { ...request, sessionId: 'illegal-target-correction' },
+  { ...config, retryCount: 1 },
+  new AbortController().signal,
+);
+assert.equal(correctedTargetDecision.targetPlayerId, 1);
+assert.equal(calls.length, 2, '非法目标应携带纠错信息重试一次');
+const initialTargetPrompt = JSON.parse(calls[0].body.messages[1].content);
+const correctedTargetPrompt = JSON.parse(calls[1].body.messages[1].content);
+assert.equal(Object.hasOwn(initialTargetPrompt.options, 'retryCorrection'), false);
+assert.deepEqual(correctedTargetPrompt.legalCandidates.map((candidate) => candidate.playerId), [1, 2]);
+assert.deepEqual(correctedTargetPrompt.options.retryCorrection, {
+  previousAttempt: 1,
+  errorKind: 'target',
+  message: 'AI 返回了非法目标：0',
+});
+assert.deepEqual(validateGamePrompt(calls[1].body.messages), { ok: true }, '纠错重试提示必须通过后端契约校验');
 
 const cancelled = new AbortController();
 cancelled.abort();

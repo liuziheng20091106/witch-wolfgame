@@ -74,7 +74,8 @@ export function isRetryableAiError(error: Pick<AiCommandError, 'kind' | 'status'
     || error.kind === 'timeout'
     || error.kind === 'empty'
     || error.kind === 'json'
-    || error.kind === 'schema';
+    || error.kind === 'schema'
+    || error.kind === 'target';
 }
 
 export const defaultAiConfig: FreeAiProviderConfig = {
