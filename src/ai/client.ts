@@ -137,6 +137,34 @@ function shouldDisableJsonOutput(error: AiCommandError, config: AiProviderConfig
     && (error.kind === 'json' || error.kind === 'schema' || error.kind === 'empty');
 }
 
+function isModelOutputError(error: AiCommandError): boolean {
+  return error.kind === 'empty'
+    || error.kind === 'json'
+    || error.kind === 'schema'
+    || error.kind === 'target';
+}
+
+function buildRetryMessages<T extends SubmittedDecision>(
+  request: AiDecisionRequest<T>,
+  error: AiCommandError,
+  previousAttempt: number,
+): PromptMessage[] {
+  return buildDecisionPrompt({
+    ...request,
+    pendingDecision: {
+      ...request.pendingDecision,
+      options: {
+        ...request.pendingDecision.options,
+        retryCorrection: {
+          previousAttempt,
+          errorKind: error.kind,
+          message: error.message,
+        },
+      },
+    },
+  });
+}
+
 function withDebugReport(
   error: AiCommandError,
   request: AiDecisionRequest,
@@ -197,6 +225,9 @@ export async function requestDecision<T extends SubmittedDecision>(
       lastError = commandError;
       if (commandError.kind === 'cancelled') throw commandError;
       const hasNextAttempt = attempt < maxAttempts - 1;
+      if (hasNextAttempt && isModelOutputError(commandError)) {
+        messages = buildRetryMessages(request, commandError, attempt + 1);
+      }
       if (hasNextAttempt && shouldDisableJsonOutput(commandError, config, jsonOutput)) {
         sessionJsonFallback.add(request.sessionId);
         jsonOutput = false;
