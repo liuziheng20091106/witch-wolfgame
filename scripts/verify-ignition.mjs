@@ -131,6 +131,7 @@ console.log('\n=== 2. 夜间点火：完整流程（RNG 判定）===');
       // 第二步：选药
       const potionPending = getNightIgnitionPotionDecision(game, witch.id);
       check(`seed ${seed} 烧药候选非空`, Boolean(potionPending) && potionPending.candidates.length > 0);
+      check(`seed ${seed} 烧药决策带药选择标记（potionChoice）`, potionPending !== null && potionPending.options.potionChoice === true);
       if (potionPending) {
         const hasPoison = before.poison === 1;
         const choice = hasPoison ? 1 : 0;
