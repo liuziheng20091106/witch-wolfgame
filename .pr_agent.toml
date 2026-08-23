@@ -3,24 +3,24 @@
 
 [config]
 # models
-model="gpt-5.6-sol"
+model="gpt-5.6"
 fallback_models=["gpt-5.6-terra"]
-#model_reasoning="gpt-5.6-terra" # dedicated reasoning model for self-reflection
-#model_weak="gpt-5.6-luna" # optional, a weaker model to use for some easier tasks
+model_reasoning="gpt-5.6-terra" # dedicated reasoning model for self-reflection
+model_weak="gpt-5.6-luna" # optional, a weaker model to use for some easier tasks
 # CLI
-git_provider="github"
-publish_output=true
-publish_output_progress=true
-progress_gif_url="" # optional, override for the progress loading gif url (example: 'https://.../spinner.gif').
-progress_gif_width=48 # optional, width (in px) of the progress loading gif.
-verbosity_level=0 # 0,1,2
-use_extra_bad_extensions=false
+#git_provider="github"
+#_output=true
+#_output_progress=true
+#_gif_url="" # optional, override for the progress loading gif url (example: 'https://.../spinner.gif').
+#_gif_width=48 # optional, width (in px) of the progress loading gif.
+#_level=0 # 0,1,2
+#_extra_bad_extensions=false
 # Log
-log_level="INFO"
+log_level="DEBUG"
 # Configurations
 use_repo_settings_file=true
 use_global_settings_file=true
-extra_config_url="" # optional URL or path to an additional .pr_agent.toml merged before the repo-local config; also settable via --extra_config_url or PR_AGENT_EXTRA_CONFIG_URL. See docs/docs/usage-guide/configuration_options.md#external-configuration-url.
+#extra_config_url="" # optional URL or path to an additional .pr_agent.toml merged before the repo-local config; also settable via --extra_config_url or PR_AGENT_EXTRA_CONFIG_URL. See docs/docs/usage-guide/configuration_options.md#external-configuration-url.
 disable_auto_feedback = false
 ai_timeout=1200 # 2 minutes
 skip_keys = []
@@ -30,9 +30,9 @@ repo_context_files = ["AGENTS.md"] # Repository-relative files (e.g. AGENTS.md, 
 repo_context_from_default_branch = true # Read repo context files from the repository default branch (trusts only default-branch content). Set to false to read from the PR target branch instead.
 repo_context_max_lines = 500 # Maximum total rendered lines for repo context, including wrapper tags
 # token limits
-max_description_tokens = 500
-max_commits_tokens = 500
-max_model_tokens = 256000 # Limits the maximum number of tokens that can be used by any model, regardless of the model's default capabilities.
+max_description_tokens = 5000
+max_commits_tokens = 5000
+max_model_tokens = 128000 # Limits the maximum number of tokens that can be used by any model, regardless of the model's default capabilities.
 custom_model_max_tokens=-1 # for models not in the default list
 model_token_count_estimate_factor=0.3 # factor to increase the token count estimate, in order to reduce likelihood of model failure due to too many tokens - applicable only when requesting an accurate estimate.
 # patch extension logic
@@ -53,7 +53,7 @@ duplicate_prompt_examples = false
 persistent_inline_comments = true
 # seed
 seed=-1 # set positive value to fix the seed (and ensure temperature=0)
-temperature=0.2
+temperature=0
 # ignore logic
 ignore_pr_title = ["^\\[Auto\\]", "^Auto"] # a list of regular expressions to match against the PR title to ignore the PR agent
 ignore_pr_target_branches = [] # a list of regular expressions of target branches to ignore from PR agent when an PR is created
@@ -74,7 +74,7 @@ is_auto_command = false # will be auto-set to true if the command is triggered b
 propagate_tool_errors = false # when true, a tool re-raises instead of swallowing an internal error, so a caller can tell a failed run from an empty one
 enable_ai_metadata = false # will enable adding ai metadata
 add_user_to_requests = false # send the current command and PR URL in the OpenAI-compatible "user" request field, for provider-side attribution of requests (e.g. OpenRouter "external_user")
-reasoning_effort = "high" # "none", "minimal", "low", "medium", "high", "xhigh", "max"
+reasoning_effort = "low" # "none", "minimal", "low", "medium", "high", "xhigh", "max"
 # extended thinking for Claude reasoning models
 enable_claude_extended_thinking = false # Set to true to enable extended thinking feature
 extended_thinking_budget_tokens = 2048
@@ -116,7 +116,7 @@ extra_instructions = """\
 - 新增功能的实现是否符合现有架构和项目约定；在有充分证据时，指出明显更简单、可靠、可维护或性能更好的实现方案。
 
 只报告能够从代码、配置、测试或变更上下文中明确证明的问题，不提出纯主观偏好。每条问题必须说明影响、依据、具体位置和可执行的修复方向。避免重复报告同一根因；如果没有发现问题，明确说明未发现可验证的问题。"""
-num_max_findings = 5
+num_max_findings = 10
 final_update_message = true
 # review labels
 enable_review_labels_security=true
@@ -353,24 +353,10 @@ content = """\
 organization_name = ""
 max_lines_allowed = 800
 enable_global_best_practices = false
-
+o
 [auto_best_practices]
 enable_auto_best_practices = true # public - general flag to disable all auto best practices usage
 utilize_auto_best_practices = true # public - disable usage of auto best practices in the 'improve' tool
 extra_instructions = "" # public - extra instructions to the auto best practices generation prompt
 content = ""
 max_patterns = 5 # max number of patterns to be detected
-
-[artifacts]
-# Enable artifact injection into tool prompts (off by default; auto-enabled when artifact_path input is set)
-enable = false
-# File path to the artifact (relative to GITHUB_WORKSPACE, or absolute)
-artifact_path = ""
-# Custom instructions appended after the artifact content (leave empty for a sensible default)
-artifact_instructions = ""
-# Label shown to the AI — defaults to the filename when empty
-artifact_label = ""
-# Which tools receive artifact context
-target_tools = ["pr_reviewer", "pr_description", "pr_code_suggestions"]
-# Max artifact size in characters (content is truncated if exceeded)
-max_artifact_size = 50000
