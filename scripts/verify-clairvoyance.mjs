@@ -138,9 +138,9 @@ console.log('=== 2. 观看直播 ===');
   check('可可获得观众职业知识', roleFact !== undefined && roleFact.value === viewerRoleBefore);
 
   const privateForViewer = privateEventsFor(game, viewerId);
-  check('观众收到私密反馈（身份已传送）', privateForViewer.some((e) => e.text.includes('知晓了你的身份')));
+  check('观众收到私密反馈（身份已传送）', privateForViewer.some((e) => e.text.includes('因此知晓了')));
   const privateForOwner = privateEventsFor(game, ownerId);
-  check('可可收到观看名单私密事件', privateForOwner.some((e) => e.text.includes('观看了你的直播') && e.text.includes('职业是')));
+  check('可可收到观看名单私密事件', privateForOwner.some((e) => e.text.includes('观看了') && e.text.includes('直播，职业是')));
 }
 
 // ===== 3. 不观看：无知识 + 观众保留事件 =====
