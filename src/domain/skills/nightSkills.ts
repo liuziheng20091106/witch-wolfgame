@@ -88,12 +88,17 @@ export function getNextNightSkillDecision(state: GameState): PendingDecision | n
         continue;
       }
       // 操控液体：创造造物（use-only，无需目标，继承诺亚职业）
+      // 策略提示按阵营区分：好人首夜召唤收益最大（造物是独立战力）；狼人保留（造物继承狼身份，被查验会暴露）
       const ownerName = nameOf(state, skill.ownerPlayerId);
+      let creatureStrategyHint = '你是好人：强烈建议首个夜晚就召唤造物——它是独立战力，可独立查验/用药/投票，越早召唤收益越大，首夜使用通常是最优解。';
+      if (getPlayerAlignment(state, skill.ownerPlayerId) === 'wolf') {
+        creatureStrategyHint = '你是狼人：造物会继承你的狼身份，被查验或公开阵营会直接暴露你，建议保留不召唤。';
+      }
       return makeSkillDecision(
         state,
         skill,
         '操控液体',
-        `创造诺亚的造物吗？【选择：是/否】\n造物是液态分身，继承你的基础职业与阵营（不继承魔女技），拥有独立意志，不参与白天发言。每局限一次。`,
+        `创造诺亚的造物吗？【选择：是/否】\n造物是液态分身，继承你的基础职业与阵营（不继承魔女技），拥有独立意志，不参与白天发言。每局限一次。\n${creatureStrategyHint}`,
         [],
         'ignition',
       );
