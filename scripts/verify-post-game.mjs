@@ -154,6 +154,11 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   if (after.privateEvents.length > 0) {
     check('复盘上下文包含私密行动行', context.includes('私密行动'), '未找到私密行动行');
   }
+  // 兜底全量：上下文行数应覆盖现役公开事件 + 私密事件（+ 归档事件），不遗漏任何事件类型
+  const totalEvents = observation.publicEvents.length + observation.privateEvents.length
+    + observation.archivedTimelines.reduce((sum, a) => sum + a.publicEvents.length + a.privateEvents.length, 0);
+  const contextLineCount = context.split('\n').filter((line) => line.length > 0).length;
+  check('复盘上下文覆盖全部事件（无遗漏类型）', contextLineCount >= totalEvents, `lines=${contextLineCount} events=${totalEvents}`);
   const { buildDecisionPrompt } = await server.ssrLoadModule('/src/ai/prompts.ts');
   const prompt = buildDecisionPrompt({ observation, pendingDecision: pending });
   const payload = JSON.parse(prompt[1].content);

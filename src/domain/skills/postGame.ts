@@ -98,16 +98,24 @@ export function buildPostGameContext(observation: GameObservation): string {
     return `${playerId + 1}号`;
   };
 
-  for (const event of observation.publicEvents) {
+  // 单条公开事件转一行复盘文本：发言/遗言等带名字与语气前缀，其余事件兜底全量输出。
+  // 不使用白名单（避免遗漏 role-exchange / trial-by-fire / factor-recovered 等关键因果事件）。
+  const formatPublicEvent = (event: TimelineEvent): string => {
     if (event.kind === 'speech') {
-      lines.push(`${dayOf(event)} 发言（${nameOfId(event.actorPlayerId)}）：${event.text}`);
-    } else if (event.kind === 'last-words') {
-      lines.push(`${dayOf(event)} 遗言（${nameOfId(event.actorPlayerId)}）：${event.text}`);
-    } else if (event.kind === 'post-game-speech') {
-      lines.push(`赛后发言（${nameOfId(event.actorPlayerId)}）：${event.text}`);
-    } else if (event.kind === 'death' || event.kind === 'vote' || event.kind === 'exile' || event.kind === 'result' || event.kind === 'system' || event.kind === 'dawn' || event.kind === 'knowledge') {
-      lines.push(`${dayOf(event)} ${event.text}`);
+      return `${dayOf(event)} 发言（${nameOfId(event.actorPlayerId)}）：${event.text}`;
     }
+    if (event.kind === 'last-words') {
+      return `${dayOf(event)} 遗言（${nameOfId(event.actorPlayerId)}）：${event.text}`;
+    }
+    if (event.kind === 'post-game-speech') {
+      return `赛后发言（${nameOfId(event.actorPlayerId)}）：${event.text}`;
+    }
+    // 兜底：任何其它公开事件（死亡/投票/放逐/火刑/灵魂交换/因子回收/时间回溯/系统等）均全量输出
+    return `${dayOf(event)} ${event.text}`;
+  };
+
+  for (const event of observation.publicEvents) {
+    lines.push(formatPublicEvent(event));
   }
   for (const event of observation.privateEvents) {
     lines.push(`${dayOf(event)} 私密行动：${event.text}`);
@@ -116,13 +124,7 @@ export function buildPostGameContext(observation: GameObservation): string {
   for (const archive of observation.archivedTimelines) {
     lines.push(`【被回溯的时间线 · 回溯于第 ${archive.rewoundAtDay} 天】`);
     for (const event of archive.publicEvents) {
-      if (event.kind === 'speech') {
-        lines.push(`${dayOf(event)} 发言（${nameOfId(event.actorPlayerId)}）：${event.text}`);
-      } else if (event.kind === 'last-words') {
-        lines.push(`${dayOf(event)} 遗言（${nameOfId(event.actorPlayerId)}）：${event.text}`);
-      } else if (event.kind === 'death' || event.kind === 'vote' || event.kind === 'exile' || event.kind === 'system' || event.kind === 'dawn' || event.kind === 'knowledge') {
-        lines.push(`${dayOf(event)} ${event.text}`);
-      }
+      lines.push(formatPublicEvent(event));
     }
     for (const event of archive.privateEvents) {
       lines.push(`${dayOf(event)} 私密行动：${event.text}`);
