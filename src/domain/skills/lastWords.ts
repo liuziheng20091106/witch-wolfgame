@@ -65,6 +65,7 @@ function makeLastWordsDecision(state: GameState, actorId: PlayerId): PendingDeci
 /**
  * 返回下一个需要发布遗言的死者决策（若本日还有未发遗言的合格死者）。
  * 死亡事件 day === state.day：夜晚死亡发生在当夜，白天放逐发生在当天。
+ * 遍历每条死亡事件的全部目标（当前引擎每条事件只含一名死者，防御未来合并场景）。
  */
 export function getNextLastWordsDecision(state: GameState): PendingDecision | null {
   const deaths = state.publicEvents.filter((event) => event.kind === 'death' && event.day === state.day);
@@ -75,14 +76,15 @@ export function getNextLastWordsDecision(state: GameState): PendingDecision | nu
       .filter((value): value is PlayerId => value !== null),
   );
   for (const death of deaths) {
-    const deadId = death.targetPlayerIds[0];
-    if (deadId === undefined || said.has(deadId)) {
-      continue;
+    for (const deadId of death.targetPlayerIds) {
+      if (said.has(deadId)) {
+        continue;
+      }
+      if (!canGiveLastWords(state, deadId, death)) {
+        continue;
+      }
+      return makeLastWordsDecision(state, deadId);
     }
-    if (!canGiveLastWords(state, deadId, death)) {
-      continue;
-    }
-    return makeLastWordsDecision(state, deadId);
   }
   return null;
 }

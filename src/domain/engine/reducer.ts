@@ -448,6 +448,8 @@ function advanceDayResolution(state: GameState): GameState {
     const targetPlayerId = exile.data.exileTargetPlayerId as PlayerId;
     if (getPlayer(state, targetPlayerId).alive) {
       const resolved = resolveDeathBatch(state, [{ playerId: targetPlayerId, sources: [] }]);
+      // 死亡回溯：resolveDeathBatch 返回新状态（死者被救回），无需遗言，直接返回。
+      // 游戏结束：胜负已定，不询问遗言。
       if (resolved !== state || resolved.phase === 'ended') {
         return resolved;
       }
@@ -455,6 +457,7 @@ function advanceDayResolution(state: GameState): GameState {
   }
   // 遗言：白天放逐死亡结算后，若有合格死者需要发布遗言，保持 day-resolution 阶段等待遗言决策。
   // 提交遗言后 advance 会再次进入本阶段，此时 exile 目标已死跳过结算，再检查是否还有遗言。
+  // （resolveDeathBatch 原地修改并返回同一引用，正常路径会继续执行到本检查，不会提前返回。）
   const lastWords = getNextLastWordsDecision(state);
   if (lastWords) {
     state.pendingDecision = lastWords;

@@ -151,8 +151,51 @@ console.log('=== 1. 首夜（day 0）狼刀死亡 → 遗言 ===');
   }
 }
 
-// ===== 2. 第二夜狼刀死亡 → 无遗言 =====
-console.log('=== 2. 第二夜（day 1）夜晚死亡 → 无遗言 ===');
+// ===== 2. 首夜多死者（狼刀好人 + 毒杀狼人）→ 逐个遗言 =====
+console.log('=== 2. 首夜多死者 → 逐个遗言 ===');
+{
+  // 找一局：狼/好各至少 2 名非死亡回溯持有者（回溯会使死者"复活"，遗言不应触发）
+  let game = null;
+  let goodVictim = null;
+  let wolfVictim = null;
+  let witchId = null;
+  let seed = 50;
+  while (seed < 4000 && !game) {
+    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const withoutRewind = (list) => list.filter((p) => !candidate.skillInstances.some((s) => s.definitionId === 'death-rewind' && s.ownerPlayerId === p.id));
+    const safeGood = withoutRewind(candidate.players.filter((p) => getRoleAssignment(candidate, p.id).roleId !== 'wolf'));
+    const safeWolves = withoutRewind(candidate.players.filter((p) => getRoleAssignment(candidate, p.id).roleId === 'wolf'));
+    const witch = candidate.players.find((p) => getRoleAssignment(candidate, p.id).roleId === 'witch');
+    if (safeGood.length >= 1 && safeWolves.length >= 2 && witch) {
+      game = candidate;
+      goodVictim = safeGood[0];
+      wolfVictim = safeWolves[1];
+      witchId = witch;
+    }
+    seed += 1;
+  }
+  check('找到含狼刀好人+毒杀狼人的对局', game !== null);
+  if (!game || !goodVictim || !wolfVictim || !witchId) process.exit(1);
+  const wolfId = game.players.find((p) => getRoleAssignment(game, p.id).roleId === 'wolf');
+  injectNightDeath(game, goodVictim.id, 'wolf', wolfId.id);
+  injectNightDeath(game, wolfVictim.id, 'poison', witchId.id);
+  const resolved = resolveNight(game);
+  const firstPending = resolved.pendingDecision;
+  check('首夜双死产生第一个遗言', firstPending !== null && firstPending.title === '遗言' && (firstPending.actorId === goodVictim.id || firstPending.actorId === wolfVictim.id));
+  if (!firstPending) process.exit(1);
+  // 提交第一个遗言后必须 advance（重入 night-resolution 幂等结算），才能继续询问第二个遗言
+  const afterFirstSubmit = submitPendingLastWords(resolved, '第一个遗言。');
+  const afterFirst = reduceGame(afterFirstSubmit, { type: 'advance' });
+  const secondPending = afterFirst.pendingDecision;
+  check('第一个遗言后产生第二个遗言', secondPending !== null && secondPending.title === '遗言' && secondPending.actorId !== firstPending.actorId && (secondPending.actorId === goodVictim.id || secondPending.actorId === wolfVictim.id));
+  if (!secondPending) process.exit(1);
+  const afterSecond = submitPendingLastWords(afterFirst, '第二个遗言。');
+  check('第二个遗言后无更多遗言', getNextLastWordsDecision(afterSecond) === null);
+  check('两名死者都已发布遗言', lastWordsEvents(afterSecond).filter((e) => e.actorPlayerId === goodVictim.id || e.actorPlayerId === wolfVictim.id).length === 2);
+}
+
+// ===== 3. 第二夜狼刀死亡 → 无遗言 =====
+console.log('=== 3. 第二夜（day 1）夜晚死亡 → 无遗言 ===');
 {
   const game = findGameWithSkill('witch-killer', 100);
   check('找到可用对局', game !== null);
@@ -166,8 +209,8 @@ console.log('=== 2. 第二夜（day 1）夜晚死亡 → 无遗言 ===');
   check('第二夜死亡后直接进入黎明', resolved.phase === 'dawn');
 }
 
-// ===== 3. 白天公投放逐 → 有遗言 =====
-console.log('=== 3. 白天放逐 → 遗言 ===');
+// ===== 4. 白天公投放逐 → 有遗言 =====
+console.log('=== 4. 白天放逐 → 遗言 ===');
 {
   const game = findGameWithSkill('witch-killer', 200);
   check('找到可用对局', game !== null);
@@ -184,8 +227,8 @@ console.log('=== 3. 白天放逐 → 遗言 ===');
   }
 }
 
-// ===== 4. 魔女杀手（precise-kill）→ 无遗言 =====
-console.log('=== 4. 首夜魔女杀手死亡 → 无遗言 ===');
+// ===== 5. 魔女杀手（precise-kill）→ 无遗言 =====
+console.log('=== 5. 首夜魔女杀手死亡 → 无遗言 ===');
 {
   const game = findGameWithSkill('witch-killer', 300);
   check('找到可用对局', game !== null);
@@ -198,8 +241,8 @@ console.log('=== 4. 首夜魔女杀手死亡 → 无遗言 ===');
   check('魔女杀手死亡后直接进入黎明', resolved.phase === 'dawn');
 }
 
-// ===== 5. 诺亚的造物死亡 → 无遗言 =====
-console.log('=== 5. 造物死亡 → 无遗言 ===');
+// ===== 6. 诺亚的造物死亡 → 无遗言 =====
+console.log('=== 6. 造物死亡 → 无遗言 ===');
 {
   const game = findGameWithSkill('liquid-control', 400);
   check('找到可用对局', game !== null);
@@ -229,8 +272,8 @@ console.log('=== 5. 造物死亡 → 无遗言 ===');
   check('造物死亡后进入黎明', resolved.phase === 'dawn');
 }
 
-// ===== 6. 当天被怪力禁言的玩家被放逐 → 无遗言 =====
-console.log('=== 6. 禁言者放逐 → 无遗言 ===');
+// ===== 7. 当天被怪力禁言的玩家被放逐 → 无遗言 =====
+console.log('=== 7. 禁言者放逐 → 无遗言 ===');
 {
   const game = findGameWithSkill('speech-restrain', 500);
   check('找到可用对局', game !== null);
@@ -246,8 +289,8 @@ console.log('=== 6. 禁言者放逐 → 无遗言 ===');
   check('禁言者放逐后正常入夜', after.phase === 'night-skills');
 }
 
-// ===== 7. 遗言洗脑联动：安安在遗言中发动洗脑 =====
-console.log('=== 7. 遗言洗脑（夏目安安）===');
+// ===== 8. 遗言洗脑联动：安安在遗言中发动洗脑 =====
+console.log('=== 8. 遗言洗脑（夏目安安）===');
 {
   const game = findGameWithSkill('brainwash', 600);
   check('找到含洗脑的对局', game !== null);
@@ -267,8 +310,8 @@ console.log('=== 7. 遗言洗脑（夏目安安）===');
   }
 }
 
-// ===== 8. 遗言不受视线诱导（本地策略不补提及）=====
-console.log('=== 8. 遗言不受视线诱导 ===');
+// ===== 9. 遗言不受视线诱导（本地策略不补提及）=====
+console.log('=== 9. 遗言不受视线诱导 ===');
 {
   const game = findGameWithSkill('gaze-guidance', 700);
   check('找到含视线诱导的对局', game !== null);
@@ -287,8 +330,8 @@ console.log('=== 8. 遗言不受视线诱导 ===');
   check('本地策略遗言不强制提及诱导对象', typeof fallback.decision.speech === 'string' && !fallback.decision.speech.includes('值得继续关注'), JSON.stringify(fallback.decision));
 }
 
-// ===== 9. 回收洗脑后遗言洗脑（月代雪）=====
-console.log('=== 9. 回收洗脑后遗言洗脑（月代雪）===');
+// ===== 10. 回收洗脑后遗言洗脑（月代雪）=====
+console.log('=== 10. 回收洗脑后遗言洗脑（月代雪）===');
 {
   // 找同时含洗脑（夏目安安）与魔女因子回收（月代雪）的对局
   let game = null;
@@ -373,8 +416,8 @@ console.log('=== 9. 回收洗脑后遗言洗脑（月代雪）===');
   check('回收者遗言洗脑技能已耗尽', brainwash?.status === 'exhausted');
 }
 
-// ===== 10. 完整对局（本地策略）正常结束 + 出现遗言 =====
-console.log('=== 10. 完整对局（本地策略）===');
+// ===== 11. 完整对局（本地策略）正常结束 + 出现遗言 =====
+console.log('=== 11. 完整对局（本地策略）===');
 {
   let ended = 0;
   let sawLastWords = 0;
