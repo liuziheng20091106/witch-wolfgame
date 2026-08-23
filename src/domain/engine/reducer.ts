@@ -516,7 +516,7 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
         throw new Error('当前无法使用解药');
       }
       assignment.resources.antidote = 0;
-      addPrivateEvent(state, [pending.actorId], 'witch-action', `你使用解药救下 ${nameOf(state, attacked)}。`, {
+      addPrivateEvent(state, [pending.actorId], 'witch-action', `${nameOf(state, pending.actorId)} 使用解药救下 ${nameOf(state, attacked)}。`, {
         actorPlayerId: pending.actorId,
         targetPlayerIds: [attacked],
         data: { actionKind: 'witch-save', savedWolfTargetPlayerId: attacked },
@@ -530,20 +530,20 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
       assignment.resources.poison = 0;
       if (isFloatingActive(state, poisonTarget, state.day)) {
         // 漂浮隐匿：毒药无法锁定目标，使用失败（毒药已消耗）
-        addPrivateEvent(state, [pending.actorId], 'witch-action', `你对 ${nameOf(state, poisonTarget)} 使用毒药，但她的身影若隐若现，毒药落空了。`, {
+        addPrivateEvent(state, [pending.actorId], 'witch-action', `${nameOf(state, pending.actorId)} 对 ${nameOf(state, poisonTarget)} 使用毒药，但她的身影若隐若现，毒药落空了。`, {
           actorPlayerId: pending.actorId,
           targetPlayerIds: [poisonTarget],
           data: { actionKind: 'witch-action', intentSource: 'poison-failed', preventable: false, targetPlayerId: poisonTarget },
         });
       } else {
-        addPrivateEvent(state, [pending.actorId], 'witch-action', `你对 ${nameOf(state, poisonTarget)} 使用毒药。`, {
+        addPrivateEvent(state, [pending.actorId], 'witch-action', `${nameOf(state, pending.actorId)} 对 ${nameOf(state, poisonTarget)} 使用毒药。`, {
           actorPlayerId: pending.actorId,
           targetPlayerIds: [poisonTarget],
           data: { intentSource: 'poison', preventable: true, targetPlayerId: poisonTarget },
         });
       }
     }
-    addPrivateEvent(state, [pending.actorId], 'witch-action', '女巫行动已提交。', {
+    addPrivateEvent(state, [pending.actorId], 'witch-action', `${nameOf(state, pending.actorId)} 已完成女巫行动。`, {
       actorPlayerId: pending.actorId,
       data: { actionKind: 'witch-action' },
     });
@@ -566,7 +566,7 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
     const targetId = targetPlayerId as PlayerId;
     if (isFloatingActive(state, targetId, state.day)) {
       // 漂浮隐匿：查验不到任何痕迹，结果为空（照常消耗本夜查验，标记已行动避免死循环）
-      addPrivateEvent(state, [pending.actorId], 'seer-check', `你查验了 ${nameOf(state, targetId)}，但在现场什么都没有看见。`, {
+      addPrivateEvent(state, [pending.actorId], 'seer-check', `${nameOf(state, pending.actorId)} 查验了 ${nameOf(state, targetId)}，但在现场什么都没有看见。`, {
         actorPlayerId: pending.actorId,
         targetPlayerIds: [targetId],
         data: { actionKind: 'seer-action' },

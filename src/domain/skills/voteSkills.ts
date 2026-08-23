@@ -24,7 +24,7 @@ export function applyVoteSkillDecision(state: GameState, pending: PendingDecisio
   markOffered(skill, offerKey(state, 'before-vote'));
   const levitation = decision as LevitationDecision;
   if (!levitation.use) {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你保留了漂浮。', { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了漂浮。`, { actorPlayerId: skill.ownerPlayerId });
     return;
   }
   if (!levitation.mode) {

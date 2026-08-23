@@ -146,6 +146,7 @@ console.log('\n=== 4. 轨迹聚合（脱敏）与目标不重复 ===');
     let iter = 0;
     let lastVisionText = null;
     let lastVisionDay = -1;
+    let lastVisionEvent = null;
     while (game.phase !== 'ended' && iter < 1500) {
       iter += 1;
       if (game.pendingDecision) {
@@ -157,7 +158,7 @@ console.log('\n=== 4. 轨迹聚合（脱敏）与目标不重复 ===');
           game = reduceGame(game, { type: 'submit-decision', pendingDecisionId: p.id, actorId: p.actorId, decision: fb.decision });
           // 记录最近一次幻视播报（结算后 privateEvents 末尾）
           const last = game.privateEvents.filter((e) => e.text.includes('幻视')).at(-1);
-          if (last) { lastVisionText = last.text; lastVisionDay = game.day; }
+          if (last) { lastVisionText = last.text; lastVisionDay = game.day; lastVisionEvent = last; }
           continue;
         }
         const fb = fallbackDecision(game, p);
@@ -173,14 +174,23 @@ console.log('\n=== 4. 轨迹聚合（脱敏）与目标不重复 ===');
         // 失败播报：明确说明系统判定，接受
         check(`seed ${seed}: 幻视失败播报格式正确`, lastVisionText.includes('本次幻视行为被系统判定为失败'), lastVisionText);
       } else {
-        // 成功播报：必须含"你通过幻视看到"
-        check(`seed ${seed}: 幻视成功播报格式正确`, lastVisionText.includes('你通过幻视看到'), lastVisionText);
-        // 脱敏：除目标名与持有者名外，不得出现其他角色名
+        // 成功播报：必须含"通过幻视看到"
+        check(`seed ${seed}: 幻视成功播报格式正确`, lastVisionText.includes('通过幻视看到'), lastVisionText);
+        // 脱敏：除目标名与持有者名外，不得出现其他角色名。
+        // 先校验事件归属：事件必须属于当前幻视持有者（actor 一致）、类型为技能、且目标字段存在，
+        // 避免文本恰好命中旧事件或其他技能事件导致脱敏误判。
         const allNames = game.players.map((pl) => characterById[pl.characterId].name);
         const mentioned = allNames.filter((n) => lastVisionText.includes(n));
-        const visionOwner = vision.ownerPlayerId;
-        const ownerName = nameOf(game, visionOwner);
-        const legitMentions = mentioned.filter((n) => n === ownerName);
+        const ownerName = nameOf(game, vision.ownerPlayerId);
+        const visionTargetId = lastVisionEvent?.targetPlayerIds?.[0];
+        const eventBelongsToVision = lastVisionEvent?.actorPlayerId === vision.ownerPlayerId
+          && lastVisionEvent?.kind === 'skill'
+          && typeof visionTargetId === 'number';
+        let legitMentions = [];
+        if (eventBelongsToVision) {
+          const targetName = nameOf(game, visionTargetId);
+          legitMentions = mentioned.filter((n) => n === ownerName || n === targetName);
+        }
         check(`seed ${seed}: 轨迹不泄露他人姓名（提及: ${mentioned.join('、') || '无'}）`, mentioned.length === legitMentions.length, lastVisionText);
       }
       verified = true;

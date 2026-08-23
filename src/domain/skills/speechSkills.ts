@@ -139,13 +139,13 @@ export function applySpeechSkillDecision(state: GameState, pending: PendingDecis
   markOffered(skill, offerKey(state, timing));
   const use = (decision as OptionalTargetDecision | IgnitionDecision).use;
   if (!use) {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
     return;
   }
 
   if (skill.definitionId === 'brainwash') {
     skill.data.activeDay = state.day;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你发动了洗脑：今天你的发言需要用【内容】包裹洗脑内容（1~6 字）才能影响他人。', {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 发动了洗脑：今天${nameOf(state, skill.ownerPlayerId)}的发言需要用【内容】包裹洗脑内容（1~6 字）才能影响他人。`, {
       actorPlayerId: skill.ownerPlayerId,
     });
     exhaustSkill(skill);
@@ -176,7 +176,7 @@ export function applySpeechSkillDecision(state: GameState, pending: PendingDecis
     skill.data.forgedDay = state.day;
     skill.data.targetPlayerId = targetPlayerId;
     skill.data.forgedSpeech = forgedSpeech;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你准备以 ${nameOf(state, targetPlayerId)} 的声音混入一段发言。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 准备以 ${nameOf(state, targetPlayerId)} 的声音混入一段发言。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
       data: { forgedSpeech },
@@ -244,7 +244,7 @@ function applyGazeGuidanceDecision(state: GameState, skill: WitchSkillInstance, 
     // 无论使用或保留，今天都不再询问第一步（避免重复询问）
     skill.data.gazeAskedDay = state.day;
     if (!use) {
-      addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
+      addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
       return;
     }
     const targetPlayerId = (decision as OptionalTargetDecision).targetPlayerId;
@@ -253,7 +253,7 @@ function applyGazeGuidanceDecision(state: GameState, skill: WitchSkillInstance, 
     }
     skill.data.activeDay = state.day;
     skill.data.gazeSubjectId = targetPlayerId;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你选择 ${nameOf(state, targetPlayerId)} 作为被诱导者：她今天的发言必须提及你指定的对象。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 选择 ${nameOf(state, targetPlayerId)} 作为被诱导者：她今天的发言必须提及${nameOf(state, skill.ownerPlayerId)}指定的对象。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -267,7 +267,7 @@ function applyGazeGuidanceDecision(state: GameState, skill: WitchSkillInstance, 
   }
   skill.data.gazeObjectId = targetPlayerId;
   const subjectId = skill.data.gazeSubjectId as PlayerId;
-  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你指定诱导对象：${nameOf(state, subjectId)} 今天的发言必须提及 ${nameOf(state, targetPlayerId)}。`, {
+  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 指定诱导对象：${nameOf(state, subjectId)} 今天的发言必须提及 ${nameOf(state, targetPlayerId)}。`, {
     actorPlayerId: skill.ownerPlayerId,
     targetPlayerIds: [subjectId, targetPlayerId],
   });
@@ -455,7 +455,7 @@ export function applyClairvoyanceDecision(state: GameState, pending: PendingDeci
   }
   const ignition = decision as IgnitionDecision;
   if (!ignition.use) {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
     markOffered(skill, offerKey(state, `clairvoyance-${state.day}`));
     return;
   }
@@ -466,7 +466,7 @@ export function applyClairvoyanceDecision(state: GameState, pending: PendingDeci
     actorPlayerId: skill.ownerPlayerId,
     targetPlayerIds: [skill.ownerPlayerId],
   });
-  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你开启了直播：任何选择观看的玩家，其职业将被你获知（观看名单仅你可见）。`, {
+  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${ownerName} 开启了直播：任何选择观看的玩家，其职业将被${ownerName}获知（观看名单仅${ownerName}可见）。`, {
     actorPlayerId: skill.ownerPlayerId,
     targetPlayerIds: [skill.ownerPlayerId],
   });
@@ -488,23 +488,23 @@ function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pend
     addPrivateEvent(state, [viewerId], 'skill', `${viewerName} 决定不观看 ${ownerName} 的直播。`, { actorPlayerId: viewerId });
   } else if (isFloatingActive(state, viewerId, state.day)) {
     // 漂浮隐匿：直播中看不到漂浮者的身份（观看已消耗，可可获知有人观看但看不清职业）
-    addPrivateEvent(state, [ownerId], 'knowledge', `${viewerName} 观看了你的直播，但她的身影若隐若现，你看不清她的职业。`, {
+    addPrivateEvent(state, [ownerId], 'knowledge', `${viewerName} 观看了 ${ownerName} 的直播，但她的身影若隐若现，${ownerName} 看不清她的职业。`, {
       actorPlayerId: ownerId,
       targetPlayerIds: [viewerId],
     });
-    addPrivateEvent(state, [viewerId], 'skill', `你观看了 ${ownerName} 的直播，但她没能看清你的身份。`, {
+    addPrivateEvent(state, [viewerId], 'skill', `${viewerName} 观看了 ${ownerName} 的直播，但${ownerName}没能看清${viewerName}的身份。`, {
       actorPlayerId: viewerId,
       targetPlayerIds: [viewerId],
     });
   } else {
     const roleId = getRoleAssignment(state, viewerId).roleId;
     const roleName = roleNames[roleId];
-    const event = addPrivateEvent(state, [ownerId], 'knowledge', `${viewerName} 观看了你的直播，职业是${roleName}。`, {
+    const event = addPrivateEvent(state, [ownerId], 'knowledge', `${viewerName} 观看了 ${ownerName} 的直播，职业是${roleName}。`, {
       actorPlayerId: ownerId,
       targetPlayerIds: [viewerId],
     });
     addKnowledge(state, ownerId, { subjectPlayerId: viewerId, kind: 'role', value: roleId, observedDay: state.day }, event.id);
-    addPrivateEvent(state, [viewerId], 'skill', `你观看了 ${ownerName} 的直播。她看到了你是${roleName}，因此知晓了你的身份。`, {
+    addPrivateEvent(state, [viewerId], 'skill', `${viewerName} 观看了 ${ownerName} 的直播。${ownerName}看到了${viewerName}是${roleName}，因此知晓了${viewerName}的身份。`, {
       actorPlayerId: viewerId,
       targetPlayerIds: [viewerId],
     });

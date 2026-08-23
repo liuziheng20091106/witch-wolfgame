@@ -157,7 +157,7 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
   if (skill.definitionId === 'healing') {
     const targetPlayerId = requireTarget(decision, pending.candidates);
     skill.data.lastUsedNight = state.day;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'protection', `你选择治愈 ${nameOf(state, targetPlayerId)}。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'protection', `${nameOf(state, skill.ownerPlayerId)} 选择治愈 ${nameOf(state, targetPlayerId)}。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
       data: { protectTargetPlayerId: targetPlayerId },
@@ -167,7 +167,7 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
 
   const optional = decision as OptionalTargetDecision;
   if (pending.schemaKey === 'optional-target' && !optional.use) {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了${pending.title}。`, { actorPlayerId: skill.ownerPlayerId });
     return;
   }
 
@@ -179,7 +179,7 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
     // 创造决策（ignition use-only）
     const ignition = decision as IgnitionDecision;
     if (!ignition.use) {
-      addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你保留了操控液体。', { actorPlayerId: skill.ownerPlayerId });
+      addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了操控液体。`, { actorPlayerId: skill.ownerPlayerId });
       return;
     }
     createCreature(state, skill);
@@ -188,7 +188,7 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
 
   const targetPlayerId = requireTarget(optional, pending.candidates);
   if (skill.definitionId === 'witch-killer') {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你对 ${nameOf(state, targetPlayerId)} 标记了精准击杀。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 对 ${nameOf(state, targetPlayerId)} 标记了精准击杀。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
       data: { intentSource: 'precise-kill', preventable: false, targetPlayerId },
@@ -199,7 +199,7 @@ export function applyNightSkillDecision(state: GameState, pending: PendingDecisi
   if (skill.definitionId === 'soul-exchange') {
     if (isFloatingActive(state, targetPlayerId, state.day)) {
       // 漂浮隐匿：灵魂交换无法锁定目标，使用失败（照常消耗）
-      addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你对 ${nameOf(state, targetPlayerId)} 发动灵魂交换，但她的存在若隐若现，交换失败了。`, {
+      addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 对 ${nameOf(state, targetPlayerId)} 发动灵魂交换，但她的存在若隐若现，交换失败了。`, {
         actorPlayerId: skill.ownerPlayerId,
         targetPlayerIds: [targetPlayerId],
       });
@@ -405,7 +405,7 @@ export function applyVisionSkillDecision(state: GameState, pending: PendingDecis
 
   const targetName = nameOf(state, targetPlayerId);
   if (outcome === 'fail') {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `本次幻视行为被系统判定为失败，你什么都没有看到。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `本次幻视行为被系统判定为失败，${nameOf(state, skill.ownerPlayerId)} 什么都没有看到。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -413,7 +413,7 @@ export function applyVisionSkillDecision(state: GameState, pending: PendingDecis
   }
   if (isFloatingActive(state, targetPlayerId, state.day)) {
     // 漂浮隐匿：目标行动不留痕迹，强制空结果（触碰已消耗）
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你通过幻视看到：${targetName} 在现场没有留下任何行动痕迹。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 通过幻视看到：${targetName} 在现场没有留下任何行动痕迹。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -433,7 +433,7 @@ export function applyVisionSkillDecision(state: GameState, pending: PendingDecis
   if (lines.length > 0) {
     body = lines.join('');
   }
-  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你通过幻视看到（${scopeLabel}）：${body}`, {
+  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 通过幻视看到（${scopeLabel}）：${body}`, {
     actorPlayerId: skill.ownerPlayerId,
     targetPlayerIds: [targetPlayerId],
   });
@@ -513,7 +513,7 @@ export function applyNightIgnition(state: GameState, pending: PendingDecision, d
   markOffered(skill, offerKey(state, 'night-ignition'));
   const optional = decision as OptionalTargetDecision;
   if (!optional.use) {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你保留了点火。', { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了点火。`, { actorPlayerId: skill.ownerPlayerId });
     return;
   }
   const targetPlayerId = optional.targetPlayerId;
@@ -526,11 +526,11 @@ export function applyNightIgnition(state: GameState, pending: PendingDecision, d
     // 10% 烧技能
     const burned = burnAllSkills(state, targetPlayerId);
     const targetName = nameOf(state, targetPlayerId);
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你用火焰烧毁了 ${targetName} 的全部魔女技！`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 用火焰烧毁了 ${targetName} 的全部魔女技！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
-    addPrivateEvent(state, [targetPlayerId], 'skill', `你的魔法技能被 ${nameOf(state, skill.ownerPlayerId)} 烧毁了！`, {
+    addPrivateEvent(state, [targetPlayerId], 'skill', `${nameOf(state, targetPlayerId)} 的魔法技能被 ${nameOf(state, skill.ownerPlayerId)} 烧毁了！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -543,7 +543,7 @@ export function applyNightIgnition(state: GameState, pending: PendingDecision, d
   const hasPoison = assignment.resources.poison === 1;
   if (!hasAntidote && !hasPoison) {
     // 无药可烧：落空（持有者私密知晓）
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你的火焰在 ${nameOf(state, targetPlayerId)} 身上没有找到可烧毁的物品，扑了个空。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 的火焰在 ${nameOf(state, targetPlayerId)} 身上没有找到可烧毁的物品，扑了个空。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -570,27 +570,27 @@ export function applyNightIgnitionPotion(state: GameState, pending: PendingDecis
   const targetName = nameOf(state, targetPlayerId);
   if (choice === 0 && assignment.resources.antidote === 1) {
     assignment.resources.antidote = 0;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你用火焰烧毁了 ${targetName} 的解药！`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 用火焰烧毁了 ${targetName} 的解药！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
-    addPrivateEvent(state, [targetPlayerId], 'skill', `你的解药被 ${nameOf(state, skill.ownerPlayerId)} 的火焰烧毁了！`, {
+    addPrivateEvent(state, [targetPlayerId], 'skill', `${nameOf(state, targetPlayerId)} 的解药被 ${nameOf(state, skill.ownerPlayerId)} 的火焰烧毁了！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
   } else if (choice === 1 && assignment.resources.poison === 1) {
     assignment.resources.poison = 0;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你用火焰烧毁了 ${targetName} 的毒药！`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 用火焰烧毁了 ${targetName} 的毒药！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
-    addPrivateEvent(state, [targetPlayerId], 'skill', `你的毒药被 ${nameOf(state, skill.ownerPlayerId)} 的火焰烧毁了！`, {
+    addPrivateEvent(state, [targetPlayerId], 'skill', `${nameOf(state, targetPlayerId)} 的毒药被 ${nameOf(state, skill.ownerPlayerId)} 的火焰烧毁了！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
   } else {
     // 选了没有的药（理论上不会，但防御）
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `火焰在 ${targetName} 身上没有找到对应的药，扑了个空。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 的火焰在 ${targetName} 身上没有找到对应的药，扑了个空。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -628,7 +628,7 @@ export function applyDayIgnition(state: GameState, pending: PendingDecision, dec
   markOffered(skill, offerKey(state, 'day-ignition'));
   const optional = decision as OptionalTargetDecision;
   if (!optional.use) {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你保留了点火。', { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了点火。`, { actorPlayerId: skill.ownerPlayerId });
     return;
   }
   const targetPlayerId = optional.targetPlayerId;
@@ -647,11 +647,11 @@ export function applyDayIgnition(state: GameState, pending: PendingDecision, dec
     // 10% 烧技能
     burnAllSkills(state, targetPlayerId);
     const targetName = nameOf(state, targetPlayerId);
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你用火焰烧毁了 ${targetName} 的全部魔女技！`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 用火焰烧毁了 ${targetName} 的全部魔女技！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
-    addPrivateEvent(state, [targetPlayerId], 'skill', `你的魔法技能被 ${nameOf(state, skill.ownerPlayerId)} 烧毁了！`, {
+    addPrivateEvent(state, [targetPlayerId], 'skill', `${nameOf(state, targetPlayerId)} 的魔法技能被 ${nameOf(state, skill.ownerPlayerId)} 烧毁了！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -660,11 +660,11 @@ export function applyDayIgnition(state: GameState, pending: PendingDecision, dec
     skill.data.burnedVoteDay = state.day;
     skill.data.burnedVoteTarget = targetPlayerId;
     const targetName = nameOf(state, targetPlayerId);
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你烧毁了 ${targetName} 今天的投票，她的票将不作数。`, {
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 烧毁了 ${targetName} 今天的投票，她的票将不作数。`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
-    addPrivateEvent(state, [targetPlayerId], 'skill', `你的投票被 ${nameOf(state, skill.ownerPlayerId)} 的火焰烧毁了，今天的票将不作数！`, {
+    addPrivateEvent(state, [targetPlayerId], 'skill', `${nameOf(state, targetPlayerId)} 的投票被 ${nameOf(state, skill.ownerPlayerId)} 的火焰烧毁了，今天的票将不作数！`, {
       actorPlayerId: skill.ownerPlayerId,
       targetPlayerIds: [targetPlayerId],
     });
@@ -709,7 +709,7 @@ export function applyLevitation(state: GameState, pending: PendingDecision, deci
   }
   const levitation = decision as IgnitionDecision;
   if (!levitation.use) {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你保留了漂浮。', { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了漂浮。`, { actorPlayerId: skill.ownerPlayerId });
     // 关键：保留也必须标记调度 key（night-start），否则下一轮仍会询问，导致死循环。
     // offerKey 含当天号，只屏蔽当天；下一天 key 变化，漂浮仍可正常询问（每局限一次，未发动则保留可下一天用）。
     markOffered(skill, offerKey(state, 'night-start'));
@@ -718,7 +718,7 @@ export function applyLevitation(state: GameState, pending: PendingDecision, deci
   skill.data.floatingStartDay = state.day;
   exhaustSkill(skill);
   // 无公开播报（隐匿）；仅持有者本人知晓已发动
-  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你发动了漂浮，隐藏了自己的脚印：直到明天白天结束，你的行动不留痕迹。`, {
+  addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 发动了漂浮，隐藏了自己的脚印：直到明天白天结束，${nameOf(state, skill.ownerPlayerId)} 的行动不留痕迹。`, {
     actorPlayerId: skill.ownerPlayerId,
   });
 }
@@ -808,7 +808,7 @@ function applyCreaturePotion(state: GameState, skill: WitchSkillInstance, pendin
     ownerAssignment.resources.antidote = 0;
     creatureAssignment.resources.antidote = 1;
     creature.resources.antidote = 1;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你把解药交给了造物。`, { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 把解药交给了造物。`, { actorPlayerId: skill.ownerPlayerId });
   } else if (targetPlayerId === 1) {
     if (ownerAssignment.resources.poison !== 1) {
       throw new Error('毒药不可用');
@@ -816,7 +816,7 @@ function applyCreaturePotion(state: GameState, skill: WitchSkillInstance, pendin
     ownerAssignment.resources.poison = 0;
     creatureAssignment.resources.poison = 1;
     creature.resources.poison = 1;
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `你把毒药交给了造物。`, { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 把毒药交给了造物。`, { actorPlayerId: skill.ownerPlayerId });
   } else {
     throw new Error('造物给药选择不合法');
   }
