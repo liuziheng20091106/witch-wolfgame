@@ -113,6 +113,7 @@ export type TimelineEventKind =
   | 'dawn'
   | 'speech'
   | 'restrained'
+  | 'last-words'
   | 'vote'
   | 'exile'
   | 'trial-by-fire'

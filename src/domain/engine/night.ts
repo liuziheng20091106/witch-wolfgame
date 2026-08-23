@@ -3,6 +3,7 @@ import { addPublicEvent } from './events';
 import { createRewindSnapshot } from './createGame';
 import { getName, getPlayer } from './selectors';
 import { checkWin } from './win';
+import { getNextLastWordsDecision } from '../skills/lastWords';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return getName(state, playerId);
@@ -164,7 +165,18 @@ export function resolveNight(state: GameState): GameState {
     state,
     [...grouped.entries()].map(([playerId, sources]) => ({ playerId, sources })),
   );
-  if (resolved.phase !== 'ended' && resolved === state) {
+  if (resolved.phase === 'ended') {
+    return resolved;
+  }
+  // 遗言：夜间死亡结算后，若有合格死者需要发布遗言，保持 night-resolution 阶段等待遗言决策。
+  // 多个死者时逐个询问：提交一次遗言后 advance 会再次进入本阶段，幂等重跑直至全部发完。
+  const lastWords = getNextLastWordsDecision(resolved);
+  if (lastWords) {
+    resolved.pendingDecision = lastWords;
+    resolved.phase = 'night-resolution';
+    return resolved;
+  }
+  if (resolved === state) {
     resolved.phase = 'dawn';
   }
   return resolved;

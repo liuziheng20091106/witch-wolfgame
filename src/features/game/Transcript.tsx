@@ -1,4 +1,4 @@
-import { ArrowDown, Gavel, MessageSquareText, Moon, ScrollText, Skull, Sparkles, Sunrise, Vote } from 'lucide-react';
+import { ArrowDown, Gavel, MessageSquareQuote, MessageSquareText, Moon, ScrollText, Skull, Sparkles, Sunrise, Vote } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { GameObservation, TimelineEvent } from '../../domain/model';
 import styles from './Transcript.module.css';
@@ -11,6 +11,7 @@ interface TranscriptProps {
 
 function EventIcon({ event }: { event: TimelineEvent }) {
   if (event.kind === 'speech') return <MessageSquareText />;
+  if (event.kind === 'last-words') return <MessageSquareQuote />;
   if (event.kind === 'vote') return <Vote />;
   if (event.kind === 'death') return <Skull />;
   if (event.kind === 'dawn') return <Sunrise />;

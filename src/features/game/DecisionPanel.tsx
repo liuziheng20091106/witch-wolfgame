@@ -151,10 +151,18 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
     onSubmit(decision);
   };
 
+  // 遗言表单文案：遗言与公开发言共用 speech 表单，用 if/else 区分文案（项目禁三目）
+  let speechLabel = '公开发言';
+  let speechPlaceholder = '也可以留空保持沉默';
+  if (pending.options.lastWords === true) {
+    speechLabel = '遗言';
+    speechPlaceholder = '留下最后的话（可留空）';
+  }
+
   return <section className={styles.panel} aria-labelledby="decision-title">
     <header><span>YOUR DECISION</span><h2 id="decision-title">{pending.title}</h2><p>{pending.description}</p></header>
     <div className={styles.body}>
-      {pending.schemaKey === 'speech' && <label className={styles.textarea}>公开发言<textarea maxLength={100} value={speech} onChange={(event) => setSpeech(event.target.value)} placeholder="也可以留空保持沉默" /><span>{speech.length}/100</span></label>}
+      {pending.schemaKey === 'speech' && <label className={styles.textarea}>{speechLabel}<textarea maxLength={100} value={speech} onChange={(event) => setSpeech(event.target.value)} placeholder={speechPlaceholder} /><span>{speech.length}/100</span></label>}
       {pending.schemaKey === 'target' && targetControl(pending.allowAbstain)}
       {(pending.schemaKey === 'optional-target' || pending.schemaKey === 'liquid-control' || pending.schemaKey === 'levitation' || pending.schemaKey === 'voice-mimic' || pending.schemaKey === 'ignition') && <label className={styles.toggle}><input type="checkbox" checked={useSkill} onChange={(event) => setUseSkill(event.target.checked)} /><span>本次使用技能</span></label>}
       {pending.schemaKey === 'optional-target' && useSkill && targetControl(false)}

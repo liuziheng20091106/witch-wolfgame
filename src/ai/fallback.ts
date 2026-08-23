@@ -30,6 +30,10 @@ function guidedSpeech(state: GameState, actorId: PlayerId, source: string): stri
 function fallbackSpeech(state: GameState, speakerId: PlayerId, pending: PendingDecision, rngState: number): { speech: string; rngState: number } {
   const character = characterById[getPlayer(state, speakerId).characterId];
   const selected = chooseWithState(character.examplePhrases, rngState);
+  // 遗言不受视线诱导约束（死者没有视线），直接截断使用例句
+  if (pending.options.lastWords === true) {
+    return { speech: selected.item.slice(0, 100), rngState: selected.state };
+  }
   return { speech: guidedSpeech(state, pending.actorId, selected.item), rngState: selected.state };
 }
 
