@@ -127,6 +127,14 @@ export function createGame(setup: GameSetup): GameState {
     result: null,
   };
   const startEvent = addPublicEvent(state, 'system', `本局版型：${BOARD_DESCRIPTION}。六名少女进入审判庭，首夜开始。`);
+  const speechOrderText = shuffledSpeech.items.map((playerId, index) => {
+    const characterId = selectedCharacters[playerId];
+    if (!characterId) {
+      throw new Error(`座位 ${playerId} 缺少发言顺序角色信息`);
+    }
+    return `${index + 1}. ${playerId + 1}号 ${characterById[characterId].name}`;
+  }).join('、');
+  addPublicEvent(state, 'knowledge', `今日发言顺序：${speechOrderText}。`);
   const skillAnnouncement = addPublicEvent(state, 'knowledge', `魔女技公开：${PLAYER_IDS.map((playerId) => {
     const characterId = selectedCharacters[playerId];
     const definitionId = skillInstances[playerId]?.definitionId;

@@ -116,7 +116,7 @@ export function getAfterSpeechSkillDecision(state: GameState, actorId: PlayerId)
     const player = getPlayer(state, playerId);
     return { playerId, name: nameOf(state, playerId), speechStyle: characterById[player.characterId].speechStyle.slice(0, 300) };
   });
-  const decision = makeSkillDecision(state, skill, '声音模仿', '选择一名尚未发言者，并伪造一段内容。伪造内容必须尽量简短、不超过 50 字，且完全模仿所选目标本人的说话风格与语气，禁止使用你自己的说话风格。', candidates, 'voice-mimic', { mimicVoices });
+  const decision = makeSkillDecision(state, skill, '声音模仿', '选择一名尚未发言者（按座位号，如"3号·名字"），并伪造一段内容。伪造内容必须尽量简短、不超过 50 字，且完全模仿所选座位号对应角色的说话风格与语气（见候选附带的 speechStyle），禁止使用你自己的说话风格。', candidates, 'voice-mimic', { mimicVoices });
   // 视线诱导为主动技（指定被诱导者），不再全局强制提及持有者；
   // 伪造内容挂在被模仿者名下，若被模仿者是被诱导者，其约束在 applySpeechSkillDecision 中按目标校验。
   return decision;
