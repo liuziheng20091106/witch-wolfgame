@@ -146,6 +146,7 @@ console.log('=== 2. 女巫造物 ===');
   // 给药二级决策
   const potionPending = after.pendingDecision;
   check('出现造物给药决策', potionPending !== null && potionPending.title === '造物-给药');
+  check('给药决策带药选择标记（potionChoice）', potionPending !== null && potionPending.options.potionChoice === true);
   if (potionPending) {
     after = driveCreature(after, potionPending, { targetPlayerId: 1 });
     check('造物获得毒药', getRoleAssignment(after, 99).resources.poison === 1);

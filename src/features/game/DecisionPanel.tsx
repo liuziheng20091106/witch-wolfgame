@@ -119,9 +119,15 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   if (!humanDecision || !pending) return null;
 
   const targetControl = (allowEmpty: boolean) => <fieldset className={styles.candidates}>
-    <legend>目标</legend>
+    <legend>{pending.options.potionChoice === true ? '选择药水' : '目标'}</legend>
     {allowEmpty && <label><input type="radio" name="target" value="" checked={target === ''} onChange={() => setTarget('')} /><span>弃权 / 不选择</span></label>}
-    {pending.candidates.map((playerId) => <label key={playerId}><input type="radio" name="target" value={playerId} checked={target === String(playerId)} onChange={() => setTarget(String(playerId))} /><span>{playerId + 1}号 · {candidateNames.get(playerId)}</span></label>)}
+    {pending.candidates.map((playerId) => {
+      let label = `${playerId + 1}号 · ${candidateNames.get(playerId)}`;
+      if (pending.options.potionChoice === true) {
+        label = playerId === 0 ? '解药' : '毒药';
+      }
+      return <label key={playerId}><input type="radio" name="target" value={playerId} checked={target === String(playerId)} onChange={() => setTarget(String(playerId))} /><span>{label}</span></label>;
+    })}
   </fieldset>;
 
   let valid = true;

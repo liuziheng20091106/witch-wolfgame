@@ -491,7 +491,10 @@ export function getNightIgnitionPotionDecision(state: GameState, targetPlayerId:
   if (candidates.length === 0) {
     return null;
   }
-  return makeSkillDecision(state, skill, '点火-烧药', '选择烧毁哪瓶药（0=解药 1=毒药）。', candidates, 'target');
+  const decision = makeSkillDecision(state, skill, '点火-烧药', '选择烧毁哪瓶药（0=解药 1=毒药）。', candidates, 'target');
+  // 药选择标记：candidates 是药索引（0=解药 1=毒药），不是玩家 id，UI/AI 据此正确渲染
+  decision.options.potionChoice = true;
+  return decision;
 }
 
 /** 夜间点火结算：90% 烧物品 / 10% 烧技能。 */
@@ -773,6 +776,8 @@ function createCreature(state: GameState, skill: WitchSkillInstance): void {
     }
     if (potionCandidates.length > 0) {
       const potionPending = makeSkillDecision(state, skill, '造物-给药', '选择给造物哪瓶药（0=解药 1=毒药）。造物可独立决定对谁使用。', potionCandidates, 'target');
+      // 药选择标记：candidates 是药索引（0=解药 1=毒药），不是玩家 id，UI/AI 据此正确渲染
+      potionPending.options.potionChoice = true;
       state.pendingDecision = potionPending;
     }
   }
