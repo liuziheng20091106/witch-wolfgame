@@ -116,7 +116,7 @@ console.log('=== 1. 发动漂浮 ===');
 // ===== 1b. 保留漂浮：不再重复询问（回归：死循环 bug）=====
 console.log('=== 1b. 保留漂浮不再询问 ===');
 {
-  const game = createGameWithLevitation(1);
+  let game = createGameWithLevitation(1);
   if (!game) {
     process.exit(1);
   }
@@ -124,9 +124,30 @@ console.log('=== 1b. 保留漂浮不再询问 ===');
   const decision = getLevitationDecision(game, getSkillInstance(game, ownerId));
   applyLevitation(game, decision, { use: false });
   check('保留后技能未消耗', getSkillInstance(game, ownerId).status === 'ready');
-  // 关键回归：保留后调度不应再次询问漂浮（此前因 key 不匹配死循环）
+  // 关键回归：保留后当天调度不应再次询问漂浮（此前因 key 不匹配死循环）
   const pending = getNextNightSkillDecision(game);
-  check('保留后不再询问漂浮', pending === null || pending.title !== '漂浮');
+  check('保留后当天不再询问漂浮', pending === null || pending.title !== '漂浮');
+  // 回归：保留只屏蔽当天（offerKey 含 day）；下一天漂浮仍可正常询问（未发动则保留可下一天用）
+  game.day += 1;
+  // 下一天调度可能先出更高优先级技能（如操控液体），循环推进直到出现漂浮或确认不出现
+  let nextDayPending = null;
+  let guard = 0;
+  while (guard < 10) {
+    guard += 1;
+    const candidate = getNextNightSkillDecision(game);
+    if (!candidate) {
+      break;
+    }
+    if (candidate.title === '漂浮') {
+      nextDayPending = candidate;
+      break;
+    }
+    game.pendingDecision = candidate;
+    const advanced = reduceGame(game, { type: 'submit-decision', pendingDecisionId: candidate.id, actorId: candidate.actorId, decision: fallbackDecision(game, candidate).decision });
+    game.pendingDecision = null;
+    game = advanced;
+  }
+  check('下一天漂浮仍可询问', nextDayPending !== null && nextDayPending.title === '漂浮');
 }
 
 // ===== 2. 预言家查验漂浮者：空结果 =====

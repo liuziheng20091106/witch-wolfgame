@@ -697,10 +697,11 @@ export function applyLevitation(state: GameState, pending: PendingDecision, deci
   if (!skill || skill.definitionId !== 'levitation' || skill.status !== 'ready') {
     throw new Error('漂浮技能不可用');
   }
-  const ignition = decision as IgnitionDecision;
-  if (!ignition.use) {
+  const levitation = decision as IgnitionDecision;
+  if (!levitation.use) {
     addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你保留了漂浮。', { actorPlayerId: skill.ownerPlayerId });
-    // 关键：保留也必须标记调度 key（night-start），否则下一轮仍会询问，导致死循环
+    // 关键：保留也必须标记调度 key（night-start），否则下一轮仍会询问，导致死循环。
+    // offerKey 含当天号，只屏蔽当天；下一天 key 变化，漂浮仍可正常询问（每局限一次，未发动则保留可下一天用）。
     markOffered(skill, offerKey(state, 'night-start'));
     return;
   }
