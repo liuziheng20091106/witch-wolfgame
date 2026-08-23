@@ -176,15 +176,21 @@ console.log('\n=== 4. 轨迹聚合（脱敏）与目标不重复 ===');
       } else {
         // 成功播报：必须含"通过幻视看到"
         check(`seed ${seed}: 幻视成功播报格式正确`, lastVisionText.includes('通过幻视看到'), lastVisionText);
-        // 脱敏：除目标名与持有者名外，不得出现其他角色名
+        // 脱敏：除目标名与持有者名外，不得出现其他角色名。
+        // 先校验事件归属：事件必须属于当前幻视持有者（actor 一致）、类型为技能、且目标字段存在，
+        // 避免文本恰好命中旧事件或其他技能事件导致脱敏误判。
         const allNames = game.players.map((pl) => characterById[pl.characterId].name);
         const mentioned = allNames.filter((n) => lastVisionText.includes(n));
-        const visionOwner = vision.ownerPlayerId;
-        const ownerName = nameOf(game, visionOwner);
-        // 目标名从幻视事件的目标字段取（合法提及 = 持有者 + 目标）
+        const ownerName = nameOf(game, vision.ownerPlayerId);
         const visionTargetId = lastVisionEvent?.targetPlayerIds?.[0];
-        const targetName = typeof visionTargetId === 'number' ? nameOf(game, visionTargetId) : '';
-        const legitMentions = mentioned.filter((n) => n === ownerName || (targetName.length > 0 && n === targetName));
+        const eventBelongsToVision = lastVisionEvent?.actorPlayerId === vision.ownerPlayerId
+          && lastVisionEvent?.kind === 'skill'
+          && typeof visionTargetId === 'number';
+        let legitMentions = [];
+        if (eventBelongsToVision) {
+          const targetName = nameOf(game, visionTargetId);
+          legitMentions = mentioned.filter((n) => n === ownerName || n === targetName);
+        }
         check(`seed ${seed}: 轨迹不泄露他人姓名（提及: ${mentioned.join('、') || '无'}）`, mentioned.length === legitMentions.length, lastVisionText);
       }
       verified = true;
