@@ -16,7 +16,7 @@ import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events'
 import { chooseWithState } from '../engine/random';
 import { getAlivePlayerIds, getPlayer, getRoleAssignment } from '../engine/selectors';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
-import { getVisionSkillDecision } from './nightSkills';
+import { getVisionSkillDecision, isFloatingActive } from './nightSkills';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return characterById[getPlayer(state, playerId).characterId].name;
@@ -481,6 +481,16 @@ function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pend
   const ignition = decision as IgnitionDecision;
   if (!ignition.use) {
     addPrivateEvent(state, [viewerId], 'skill', `${viewerName} 决定不观看 ${ownerName} 的直播。`, { actorPlayerId: viewerId });
+  } else if (isFloatingActive(state, viewerId, state.day)) {
+    // 漂浮隐匿：直播中看不到漂浮者的身份（观看已消耗，可可获知有人观看但看不清职业）
+    addPrivateEvent(state, [ownerId], 'knowledge', `${viewerName} 观看了你的直播，但她的身影若隐若现，你看不清她的职业。`, {
+      actorPlayerId: ownerId,
+      targetPlayerIds: [viewerId],
+    });
+    addPrivateEvent(state, [viewerId], 'skill', `你观看了 ${ownerName} 的直播，但她没能看清你的身份。`, {
+      actorPlayerId: viewerId,
+      targetPlayerIds: [viewerId],
+    });
   } else {
     const roleId = getRoleAssignment(state, viewerId).roleId;
     const roleName = roleNames[roleId];
