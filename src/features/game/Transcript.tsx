@@ -11,7 +11,7 @@ interface TranscriptProps {
 
 function EventIcon({ event }: { event: TimelineEvent }) {
   if (event.kind === 'speech') return <MessageSquareText />;
-  if (event.kind === 'last-words') return <MessageSquareQuote />;
+  if (event.kind === 'last-words' || event.kind === 'post-game-speech') return <MessageSquareQuote />;
   if (event.kind === 'vote') return <Vote />;
   if (event.kind === 'death') return <Skull />;
   if (event.kind === 'dawn') return <Sunrise />;
@@ -42,13 +42,15 @@ export function Transcript({ observation, phaseLabel, onFollowingChange }: Trans
       updateFollowing(element.scrollHeight - element.scrollTop - element.clientHeight < 72);
     }}>
       {observation.publicEvents.map((event) => {
-        const speaker = event.kind === 'speech' && event.displayAuthorPlayerId !== null
+        const isSpeech = event.kind === 'speech';
+        const isPostGame = event.kind === 'post-game-speech';
+        const speaker = (isSpeech || isPostGame) && event.displayAuthorPlayerId !== null
           ? playerById.get(event.displayAuthorPlayerId)
           : null;
         return <article key={event.id} className={`${styles.event} ${event.kind === 'trial-by-fire' || event.kind === 'result' ? styles.major : ''}`}>
           <span className={styles.icon}><EventIcon event={event} /></span>
           <div><span className={styles.meta}>第 {event.day} 天 · {event.phase}</span>
-            {speaker && <div className={styles.speaker}><img src={speaker.avatarUrl} alt="" /><strong>{speaker.name}</strong></div>}
+            {speaker && <div className={styles.speaker}><img src={speaker.avatarUrl} alt="" /><strong>{speaker.name}{isPostGame && <small className={styles.speakerTag}>赛后复盘</small>}</strong></div>}
             <p>{event.text}</p>
             {observation.omniscient && event.data.hasForgedFragment === true && <small>观战标记：含声音模仿片段，真实来源为 {event.actualAuthorPlayerId === null ? '未知' : `${event.actualAuthorPlayerId + 1}号`}。</small>}
           </div>

@@ -5,6 +5,7 @@ import { AiCommandError, defaultAiConfig, type AiProviderConfig } from '../ai/ty
 import { createGame } from '../domain/engine/createGame';
 import { reduceGame } from '../domain/engine/reducer';
 import { selectObservation } from '../domain/engine/selectors';
+import { postGameDone } from '../domain/skills/postGame';
 import type { GameEvent, GameObservation, GameState, SubmittedDecision } from '../domain/model';
 import {
   clearSavedGame,
@@ -168,7 +169,19 @@ export function useGameController(): GameController {
   }, [game]);
 
   useEffect(() => {
-    if (view !== 'game' || !game || game.phase === 'ended' || paused || aiError || awaitingRetry) return;
+    if (view !== 'game' || !game || paused || aiError || awaitingRetry) return;
+    // 对局结束：仅当尚未进入赛后阶段且胜负已结算时，派发一次 advance 切入 post-game；
+    // 赛后阶段完成（postGameDone）后停止驱动。
+    if (game.phase === 'ended') {
+      if (game.result) {
+        const timer = window.setTimeout(() => dispatch({ type: 'advance' }), 600);
+        return () => window.clearTimeout(timer);
+      }
+      return;
+    }
+    if (game.phase === 'post-game' && postGameDone(game)) {
+      return;
+    }
     const pending = game.pendingDecision;
     if (!pending) {
       const timer = window.setTimeout(() => dispatch({ type: 'advance' }), 460);
@@ -205,7 +218,10 @@ export function useGameController(): GameController {
     }
 
     setThinking(true);
-    const actorObservation = selectObservation(game, { kind: 'player', playerId: pending.actorId });
+    // 赛后复盘：以全知（spectator）视角请求 AI，使复盘上下文包含全部私密行动（真相已揭晓）
+    const actorObservation = pending.options.postGame === true
+      ? selectObservation(game, { kind: 'spectator' })
+      : selectObservation(game, { kind: 'player', playerId: pending.actorId });
     void requestDecision({ observation: actorObservation, pendingDecision: pending, sessionId: sessionIdRef.current }, settings, controller.signal)
       .then((decision) => {
         if (disposed) return;

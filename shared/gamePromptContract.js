@@ -56,6 +56,7 @@ export const GAME_PHASES = freeze(/** @type {const} */([
  'runoff',
  'day-resolution',
  'ended',
+ 'post-game',
 ]));
 
 export const DECISION_EXAMPLES = freeze(/** @type {const} */({

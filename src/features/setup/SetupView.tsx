@@ -42,7 +42,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
   const [copiedSeed, setCopiedSeed] = useState<number | null>(null);
   const ready = hasUsableSettings(settings) && (setup.mode === 'spectator' || setup.humanCharacterId !== null);
   const savedLabel = savedGame
-    ? `${savedGame.state.day === 0 ? '首夜' : `第 ${savedGame.state.day} 天`} · ${savedGame.state.phase === 'ended' ? '已结束' : '进行中'}`
+    ? `${savedGame.state.day === 0 ? '首夜' : `第 ${savedGame.state.day} 天`} · ${savedGame.state.phase === 'ended' || savedGame.state.phase === 'post-game' ? '已结束' : '进行中'}`
     : null;
 
   const chooseCharacter = (characterId: CharacterId) => onUpdateSetup({ ...setup, humanCharacterId: characterId });
@@ -58,7 +58,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
     window.setTimeout(() => setCopiedSeed((current) => (current === seed ? null : current)), 1500);
   };
   const requestStart = () => {
-    if (savedGame && savedGame.state.phase !== 'ended') {
+    if (savedGame && savedGame.state.phase !== 'ended' && savedGame.state.phase !== 'post-game') {
       setConfirming(true);
     } else {
       onStart();

@@ -2,6 +2,7 @@ import { CREATURE_ID, POTION_CHOICE_CATALOG, buildGameSystemPrompt, formatPublic
 import { characterById } from '../domain/catalog/characters';
 import { roleDescriptions, roleNames } from '../domain/catalog/roles';
 import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
+import { buildPostGameContext } from '../domain/skills/postGame';
 import type { AiDecisionRequest } from './types';
 
 export interface PromptMessage {
@@ -134,6 +135,8 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
         privateKnowledge,
         publicSkills,
         privateEvents: observation.privateEvents.slice(-12).map((event) => event.text),
+        // 赛后复盘：额外提供全量对局时间线（发言/遗言/死亡/私密行动/前序赛后发言），供公开复盘
+        postGameContext: pendingDecision.options.postGame === true ? buildPostGameContext(observation) : undefined,
       }),
     },
   ];
