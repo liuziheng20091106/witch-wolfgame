@@ -426,7 +426,6 @@ export function getClairvoyanceDecision(state: GameState): PendingDecision | nul
     if (wasOffered(skill, offeredKey)) {
       return null;
     }
-<<<<<<< HEAD
     const ownerName = nameOf(state, skill.ownerPlayerId);
     return makeSkillDecision(
       state,
