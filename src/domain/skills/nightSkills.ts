@@ -700,7 +700,8 @@ export function applyLevitation(state: GameState, pending: PendingDecision, deci
   const ignition = decision as IgnitionDecision;
   if (!ignition.use) {
     addPrivateEvent(state, [skill.ownerPlayerId], 'skill', '你保留了漂浮。', { actorPlayerId: skill.ownerPlayerId });
-    markOffered(skill, offerKey(state, `levitation-${state.day}`));
+    // 关键：保留也必须标记调度 key（night-start），否则下一轮仍会询问，导致死循环
+    markOffered(skill, offerKey(state, 'night-start'));
     return;
   }
   skill.data.floatingStartDay = state.day;
