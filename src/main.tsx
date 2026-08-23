@@ -1,7 +1,10 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
+import { exportCurrentGame } from './app/gameExport';
 import { defaultThemeSettings, loadThemeSettings } from './storage/browserStorage';
 import './styles/global.css';
+
+window.exportCurrentGame = exportCurrentGame;
 
 const storedTheme = loadThemeSettings();
 const initialTheme = storedTheme.ok && storedTheme.value ? storedTheme.value : defaultThemeSettings;

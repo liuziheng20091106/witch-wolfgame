@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { aiDebugReportFilename, formatAiDebugReport } from '../../ai/debugReport';
 import type { AiCommandError } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
+import { downloadTextFile } from '../../app/download';
 import type { GameObservation, PendingDecision, PlayerId, SubmittedDecision } from '../../domain/model';
 import { isCreatureId } from '../../domain/engine/selectors';
 import styles from './DecisionPanel.module.css';
@@ -46,15 +47,11 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   const downloadDebugReport = () => {
     if (!aiError?.debugReport || !debugReportText) return;
     try {
-      const url = URL.createObjectURL(new Blob([debugReportText], { type: 'application/json;charset=utf-8' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = aiDebugReportFilename(aiError.debugReport);
-      link.hidden = true;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      downloadTextFile(
+        debugReportText,
+        aiDebugReportFilename(aiError.debugReport),
+        'application/json;charset=utf-8',
+      );
       setDebugExportStatus('downloaded');
       setDebugExportError(null);
     } catch (error) {
