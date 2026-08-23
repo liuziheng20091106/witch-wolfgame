@@ -1,10 +1,14 @@
+import { POTION_CHOICE_CATALOG } from '../../../shared/gamePromptContract.js';
 import { AlertTriangle, Clipboard, Download, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { aiDebugReportFilename, formatAiDebugReport } from '../../ai/debugReport';
 import type { AiCommandError } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
-import type { GameObservation, PendingDecision, SubmittedDecision } from '../../domain/model';
+import type { GameObservation, PendingDecision, PlayerId, SubmittedDecision } from '../../domain/model';
+import { isCreatureId } from '../../domain/engine/selectors';
 import styles from './DecisionPanel.module.css';
+
+const potionChoiceNames: ReadonlyMap<PlayerId, string> = new Map(POTION_CHOICE_CATALOG.map((choice) => [choice.playerId, choice.name]));
 
 function formatPayloadSize(text: string): string {
   const bytes = new TextEncoder().encode(text).byteLength;
@@ -86,6 +90,10 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   }, [aiError]);
 
   const candidateNames = useMemo(() => new Map(observation.players.map((player) => [player.id, player.name])), [observation.players]);
+  const candidateLabel = (playerId: PlayerId): string => {
+    const name = candidateNames.get(playerId) ?? '未知目标';
+    return isCreatureId(playerId) ? name : `${playerId + 1}号 · ${name}`;
+  };
   const requiredMention = typeof pending?.options.requiredMention === 'string' ? pending.options.requiredMention : null;
   const requiredSeatLabel = typeof pending?.options.requiredSeatLabel === 'string' ? pending.options.requiredSeatLabel : null;
   const mentionsRequired = (value: string) => !requiredMention || value.includes(requiredMention) || (requiredSeatLabel !== null && value.includes(requiredSeatLabel));
@@ -122,9 +130,9 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
     <legend>{pending.options.potionChoice === true ? '选择药水' : '目标'}</legend>
     {allowEmpty && <label><input type="radio" name="target" value="" checked={target === ''} onChange={() => setTarget('')} /><span>弃权 / 不选择</span></label>}
     {pending.candidates.map((playerId) => {
-      let label = `${playerId + 1}号 · ${candidateNames.get(playerId)}`;
+      let label = candidateLabel(playerId);
       if (pending.options.potionChoice === true) {
-        label = playerId === 0 ? '解药' : '毒药';
+        label = potionChoiceNames.get(playerId) ?? '未知药水';
       }
       return <label key={playerId}><input type="radio" name="target" value={playerId} checked={target === String(playerId)} onChange={() => setTarget(String(playerId))} /><span>{label}</span></label>;
     })}
@@ -141,24 +149,32 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   const submit = () => {
     let decision: SubmittedDecision;
     if (pending.schemaKey === 'speech') decision = { speech };
-    else if (pending.schemaKey === 'target') decision = { targetPlayerId: target === '' ? null : Number(target) as 0 | 1 | 2 | 3 | 4 | 5 };
-    else if (pending.schemaKey === 'optional-target') decision = { use: useSkill, targetPlayerId: useSkill ? Number(target) as 0 | 1 | 2 | 3 | 4 | 5 : null };
-    else if (pending.schemaKey === 'witch') decision = { save, poisonTargetPlayerId: poison === '' ? null : Number(poison) as 0 | 1 | 2 | 3 | 4 | 5 };
-    else if (pending.schemaKey === 'liquid-control') decision = { use: useSkill, mode: useSkill ? mode as 'extract' | 'spread' : null, targetPlayerId: useSkill && mode === 'extract' ? Number(target) as 0 | 1 | 2 | 3 | 4 | 5 : null, factId: useSkill && mode === 'spread' ? factId : null };
-    else if (pending.schemaKey === 'levitation') decision = { use: useSkill, mode: useSkill ? mode as 'move-first' | 'move-last' | 'tie-break' : null, targetPlayerId: useSkill && mode !== 'tie-break' ? Number(target) as 0 | 1 | 2 | 3 | 4 | 5 : null };
-    else if (pending.schemaKey === 'voice-mimic') decision = { use: useSkill, targetPlayerId: useSkill ? Number(target) as 0 | 1 | 2 | 3 | 4 | 5 : null, forgedSpeech: useSkill ? forgedSpeech : null };
+    else if (pending.schemaKey === 'target') decision = { targetPlayerId: target === '' ? null : Number(target) as PlayerId };
+    else if (pending.schemaKey === 'optional-target') decision = { use: useSkill, targetPlayerId: useSkill ? Number(target) as PlayerId : null };
+    else if (pending.schemaKey === 'witch') decision = { save, poisonTargetPlayerId: poison === '' ? null : Number(poison) as PlayerId };
+    else if (pending.schemaKey === 'liquid-control') decision = { use: useSkill, mode: useSkill ? mode as 'extract' | 'spread' : null, targetPlayerId: useSkill && mode === 'extract' ? Number(target) as PlayerId : null, factId: useSkill && mode === 'spread' ? factId : null };
+    else if (pending.schemaKey === 'levitation') decision = { use: useSkill, mode: useSkill ? mode as 'move-first' | 'move-last' | 'tie-break' : null, targetPlayerId: useSkill && mode !== 'tie-break' ? Number(target) as PlayerId : null };
+    else if (pending.schemaKey === 'voice-mimic') decision = { use: useSkill, targetPlayerId: useSkill ? Number(target) as PlayerId : null, forgedSpeech: useSkill ? forgedSpeech : null };
     else decision = { use: useSkill };
     onSubmit(decision);
   };
 
+  // 遗言表单文案：遗言与公开发言共用 speech 表单，用 if/else 区分文案（项目禁三目）
+  let speechLabel = '公开发言';
+  let speechPlaceholder = '也可以留空保持沉默';
+  if (pending.options.lastWords === true) {
+    speechLabel = '遗言';
+    speechPlaceholder = '留下最后的话（可留空）';
+  }
+
   return <section className={styles.panel} aria-labelledby="decision-title">
     <header><span>YOUR DECISION</span><h2 id="decision-title">{pending.title}</h2><p>{pending.description}</p></header>
     <div className={styles.body}>
-      {pending.schemaKey === 'speech' && <label className={styles.textarea}>公开发言<textarea maxLength={100} value={speech} onChange={(event) => setSpeech(event.target.value)} placeholder="也可以留空保持沉默" /><span>{speech.length}/100</span></label>}
+      {pending.schemaKey === 'speech' && <label className={styles.textarea}>{speechLabel}<textarea maxLength={100} value={speech} onChange={(event) => setSpeech(event.target.value)} placeholder={speechPlaceholder} /><span>{speech.length}/100</span></label>}
       {pending.schemaKey === 'target' && targetControl(pending.allowAbstain)}
       {(pending.schemaKey === 'optional-target' || pending.schemaKey === 'liquid-control' || pending.schemaKey === 'levitation' || pending.schemaKey === 'voice-mimic' || pending.schemaKey === 'ignition') && <label className={styles.toggle}><input type="checkbox" checked={useSkill} onChange={(event) => setUseSkill(event.target.checked)} /><span>本次使用技能</span></label>}
       {pending.schemaKey === 'optional-target' && useSkill && targetControl(false)}
-      {pending.schemaKey === 'witch' && <><label className={styles.toggle}><input type="checkbox" checked={save} disabled={pending.options.canSave !== true} onChange={(event) => setSave(event.target.checked)} /><span>使用解药救下狼刀目标</span></label><label className={styles.select}>毒药目标<select value={poison} onChange={(event) => setPoison(event.target.value)}><option value="">不用毒</option>{pending.candidates.map((id) => <option key={id} value={id}>{id + 1}号 · {candidateNames.get(id)}</option>)}</select></label></>}
+      {pending.schemaKey === 'witch' && <><label className={styles.toggle}><input type="checkbox" checked={save} disabled={pending.options.canSave !== true} onChange={(event) => setSave(event.target.checked)} /><span>使用解药救下狼刀目标</span></label><label className={styles.select}>毒药目标<select value={poison} onChange={(event) => setPoison(event.target.value)}><option value="">不用毒</option>{pending.candidates.map((id) => <option key={id} value={id}>{candidateLabel(id)}</option>)}</select></label></>}
       {pending.schemaKey === 'liquid-control' && useSkill && <><div className={styles.segment}><button type="button" className={mode === 'extract' ? styles.selected : ''} onClick={() => setMode('extract')}>抽取职业</button><button type="button" className={mode === 'spread' ? styles.selected : ''} onClick={() => setMode('spread')}>传播事实</button></div>{mode === 'extract' && targetControl(false)}{mode === 'spread' && <label className={styles.select}>已知事实<select value={factId} onChange={(event) => setFactId(event.target.value)}><option value="">请选择</option>{Array.isArray(pending.options.factIds) && pending.options.factIds.map((id, index) => typeof id === 'string' && <option key={id} value={id}>事实 {index + 1}</option>)}</select></label>}</>}
       {pending.schemaKey === 'levitation' && useSkill && <><div className={styles.segment}><button type="button" className={mode === 'move-first' ? styles.selected : ''} onClick={() => setMode('move-first')}>移到首位</button><button type="button" className={mode === 'move-last' ? styles.selected : ''} onClick={() => setMode('move-last')}>移到末位</button><button type="button" className={mode === 'tie-break' ? styles.selected : ''} onClick={() => setMode('tie-break')}>平票裁决</button></div>{mode !== 'tie-break' && mode !== '' && targetControl(false)}</>}
       {pending.schemaKey === 'voice-mimic' && useSkill && <>{targetControl(false)}<label className={styles.textarea}>伪造片段<textarea maxLength={50} value={forgedSpeech} onChange={(event) => setForgedSpeech(event.target.value)} /><span>{forgedSpeech.length}/50</span></label></>}

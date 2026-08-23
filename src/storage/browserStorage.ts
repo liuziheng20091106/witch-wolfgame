@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { BOARD_DESCRIPTION, CHARACTER_IDS, GAME_PHASES, PLAYER_IDS, ROLE_IDS, WITCH_SKILL_IDS } from '../../shared/gamePromptContract.js';
-import type { CharacterId, GameMode, GameState, PlayerId } from '../domain/model';
+import { BOARD_DESCRIPTION, CHARACTER_IDS, GAME_ENTITY_IDS, GAME_PHASES, ROLE_IDS, WITCH_SKILL_IDS } from '../../shared/gamePromptContract.js';
+import type { CharacterId, GameMode, GameState, PlayerId, RewindSnapshot } from '../domain/model';
 import type { AiProviderConfig } from '../ai/types';
 
 export const SETTINGS_KEY = 'majo-wolf.settings.v1';
@@ -38,7 +38,7 @@ export type StorageResult<T> =
   | { ok: true; value: T | null }
   | { ok: false; error: string };
 
-const playerIdSchema = z.custom<PlayerId>((value) => typeof value === 'number' && (PLAYER_IDS.includes(value as 0 | 1 | 2 | 3 | 4 | 5) || value === 99));
+const playerIdSchema = z.custom<PlayerId>((value) => typeof value === 'number' && GAME_ENTITY_IDS.includes(value as PlayerId));
 const roleIdSchema = z.enum(ROLE_IDS);
 const skillIdSchema = z.enum(WITCH_SKILL_IDS);
 
@@ -200,14 +200,17 @@ export function saveSetup(setup: SetupPreferences): void {
   localStorage.setItem(SETUP_KEY, JSON.stringify(setupSchema.parse(setup)));
 }
 
+function migrateCreatureFields(state: GameState | RewindSnapshot): void {
+  if (!Array.isArray(state.creatures)) state.creatures = [];
+  if (!state.knowledgeByPlayer[99]) state.knowledgeByPlayer[99] = [];
+}
+
 export function loadGame(): StorageResult<SavedGameEnvelope> {
   const result = readValue(GAME_KEY, envelopeSchema);
   if (!result.ok || result.value === null) return result as StorageResult<SavedGameEnvelope>;
   const envelope = result.value as unknown as SavedGameEnvelope;
-  // 旧存档迁移：补造物知识键（99 号），避免造物相关代码访问 undefined
-  if (!envelope.state.knowledgeByPlayer[99]) {
-    envelope.state.knowledgeByPlayer[99] = [];
-  }
+  migrateCreatureFields(envelope.state);
+  if (envelope.state.morningCheckpoint) migrateCreatureFields(envelope.state.morningCheckpoint);
   return { ok: true, value: envelope };
 }
 

@@ -40,10 +40,11 @@ import {
   publishSpeech,
 } from '../skills/registry';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from './events';
-import { refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
+import { finalizeGameIfWon, refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
 import { getAlivePlayerIds, getName, getPlayer, getRoleAssignment, getSkillInstance } from './selectors';
 import { exhaustSkill } from '../skills/types';
 import { resolveVotes } from './vote';
+import { applyLastWords, getNextLastWordsDecision } from '../skills/lastWords';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return getName(state, playerId);
@@ -447,11 +448,19 @@ function advanceDayResolution(state: GameState): GameState {
     const targetPlayerId = exile.data.exileTargetPlayerId as PlayerId;
     if (getPlayer(state, targetPlayerId).alive) {
       const resolved = resolveDeathBatch(state, [{ playerId: targetPlayerId, sources: [] }]);
-      if (resolved !== state || resolved.phase === 'ended') {
-        return resolved;
-      }
+      // 死亡回溯返回新状态（死者被救回），当前放逐与遗言均被撤销。
+      if (resolved !== state) return resolved;
     }
   }
+  // 遗言：白天放逐死亡结算后，若有合格死者需要发布遗言，保持 day-resolution 阶段等待遗言决策。
+  // 提交遗言后 advance 会再次进入本阶段，此时 exile 目标已死跳过结算，再检查是否还有遗言。
+  // （resolveDeathBatch 原地修改并返回同一引用，正常路径会继续执行到本检查，不会提前返回。）
+  const lastWords = getNextLastWordsDecision(state);
+  if (lastWords) {
+    state.pendingDecision = lastWords;
+    return state;
+  }
+  if (finalizeGameIfWon(state)) return state;
   for (const skill of state.skillInstances) {
     if (skill.definitionId === 'brainwash' && skill.data.activeDay === state.day) {
       delete skill.data.activeDay;
@@ -504,6 +513,11 @@ function validateTarget(state: GameState, decision: SubmittedDecision, pending: 
 
 function applyRoleDecision(state: GameState, pending: PendingDecision, decision: SubmittedDecision): GameState {
   if (pending.kind === 'speech') {
+    if (pending.options.lastWords === true) {
+      // 遗言：死者发布的最后发言（公开事件），不受视线诱导约束
+      applyLastWords(state, pending, decision);
+      return state;
+    }
     publishSpeech(state, pending.actorId, decision as SpeechDecision);
     return state;
   }

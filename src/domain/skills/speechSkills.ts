@@ -285,7 +285,7 @@ export function attachBrainwashSuggestion(state: GameState, pending: PendingDeci
     return;
   }
   const brainwash = state.skillInstances.find(
-    (skill) => skill.definitionId === 'brainwash' && skill.data.activeDay === state.day,
+    (skill) => skill.definitionId === 'brainwash' && (skill.data.activeDay === state.day || skill.data.lastWordsBrainwash === true),
   );
   if (!brainwash) {
     return;
@@ -294,8 +294,9 @@ export function attachBrainwashSuggestion(state: GameState, pending: PendingDeci
   if (pending.actorId === ownerId) {
     return;
   }
+  // 遗言洗脑是死者最后的执念：即使持有者已死亡，只要内容已在遗言中锁定，仍对后续决策生效
   const ownerPlayer = state.players[ownerId];
-  if (!ownerPlayer || !ownerPlayer.alive) {
+  if (brainwash.data.lastWordsBrainwash !== true && (!ownerPlayer || !ownerPlayer.alive)) {
     return;
   }
   // 洗脑内容在发言发布时已锁定为一次确定的游戏事实（见 lockBrainwashContent），

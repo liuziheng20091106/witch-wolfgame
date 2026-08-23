@@ -1,4 +1,4 @@
-import { buildGameSystemPrompt, formatPublicSkill, isAllowedDecisionPair } from '../../shared/gamePromptContract.js';
+import { CREATURE_ID, POTION_CHOICE_CATALOG, buildGameSystemPrompt, formatPublicSkill, isAllowedDecisionPair } from '../../shared/gamePromptContract.js';
 import { characterById } from '../domain/catalog/characters';
 import { roleDescriptions, roleNames } from '../domain/catalog/roles';
 import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
@@ -13,7 +13,7 @@ const CREATURE_PERSONALITY = '你是诺亚用魔法创造出来的造物，你�
 
 /** 组装 actor 负载：造物（id=99）使用专属提示词，否则用角色原始数据。 */
 function buildActorPayload(actor: { id: number; name: string }, character: { personality: string; speechStyle: string; decisionTraits: { conservative: number; trusting: number; aggressive: number } }, visibleRole: string, visibleSkill: string) {
-  if (actor.id === 99) {
+  if (actor.id === CREATURE_ID) {
     return {
       playerId: actor.id,
       name: actor.name,
@@ -89,29 +89,25 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
     }));
   // 公开技能按角色默认技生成：与开局公开播报一致，始终恰好 6 项且唯一；
   // 魔女因子回收等技能转移通过公开事件（factor-recovered）向 AI 呈现。
-  const publicSkills = observation.players.map((player) => ({
-    playerId: player.id,
-    name: player.name,
-    skill: formatPublicSkill(defaultSkillByCharacterId[player.characterId]),
-  }));
+  const publicSkills = observation.players
+    .filter((player) => player.id !== CREATURE_ID)
+    .map((player) => ({
+      playerId: player.id,
+      name: player.name,
+      skill: formatPublicSkill(defaultSkillByCharacterId[player.characterId]),
+    }));
   const visibleRole = actor.roleId ? `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}` : '未公开';
   const visibleSkill = actor.skillId
     ? `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}${skillUsageHints[actor.skillId] ?? ''}`
     : '无可见技能';
   const legalCandidates = pendingDecision.candidates.map((playerId) => {
     if (pendingDecision.options.potionChoice === true) {
-      // 药选择：candidates 是药索引（0=解药 1=毒药），不是玩家 id
-      return { playerId, name: playerId === 0 ? '解药' : '毒药' };
+      const potion = POTION_CHOICE_CATALOG.find((choice) => choice.playerId === playerId);
+      if (!potion) throw new Error(`未知药水候选：${playerId}`);
+      return { playerId, name: potion.name };
     }
     const player = observation.players.find((entry) => entry.id === playerId);
     const name = player?.name ?? `${playerId + 1}号`;
-    // 声音模仿：把每个候选的说话风格直接附在候选上，避免 AI 混淆"发言顺序"与"座位号"而用错人设
-    if (pendingDecision.schemaKey === 'voice-mimic' && Array.isArray(pendingDecision.options.mimicVoices)) {
-      const voice = (pendingDecision.options.mimicVoices as Array<{ playerId: number; speechStyle: string }>).find((entry) => entry.playerId === playerId);
-      if (voice) {
-        return { playerId, name, speechStyle: voice.speechStyle };
-      }
-    }
     return { playerId, name };
   });
 

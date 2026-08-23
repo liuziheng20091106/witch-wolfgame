@@ -24,7 +24,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "changed=all" >> "$GITHUB_OUTPUT"
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(server|proxy)/' || true)
+            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(server|proxy|shared)/' || true)
             if [ -z "$CHANGED" ]; then
               echo "changed=" >> "$GITHUB_OUTPUT"
             else

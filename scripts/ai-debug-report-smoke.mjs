@@ -3,8 +3,10 @@ import { resolve } from 'node:path';
 import { createServer } from 'vite';
 import {
   BOARD_DESCRIPTION,
+  CREATURE_ID,
   CHARACTER_CATALOG,
   DECISION_KIND_SCHEMAS,
+  formatCreatureName,
 } from '../shared/gamePromptContract.js';
 import { validateGamePrompt } from '../server/gameProtocol.mjs';
 
@@ -144,6 +146,94 @@ for (const [kind, schemaKeys] of Object.entries(DECISION_KIND_SCHEMAS)) {
     assert.deepEqual(validation, { ok: true }, `${kind} + ${schemaKey} 必须通过 Node 提示词验证`);
   }
 }
+
+const creatureOwner = players[3];
+assert.ok(creatureOwner);
+const creaturePlayer = {
+  id: CREATURE_ID,
+  characterId: creatureOwner.characterId,
+  name: formatCreatureName(creatureOwner.name),
+  avatarUrl: creatureOwner.avatarUrl,
+  alive: true,
+  roleId: 'seer',
+  skillId: null,
+  isSelf: true,
+};
+const sevenPlayers = [...players.map((player) => ({ ...player, alive: true, isSelf: false })), creaturePlayer];
+const creaturePending = {
+  ...pendingDecision,
+  id: 'contract-creature-actor',
+  kind: 'seer-action',
+  schemaKey: 'target',
+  actorId: CREATURE_ID,
+  title: '造物查验',
+  candidates: [0],
+  allowAbstain: false,
+};
+const creatureObservation = {
+  ...observation,
+  phase: 'seer-action',
+  viewerPlayerId: CREATURE_ID,
+  players: sevenPlayers,
+  pendingDecision: creaturePending,
+  knowledge: [{ subjectPlayerId: CREATURE_ID, kind: 'role', value: 'seer', observedDay: observation.day }],
+};
+const creatureMessages = buildDecisionPrompt({ observation: creatureObservation, pendingDecision: creaturePending, sessionId: 'contract-creature' });
+assert.deepEqual(validateGamePrompt(creatureMessages), { ok: true }, '造物行动与七个存活实体必须通过 Node 提示词验证');
+const creaturePrompt = JSON.parse(creatureMessages[1].content);
+assert.equal(creaturePrompt.alivePlayers.length, 7);
+assert.equal(creaturePrompt.publicSkills.length, 6, '造物不应扩充六座位公开技能目录');
+
+const healingPending = {
+  ...pendingDecision,
+  id: 'contract-seven-healing-targets',
+  kind: 'healing',
+  schemaKey: 'target',
+  title: '治愈',
+  candidates: sevenPlayers.map((player) => player.id),
+  allowAbstain: false,
+};
+const healingObservation = { ...creatureObservation, phase: 'night-protection', viewerPlayerId: 0, pendingDecision: healingPending };
+assert.deepEqual(
+  validateGamePrompt(buildDecisionPrompt({ observation: healingObservation, pendingDecision: healingPending, sessionId: 'contract-healing-seven' })),
+  { ok: true },
+  '七个治愈候选必须通过 Node 提示词验证',
+);
+
+const potionPending = {
+  ...pendingDecision,
+  id: 'contract-potion-choice',
+  kind: 'skill',
+  schemaKey: 'target',
+  title: '点火-烧药',
+  candidates: [0, 1],
+  allowAbstain: false,
+  options: { potionChoice: true },
+};
+assert.deepEqual(
+  validateGamePrompt(buildDecisionPrompt({ observation: { ...observation, pendingDecision: potionPending }, pendingDecision: potionPending, sessionId: 'contract-potion' })),
+  { ok: true },
+  '药水候选必须通过 Node 提示词验证',
+);
+
+const mimicPending = {
+  ...pendingDecision,
+  id: 'contract-voice-mimic-options',
+  kind: 'skill',
+  schemaKey: 'voice-mimic',
+  title: '声音模仿',
+  candidates: [1, 2],
+  options: {
+    mimicVoices: [
+      { playerId: 1, name: players[1].name, speechStyle: '冷静简洁。' },
+      { playerId: 2, name: players[2].name, speechStyle: '直接果断。' },
+    ],
+  },
+};
+const mimicMessages = buildDecisionPrompt({ observation: { ...observation, pendingDecision: mimicPending }, pendingDecision: mimicPending, sessionId: 'contract-mimic' });
+assert.deepEqual(validateGamePrompt(mimicMessages), { ok: true }, '声音模仿提示词必须通过 Node 验证');
+const mimicPrompt = JSON.parse(mimicMessages[1].content);
+assert.equal(mimicPrompt.legalCandidates.every((candidate) => !Object.hasOwn(candidate, 'speechStyle')), true);
 
 function chatResponse(content, status = 200) {
   return new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
