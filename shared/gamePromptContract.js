@@ -125,7 +125,7 @@ export const PROMPT_FIELD_KEYS = freeze({
  payload: freeze(/** @type {const} */(['client', 'messages', 'response_format'])),
  client: freeze(/** @type {const} */(['name', 'version', 'protocol'])),
  message: freeze(/** @type {const} */(['role', 'content'])),
- prompt: freeze(/** @type {const} */(['action', 'actor', 'phase', 'day', 'board', 'alivePlayers', 'legalCandidates', 'allowAbstain', 'options', 'currentDaySpeeches', 'historicalSpeeches', 'recentPublic', 'privateKnowledge', 'publicSkills', 'privateEvents'])),
+ prompt: freeze(/** @type {const} */(['action', 'actor', 'phase', 'day', 'board', 'alivePlayers', 'legalCandidates', 'allowAbstain', 'options', 'currentDaySpeeches', 'historicalSpeeches', 'recentPublic', 'privateKnowledge', 'publicSkills', 'privateEvents', 'postGameContext'])),
  action: freeze(/** @type {const} */(['kind', 'title', 'description', 'schema'])),
  actor: freeze(/** @type {const} */(['playerId', 'name', 'personality', 'speechStyle', 'decisionTraits', 'role', 'skill'])),
  decisionTraits: freeze(/** @type {const} */(['conservative', 'trusting', 'aggressive'])),

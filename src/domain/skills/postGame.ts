@@ -131,7 +131,7 @@ export function buildPostGameContext(observation: GameObservation): string {
     if (player) {
       return player.name;
     }
-    return `${playerId}号`;
+    return `${playerId >= 0 && playerId < 6 ? playerId + 1 : playerId}号`;
   };
 
   // 单条公开事件转一行复盘文本：发言/遗言等带名字与语气前缀，其余事件兜底全量输出。

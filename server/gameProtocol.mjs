@@ -209,6 +209,10 @@ export function validateGamePrompt(messages) {
   if (!boundedStrings(prompt.privateEvents, PROMPT_LIMITS.privateEventsMaxItems, PROMPT_LIMITS.speechMaxLength)) {
     return invalidResult('private_events', 'privateEvents');
   }
+  if (prompt.postGameContext !== undefined
+    && (typeof prompt.postGameContext !== 'string' || prompt.postGameContext.length > PROMPT_LIMITS.userContentMaxLength)) {
+    return invalidResult('post_game_context_shape', 'postGameContext');
+  }
   if (!Array.isArray(prompt.privateKnowledge) || prompt.privateKnowledge.length > PROMPT_LIMITS.privateKnowledgeMaxItems) {
     return invalidResult('private_knowledge_shape', 'privateKnowledge');
   }

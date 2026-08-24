@@ -150,6 +150,27 @@ for (const [kind, schemaKeys] of Object.entries(DECISION_KIND_SCHEMAS)) {
   }
 }
 
+const postGamePending = {
+  ...pendingDecision,
+  id: 'contract-post-game-speech',
+  kind: 'speech',
+  schemaKey: 'speech',
+  title: '赛后复盘',
+  description: '复盘这一局的经过。',
+  candidates: [],
+  allowAbstain: true,
+  options: { postGame: true },
+};
+const postGameObservation = {
+  ...observation,
+  phase: 'post-game',
+  pendingDecision: postGamePending,
+};
+const postGameMessages = buildDecisionPrompt({ observation: postGameObservation, pendingDecision: postGamePending, sessionId: 'contract-post-game' });
+const postGamePrompt = JSON.parse(postGameMessages[1].content);
+assert.equal(typeof postGamePrompt.postGameContext, 'string');
+assert.deepEqual(validateGamePrompt(postGameMessages), { ok: true }, '赛后复盘上下文必须被后端提示词契约识别');
+
 const creatureOwner = players[3];
 assert.ok(creatureOwner);
 const creaturePlayer = {
