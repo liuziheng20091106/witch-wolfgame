@@ -154,6 +154,19 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   if (after.privateEvents.length > 0) {
     check('复盘上下文包含私密行动行', context.includes('私密行动'), '未找到私密行动行');
   }
+  const fallbackObservation = {
+    ...observation,
+    players: observation.players.filter((player) => player.id !== 0),
+    publicEvents: [
+      { kind: 'speech', day: 1, phase: 'speeches', text: '缺失座位信息的发言', actorPlayerId: 0, targetPlayerIds: [], displayAuthorPlayerId: 0, actualAuthorPlayerId: 0, data: {} },
+      { kind: 'last-words', day: 1, phase: 'day-resolution', text: '明确的非座位实体', actorPlayerId: 99, targetPlayerIds: [], displayAuthorPlayerId: 99, actualAuthorPlayerId: 99, data: {} },
+    ],
+    privateEvents: [],
+    archivedTimelines: [],
+  };
+  const fallbackContext = buildPostGameContext(fallbackObservation);
+  check('缺失玩家资料时仍按一基座位号显示', fallbackContext.includes('发言（1号）'), fallbackContext);
+  check('明确的非座位 ID 保留原始编号', fallbackContext.includes('遗言（99号）'), fallbackContext);
   // 兜底全量：上下文行数应覆盖现役公开事件 + 私密事件（+ 归档事件），不遗漏任何事件类型
   const totalEvents = observation.publicEvents.length + observation.privateEvents.length
     + observation.archivedTimelines.reduce((sum, a) => sum + a.publicEvents.length + a.privateEvents.length, 0);
