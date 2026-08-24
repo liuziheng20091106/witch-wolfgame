@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fallbackDecision } from '../ai/fallback';
 import { requestDecision } from '../ai/client';
 import { AiCommandError, defaultAiConfig, type AiProviderConfig } from '../ai/types';
+import { APP_VERSION } from '../config/version';
 import { createGame } from '../domain/engine/createGame';
 import { reduceGame } from '../domain/engine/reducer';
 import { selectObservation } from '../domain/engine/selectors';
@@ -91,6 +92,11 @@ function readInitialBrowserState(): InitialBrowserState {
   };
 }
 
+function getSavedGameVersion(savedGame: SavedGameEnvelope | null): string | null {
+  if (savedGame === null) return APP_VERSION;
+  return savedGame.appVersion;
+}
+
 export function rollSeed(): number {
   const buffer = new Uint32Array(1);
   crypto.getRandomValues(buffer);
@@ -103,6 +109,8 @@ export function useGameController(): GameController {
   const [game, setGame] = useState<GameState | null>(null);
   const gameRef = useRef<GameState | null>(null);
   const [savedGame, setSavedGame] = useState<SavedGameEnvelope | null>(initial.savedGame);
+  // 同种子重开会复用 gameId，必须显式区分恢复旧局与创建新局的版本来源。
+  const savedGameVersionRef = useRef<string | null>(getSavedGameVersion(initial.savedGame));
   const [settings, setSettings] = useState(initial.settings);
   const [theme, setTheme] = useState(initial.theme);
   const [setup, setSetup] = useState(initial.setup);
@@ -124,7 +132,7 @@ export function useGameController(): GameController {
     gameRef.current = next;
     setGame(next);
     try {
-      setSavedGame(saveGame(next));
+      setSavedGame(saveGame(next, savedGameVersionRef.current));
       setStorageError(null);
     } catch (error) {
       setStorageError(error instanceof Error ? error.message : '保存游戏失败');
@@ -269,6 +277,7 @@ export function useGameController(): GameController {
 
   const beginGame = useCallback((seed: number) => {
     const next = createGame({ ...setup, seed });
+    savedGameVersionRef.current = APP_VERSION;
     commit(next);
     setAiError(null);
     setDecisionError(null);
@@ -285,6 +294,7 @@ export function useGameController(): GameController {
   const continueSavedGame = useCallback(() => {
     if (!savedGame) return;
     const restored = structuredClone(savedGame.state);
+    savedGameVersionRef.current = savedGame.appVersion;
     gameRef.current = restored;
     setGame(restored);
     setAiError(null);
@@ -306,6 +316,7 @@ export function useGameController(): GameController {
 
   const discardSavedGame = useCallback(() => {
     clearSavedGame();
+    savedGameVersionRef.current = APP_VERSION;
     setSavedGame(null);
     gameRef.current = null;
     setGame(null);
