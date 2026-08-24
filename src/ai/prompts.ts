@@ -1,9 +1,19 @@
-import { CREATURE_ID, POTION_CHOICE_CATALOG, PROMPT_LIMITS, buildGameSystemPrompt, formatPublicSkill, isAllowedDecisionPair } from '../../shared/gamePromptContract.js';
+import {
+  CHAT_COMPLETIONS_MAX_BODY_BYTES,
+  CREATURE_ID,
+  POTION_CHOICE_CATALOG,
+  PROMPT_LIMITS,
+  buildFreeClientPayload,
+  buildGameSystemPrompt,
+  formatPublicSkill,
+  isAllowedDecisionPair,
+} from '../../shared/gamePromptContract.js';
 import { characterById } from '../domain/catalog/characters';
 import { roleDescriptions, roleNames } from '../domain/catalog/roles';
 import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
 import { buildPostGameContext } from '../domain/skills/postGame';
-import type { AiDecisionRequest } from './types';
+import { APP_VERSION } from '../config/version';
+import type { AiDecisionRequest, AiProviderKind } from './types';
 
 export interface PromptMessage {
   role: 'system' | 'user';
@@ -12,6 +22,7 @@ export interface PromptMessage {
 
 const CREATURE_PERSONALITY = '你是诺亚用魔法创造出来的造物，你拥有和她一样的基础身份和阵营，但不拥有她的魔法。除了每天的投票权（跟随诺亚）以外，你的所有行动可以独立决策；如果你想制造混乱，也可以用毒药毒死主人（但这对你并没有好处）。';
 const POST_GAME_TRUNCATION_MARKER = '\n【赛后复盘上下文过长，已保留开头和结尾；省略部分不代表没有发生】\n';
+const UTF8_ENCODER = new TextEncoder();
 
 /**
  * 在保留复盘开头、结尾的前提下做确定性截断。
@@ -30,25 +41,38 @@ function truncatePostGameContext(context: string, maxLength: number): string {
 }
 
 /**
- * 将赛后上下文放入完整 user JSON 后再计算长度，给 action/actor 等字段预留空间。
- * 这样不会因为只限制 postGameContext 本身而忽略 JSON 转义和其它提示字段。
+ * 将赛后上下文放入完整 user JSON 后再计算长度；免费服务还会计算客户端实际发送的完整 UTF-8 body。
  */
-function fitPostGameContext(promptPayload: Record<string, unknown>, context: string): string {
-  const maxLength = PROMPT_LIMITS.userContentMaxLength;
-  const serializedLength = (candidate: string): number => JSON.stringify({ ...promptPayload, postGameContext: candidate }).length;
-  if (serializedLength(context) <= maxLength) return context;
-  if (serializedLength('') > maxLength) {
-    throw new Error('赛后复盘提示词的基础内容已超过协议长度限制');
+function fitPostGameContext(
+  promptPayload: Record<string, unknown>,
+  context: string,
+  provider: AiProviderKind,
+  systemContent: string,
+): string {
+  const serializeUserContent = (candidate: string): string => JSON.stringify({ ...promptPayload, postGameContext: candidate });
+  const fitsCandidate = (candidate: string): boolean => {
+    const userContent = serializeUserContent(candidate);
+    if (userContent.length > PROMPT_LIMITS.userContentMaxLength) return false;
+    if (provider !== 'free') return true;
+    const body = JSON.stringify(buildFreeClientPayload(APP_VERSION, [
+      { role: 'system', content: systemContent },
+      { role: 'user', content: userContent },
+    ]));
+    return UTF8_ENCODER.encode(body).byteLength <= CHAT_COMPLETIONS_MAX_BODY_BYTES;
+  };
+  if (fitsCandidate(context)) return context;
+  if (!fitsCandidate('')) {
+    throw new Error('赛后复盘提示词的基础内容已超过提供方限制');
   }
 
-  // 二分查找可放入完整 JSON 的最大上下文长度，结果与事件顺序完全确定。
+  // 二分查找可放入完整请求的最大上下文长度，结果与事件顺序完全确定。
   let low = 0;
   let high = context.length;
   let best = '';
   while (low <= high) {
     const middle = Math.floor((low + high) / 2);
     const candidate = truncatePostGameContext(context, middle);
-    if (serializedLength(candidate) <= maxLength) {
+    if (fitsCandidate(candidate)) {
       best = candidate;
       low = middle + 1;
     } else {
@@ -56,7 +80,7 @@ function fitPostGameContext(promptPayload: Record<string, unknown>, context: str
     }
   }
   if (best.length === 0 && context.length > 0) {
-    throw new Error('赛后复盘上下文无法压缩到协议长度限制内');
+    throw new Error('赛后复盘上下文无法压缩到提供方限制内');
   }
   return best;
 }
@@ -91,7 +115,7 @@ function buildActorPayload(actor: { id: number; name: string }, character: { per
 }
 
 
-export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[] {
+export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProviderKind = 'custom'): PromptMessage[] {
   const { observation, pendingDecision } = request;
   if (!isAllowedDecisionPair(pendingDecision.kind, pendingDecision.schemaKey)) {
     throw new Error('当前决策不属于受支持的提示词契约');
@@ -160,6 +184,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
     const name = player?.name ?? `${playerId + 1}号`;
     return { playerId, name };
   });
+  const systemContent = buildGameSystemPrompt(pendingDecision.schemaKey);
 
   const promptPayload: Record<string, unknown> = {
     action: { kind: pendingDecision.kind, title: pendingDecision.title, description: pendingDecision.description, schema: pendingDecision.schemaKey },
@@ -179,14 +204,18 @@ export function buildDecisionPrompt(request: AiDecisionRequest): PromptMessage[]
     privateEvents: observation.privateEvents.slice(-12).map((event) => event.text),
   };
   if (pendingDecision.options.postGame === true) {
-    // 赛后复盘：额外提供全量对局时间线；超出完整 user JSON 契约时确定性保留首尾。
-    promptPayload.postGameContext = fitPostGameContext(promptPayload, buildPostGameContext(observation));
+    promptPayload.finalRoles = observation.players.map((player) => {
+      if (player.roleId === null) throw new Error('赛后全知观察缺少最终职业');
+      return { playerId: player.id, name: player.name, roleId: player.roleId, roleName: roleNames[player.roleId] };
+    });
+    // 赛后复盘：额外提供全量对局时间线；超出当前提供方限制时确定性保留首尾。
+    promptPayload.postGameContext = fitPostGameContext(promptPayload, buildPostGameContext(observation), provider, systemContent);
   }
 
   return [
     {
       role: 'system',
-      content: buildGameSystemPrompt(pendingDecision.schemaKey),
+      content: systemContent,
     },
     {
       role: 'user',

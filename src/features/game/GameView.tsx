@@ -38,6 +38,20 @@ const phaseNames: Record<GameObservation['phase'], string> = {
 
 type MobileTab = 'live' | 'players' | 'history';
 
+function HistoryBody({ observation }: { observation: GameObservation }) {
+  const empty = observation.privateEvents.length === 0 && observation.archivedTimelines.length === 0;
+  return <div className={styles.historyBody}>
+    <h3>私密行动</h3>
+    {observation.privateEvents.map((event) => <p key={event.id}>{event.text}</p>)}
+    {observation.archivedTimelines.map((archive) => <div key={archive.id} className={styles.archive}>
+      <h3>被回溯时间线 · 第 {archive.rewoundAtDay} 天</h3>
+      {archive.publicEvents.map((event) => <p key={event.id}>{event.text}</p>)}
+      {archive.privateEvents.length > 0 && <><h4>私密行动</h4>{archive.privateEvents.map((event) => <p key={event.id}>{event.text}</p>)}</>}
+    </div>)}
+    {empty && <p>暂无额外记录。</p>}
+  </div>;
+}
+
 export function GameView(props: GameViewProps) {
   const { observation } = props;
   const [mobileTab, setMobileTab] = useState<MobileTab>('live');
@@ -56,7 +70,7 @@ export function GameView(props: GameViewProps) {
   let selectedSeatLabel: string | null = null;
   if (selectedPlayer) selectedSeatLabel = isCreatureId(selectedPlayer.id) ? '造物' : `${selectedPlayer.id + 1}号席位`;
   const activeActorId = observation.pendingDecision?.actorId ?? null;
-  const privateEvents = observation.privateEvents.slice(-10).reverse();
+  const recentPrivateEvents = observation.privateEvents.slice(-10).reverse();
   const hasResult = observation.result !== null;
   const humanDecisionPending = observation.pendingDecision?.actorId === observation.viewerPlayerId;
   const decisionPanelVisible = humanDecisionPending || props.aiError !== null || props.awaitingRetry;
@@ -132,9 +146,20 @@ export function GameView(props: GameViewProps) {
       <aside ref={sidePaneRef} className={`${styles.sidePane} ${chromeClass}`}>
         <GameControls paused={props.paused} onPaused={props.onPaused} onSettings={props.onSettings} onRestart={() => setConfirmRestart(true)} onExit={props.onExit} />
         <DecisionPanel observation={observation} aiError={props.aiError} awaitingRetry={props.awaitingRetry} thinking={props.thinking} decisionError={props.decisionError} onSubmit={props.onSubmit} onRetry={props.onRetry} onLocal={props.onLocal} onSettings={props.onSettings} />
-        <section className={styles.intel} aria-labelledby="intel-title"><header><Info /><h2 id="intel-title">私密情报</h2></header><div>{privateEvents.length > 0 ? privateEvents.map((event) => <p key={event.id}>{event.text}</p>) : <p>尚未获得私密情报。</p>}</div></section>
+        {observation.omniscient
+          ? <section className={`${styles.intel} ${styles.desktopHistory}`} aria-labelledby="desktop-history-title">
+            <header><Archive /><div><span>CASE ARCHIVE</span><h2 id="desktop-history-title">完整记录</h2></div></header>
+            <HistoryBody observation={observation} />
+          </section>
+          : <section className={styles.intel} aria-labelledby="intel-title">
+            <header><Info /><h2 id="intel-title">私密情报</h2></header>
+            <div>{recentPrivateEvents.length > 0 ? recentPrivateEvents.map((event) => <p key={event.id}>{event.text}</p>) : <p>尚未获得私密情报。</p>}</div>
+          </section>}
       </aside>
-      <section className={styles.historyPane} aria-labelledby="history-title"><header><Archive /><div><span>CASE ARCHIVE</span><h2 id="history-title">完整记录</h2></div></header><div className={styles.historyBody}><h3>私密行动</h3>{observation.privateEvents.map((event) => <p key={event.id}>{event.text}</p>)}{observation.omniscient && observation.archivedTimelines.map((archive) => <div key={archive.id} className={styles.archive}><h3>被回溯时间线 · 第 {archive.rewoundAtDay} 天</h3>{archive.publicEvents.map((event) => <p key={event.id}>{event.text}</p>)}{archive.privateEvents.length > 0 && <><h4>私密行动</h4>{archive.privateEvents.map((event) => <p key={event.id}>{event.text}</p>)}</>}</div>)}{observation.privateEvents.length === 0 && observation.archivedTimelines.length === 0 && <p>暂无额外记录。</p>}</div></section>
+      <section className={styles.historyPane} aria-labelledby="history-title">
+        <header><Archive /><div><span>CASE ARCHIVE</span><h2 id="history-title">完整记录</h2></div></header>
+        <HistoryBody observation={observation} />
+      </section>
     </div>
     {!decisionPanelVisible && <div className={styles.automationBar} aria-live="polite"><Bot /><div><span>{observation.automationMode === 'local' ? 'LOCAL STRATEGY' : 'AI AUTOMATION'}</span><strong>{observation.pendingDecision ? `${observation.players.find((player) => player.id === observation.pendingDecision?.actorId)?.name ?? `${observation.pendingDecision.actorId + 1}号`} 正在${observation.pendingDecision.title}` : observation.result ? '审判已结束' : '审判正在推进'}</strong></div>{observation.result && <button className={styles.mobileRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button>}{props.thinking && <LoaderCircle className={styles.automationSpin} />}</div>}
     {mobileChromeHidden && <button className={styles.mobileReveal} type="button" onClick={(event) => { event.stopPropagation(); revealMobileChrome(); }} aria-label="显示游戏控制"><ChevronDown />展开面板</button>}

@@ -3,6 +3,7 @@ import type {
   GameState,
   PendingDecision,
   PlayerId,
+  PrivateTimelineEvent,
   SpeechDecision,
   SubmittedDecision,
   TimelineEvent,
@@ -119,57 +120,46 @@ export function applyPostGameSpeech(state: GameState, pending: PendingDecision, 
  */
 export function buildPostGameContext(observation: GameObservation): string {
   const lines: string[] = [];
-  const dayOf = (event: TimelineEvent): string => {
-    const day = (event as any).day;
-    return Number.isFinite(day) ? `第 ${day} 天` : '未知日';
-  };
-  const nameOfId = (playerId: number | null): string => {
-    if (playerId === null || playerId === undefined) {
-      return '系统';
-    }
+  const dayOf = (event: TimelineEvent): string => Number.isFinite(event.day) ? `第 ${event.day} 天` : '未知日';
+  const nameOfId = (playerId: PlayerId | null): string => {
+    if (playerId === null) return '系统';
     const player = observation.players.find((entry) => entry.id === playerId);
-    if (player) {
-      return player.name;
-    }
+    if (player) return player.name;
     return `${playerId >= 0 && playerId < 6 ? playerId + 1 : playerId}号`;
   };
+  const namesOfIds = (playerIds: readonly PlayerId[]): string => playerIds.length > 0
+    ? playerIds.map(nameOfId).join('、')
+    : '无';
 
-  // 单条公开事件转一行复盘文本：发言/遗言等带名字与语气前缀，其余事件兜底全量输出。
-  // 不使用白名单（避免遗漏 role-exchange / trial-by-fire / factor-recovered 等关键因果事件）。
+  // 不使用事件白名单，避免遗漏职业交换、火刑、因子回收等关键因果事件。
   const formatPublicEvent = (event: TimelineEvent): string => {
-    const text = (event as any).text ?? '';
+    const displayAuthorId = event.displayAuthorPlayerId ?? event.actorPlayerId;
+    const displayAuthor = nameOfId(displayAuthorId);
     if (event.kind === 'speech') {
-      return `${dayOf(event)} 发言（${nameOfId(event.actorPlayerId)}）：${text}`;
+      if (event.data.hasForgedFragment === true) {
+        const forgedSpeech = event.data.forgedSpeech;
+        const fragment = typeof forgedSpeech === 'string' && forgedSpeech.length > 0 ? `“${forgedSpeech}”` : '其中一段内容';
+        return `${dayOf(event)} 发言（${displayAuthor}）：${event.text}（${fragment}由${nameOfId(event.actualAuthorPlayerId)}伪造）`;
+      }
+      return `${dayOf(event)} 发言（${displayAuthor}）：${event.text}`;
     }
     if (event.kind === 'last-words') {
-      return `${dayOf(event)} 遗言（${nameOfId(event.actorPlayerId)}）：${text}`;
+      return `${dayOf(event)} 遗言（${displayAuthor}）：${event.text}`;
     }
     if (event.kind === 'post-game-speech') {
-      return `赛后发言（${nameOfId(event.actorPlayerId)}）：${text}`;
+      return `赛后发言（${displayAuthor}）：${event.text}`;
     }
-    // 兜底：任何其它公开事件（死亡/投票/放逐/火刑/灵魂交换/因子回收/时间回溯/系统等）均全量输出
-    return `${dayOf(event)} ${text}`;
+    return `${dayOf(event)} ${event.text}`;
   };
+  const formatPrivateEvent = (event: PrivateTimelineEvent): string => `${dayOf(event)} 私密行动（行动者：${nameOfId(event.actorPlayerId)}；目标：${namesOfIds(event.targetPlayerIds)}；知情者：${namesOfIds(event.viewerPlayerIds)}）：${event.text}`;
 
-  for (const event of observation.publicEvents) {
-    lines.push(formatPublicEvent(event));
-  }
-  for (const event of observation.privateEvents) {
-    const text = (event as any).text ?? '';
-    lines.push(`${dayOf(event)} 私密行动：${text}`);
-  }
-  // 死亡回溯归档的旧时间线：以"被回溯的时间线"区块呈现，作为真实发生过的历史供复盘
+  for (const event of observation.publicEvents) lines.push(formatPublicEvent(event));
+  for (const event of observation.privateEvents) lines.push(formatPrivateEvent(event));
   for (const archive of observation.archivedTimelines) {
     lines.push(`【被回溯的时间线 · 回溯于第 ${archive.rewoundAtDay} 天】`);
-    for (const event of archive.publicEvents) {
-      lines.push(formatPublicEvent(event));
-    }
-    for (const event of archive.privateEvents) {
-      const text = (event as any).text ?? '';
-      lines.push(`${dayOf(event)} 私密行动：${text}`);
-    }
+    for (const event of archive.publicEvents) lines.push(formatPublicEvent(event));
+    for (const event of archive.privateEvents) lines.push(formatPrivateEvent(event));
   }
-  // 不做本地截断：赛后复盘必须"全知"（完整时间线 + 私密行动 + 回溯归档），
-  // 截断会让小魔女们复盘缺失关键信息。最终防线是契约的 userContentMaxLength（96,000）后端校验。
+  // 此处保留完整记录；提示词构建器会按当前提供方的实际限制确定性截断。
   return lines.join('\n');
 }

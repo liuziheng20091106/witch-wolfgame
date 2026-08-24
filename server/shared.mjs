@@ -3,6 +3,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
+import { CHAT_COMPLETIONS_MAX_BODY_BYTES } from '../shared/gamePromptContract.js';
 
 export function logEvent(level, event, fields = {}) {
   const writer = level === 'error' ? console.error : level === 'warn' ? console.warn : level === 'info' ? console.info : console.log;
@@ -16,7 +17,7 @@ export async function watchRestartSignal(signalPath, onSignal, log = (message) =
   const filename = basename(absolutePath);
   await mkdir(directory, { recursive: true });
   let lastValue = '';
-  try { lastValue = await readFile(absolutePath, 'utf8'); } catch {}
+  try { lastValue = await readFile(absolutePath, 'utf8'); } catch { }
   let triggered = false;
   const check = async () => {
     if (triggered) return;
@@ -40,7 +41,7 @@ export async function watchRestartSignal(signalPath, onSignal, log = (message) =
 
 export const INTERNAL_PATH = '/internal/v1/chat/completions';
 export const PUBLIC_PATHS = new Set(['/v1/chat/completions', '/api/ai/chat/completions']);
-export const MAX_BODY_BYTES = 128 * 1024;
+export const MAX_BODY_BYTES = CHAT_COMPLETIONS_MAX_BODY_BYTES;
 
 export async function readJsonFile(path) {
   return JSON.parse(await readFile(path, 'utf8'));

@@ -136,7 +136,7 @@ export function selectObservation(
   const publicEvents = omniscient
     ? state.publicEvents
     : state.publicEvents.map((event) => ({ ...event, actualAuthorPlayerId: null }));
-  const privateEvents = viewer.kind === 'spectator' || state.phase === 'post-game'
+  const privateEvents = omniscient
     ? state.privateEvents
     : state.privateEvents.filter((event) => event.viewerPlayerIds.includes(viewer.playerId));
 
@@ -154,7 +154,7 @@ export function selectObservation(
     players,
     publicEvents,
     privateEvents,
-    archivedTimelines: viewer.kind === 'spectator' ? state.archivedTimelines : [],
+    archivedTimelines: omniscient ? state.archivedTimelines : [],
     knowledge: viewerPlayerId === null ? [] : state.knowledgeByPlayer[viewerPlayerId],
     currentVotes: state.currentVotes,
     pendingDecision: state.pendingDecision?.actorId === viewerPlayerId || omniscient ? state.pendingDecision : null,
