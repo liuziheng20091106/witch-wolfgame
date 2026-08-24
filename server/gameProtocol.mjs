@@ -99,6 +99,8 @@ function validFinalRole(value) {
     && hasOnlyKeys(value, FINAL_ROLE_KEYS)
     && validEntityId(value.playerId)
     && validEntityName(value.playerId, value.name)
+    && ROLE_VALUES.has(value.roleId)
+    && typeof value.roleName === 'string'
     && ROLE_NAMES_BY_ID.get(value.roleId) === value.roleName;
 }
 

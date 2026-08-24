@@ -191,6 +191,13 @@ invalidFinalRolePrompt.finalRoles[0].roleName = '错误职业名';
 invalidFinalRoleMessages[1].content = JSON.stringify(invalidFinalRolePrompt);
 assert.deepEqual(validateGamePrompt(invalidFinalRoleMessages), { ok: false, reason: 'final_roles_shape', path: 'finalRoles' });
 
+const unknownFinalRoleMessages = structuredClone(postGameMessages);
+const unknownFinalRolePrompt = JSON.parse(unknownFinalRoleMessages[1].content);
+unknownFinalRolePrompt.finalRoles[0].roleId = 'unknown-role';
+delete unknownFinalRolePrompt.finalRoles[0].roleName;
+unknownFinalRoleMessages[1].content = JSON.stringify(unknownFinalRolePrompt);
+assert.deepEqual(validateGamePrompt(unknownFinalRoleMessages), { ok: false, reason: 'final_roles_shape', path: 'finalRoles' });
+
 const nonPostGameFinalRoleMessages = structuredClone(buildDecisionPrompt(request));
 const nonPostGameFinalRolePrompt = JSON.parse(nonPostGameFinalRoleMessages[1].content);
 nonPostGameFinalRolePrompt.finalRoles = postGamePrompt.finalRoles;
