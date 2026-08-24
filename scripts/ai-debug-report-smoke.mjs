@@ -8,6 +8,7 @@ import {
   CHARACTER_CATALOG,
   DECISION_KIND_SCHEMAS,
   formatCreatureName,
+  PROMPT_LIMITS,
 } from '../shared/gamePromptContract.js';
 import { validateGamePrompt } from '../server/gameProtocol.mjs';
 
@@ -170,6 +171,28 @@ const postGameMessages = buildDecisionPrompt({ observation: postGameObservation,
 const postGamePrompt = JSON.parse(postGameMessages[1].content);
 assert.equal(typeof postGamePrompt.postGameContext, 'string');
 assert.deepEqual(validateGamePrompt(postGameMessages), { ok: true }, '赛后复盘上下文必须被后端提示词契约识别');
+
+const oversizedPostGameObservation = structuredClone(postGameObservation);
+oversizedPostGameObservation.publicEvents = Array.from({ length: 300 }, (_, index) => ({
+  kind: 'system',
+  day: 1,
+  phase: 'post-game',
+  text: `超长回归事件-${index}-${'x'.repeat(500)}`,
+  actorPlayerId: null,
+  targetPlayerIds: [],
+  displayAuthorPlayerId: null,
+  actualAuthorPlayerId: null,
+  data: {},
+}));
+const oversizedPostGameMessages = buildDecisionPrompt({
+  observation: oversizedPostGameObservation,
+  pendingDecision: postGamePending,
+  sessionId: 'contract-post-game-oversized',
+});
+const oversizedPostGamePrompt = JSON.parse(oversizedPostGameMessages[1].content);
+assert.ok(oversizedPostGameMessages[1].content.length <= PROMPT_LIMITS.userContentMaxLength, '超长赛后提示词必须符合完整 user 内容上限');
+assert.match(oversizedPostGamePrompt.postGameContext, /赛后复盘上下文过长/);
+assert.deepEqual(validateGamePrompt(oversizedPostGameMessages), { ok: true }, '截断后的赛后提示词必须通过后端协议校验');
 
 const creatureOwner = players[3];
 assert.ok(creatureOwner);
