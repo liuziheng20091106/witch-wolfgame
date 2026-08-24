@@ -13,6 +13,8 @@ import { roleDescriptions, roleNames } from '../domain/catalog/roles';
 import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
 import { buildPostGameContext } from '../domain/skills/postGame';
 import { APP_VERSION } from '../config/version';
+import { buildPostGameActorContext, buildPostGamePromptContext } from './postGameLore';
+import type { CharacterId } from '../domain/model';
 import type { AiDecisionRequest, AiProviderKind } from './types';
 
 export interface PromptMessage {
@@ -86,7 +88,7 @@ function fitPostGameContext(
 }
 
 /** 组装 actor 负载：造物（id=99）使用专属提示词，否则用角色原始数据。 */
-function buildActorPayload(actor: { id: number; name: string }, character: { personality: string; speechStyle: string; decisionTraits: { conservative: number; trusting: number; aggressive: number } }, visibleRole: string, visibleSkill: string) {
+function buildActorPayload(actor: { id: number; name: string }, character: { id: CharacterId; personality: string; speechStyle: string; decisionTraits: { conservative: number; trusting: number; aggressive: number } }, visibleRole: string, visibleSkill: string, isPostGame: boolean) {
   if (actor.id === CREATURE_ID) {
     return {
       playerId: actor.id,
@@ -102,6 +104,9 @@ function buildActorPayload(actor: { id: number; name: string }, character: { per
   let personality = character.personality;
   if (visibleRole.includes('预言家') && visibleSkill.includes('操控液体')) {
     personality = `${personality}你作为预言家，拥有自己和造物的查验结果，请善加利用这两条情报。`;
+  }
+  if (isPostGame) {
+    personality = `${personality}\n${buildPostGameActorContext(character.id)}`;
   }
   return {
     playerId: actor.id,
@@ -188,7 +193,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
 
   const promptPayload: Record<string, unknown> = {
     action: { kind: pendingDecision.kind, title: pendingDecision.title, description: pendingDecision.description, schema: pendingDecision.schemaKey },
-    actor: buildActorPayload(actor, character, visibleRole, visibleSkill),
+    actor: buildActorPayload(actor, character, visibleRole, visibleSkill, pendingDecision.options.postGame === true),
     phase: observation.phase,
     day: observation.day,
     board: observation.board,
@@ -209,7 +214,13 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
       return { playerId: player.id, name: player.name, roleId: player.roleId, roleName: roleNames[player.roleId] };
     });
     // 赛后复盘：额外提供全量对局时间线；超出当前提供方限制时确定性保留首尾。
-    promptPayload.postGameContext = fitPostGameContext(promptPayload, buildPostGameContext(observation), provider, systemContent);
+    const timelineContext = buildPostGameContext(observation);
+    promptPayload.postGameContext = fitPostGameContext(
+      promptPayload,
+      buildPostGamePromptContext(timelineContext),
+      provider,
+      systemContent,
+    );
   }
 
   return [

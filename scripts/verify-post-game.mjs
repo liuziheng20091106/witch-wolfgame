@@ -11,6 +11,7 @@
  */
 import { createServer } from 'vite';
 import { resolve } from 'node:path';
+import { validateGamePrompt } from '../server/gameProtocol.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
@@ -194,9 +195,37 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   const { buildDecisionPrompt } = await server.ssrLoadModule('/src/ai/prompts.ts');
   const prompt = buildDecisionPrompt({ observation, pendingDecision: pending });
   const payload = JSON.parse(prompt[1].content);
+  const backendValidation = validateGamePrompt(prompt);
+  check('赛后提示通过后端请求校验', backendValidation.ok, JSON.stringify(backendValidation));
   check('AI 提示含 postGameContext', typeof payload.postGameContext === 'string' && payload.postGameContext.length > 0);
   check('AI 提示 action.title 为赛后复盘', payload.action.title === '赛后复盘');
   check('AI 提示含完整最终职业表', Array.isArray(payload.finalRoles) && payload.finalRoles.length >= 6 && payload.finalRoles.length <= 7 && [0, 1, 2, 3, 4, 5].every((playerId) => payload.finalRoles.some((entry) => entry.playerId === playerId && typeof entry.roleId === 'string' && typeof entry.roleName === 'string')));
+  check('赛后提示含后日谈背景和降冲突规则', payload.postGameContext.includes('赛后复盘专用创作规则') && payload.postGameContext.includes('不是第二次审判'), payload.postGameContext.slice(0, 120));
+  check('赛后 actor 含角色关系网', payload.actor.personality.includes('关系背景只用于保持角色一致'), payload.actor.personality.slice(-160));
+  let normalGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 42 });
+  let normalGuard = 0;
+  while (!normalGame.pendingDecision && normalGame.phase !== 'ended' && normalGuard < 20) {
+    normalGuard += 1;
+    normalGame = reduceGame(normalGame, { type: 'advance' });
+  }
+  const normalPending = normalGame.pendingDecision;
+  if (normalPending) {
+    const normalObservation = selectObservation(normalGame, { kind: 'spectator' });
+    const normalPrompt = buildDecisionPrompt({ observation: normalObservation, pendingDecision: normalPending });
+    const normalPayload = JSON.parse(normalPrompt[1].content);
+    check('普通决策不携带后日谈背景', normalPayload.actor.personality.includes('赛后复盘专用创作规则') === false && normalPayload.postGameContext === undefined, JSON.stringify(normalPayload.actor));
+  } else {
+    check('普通决策不携带后日谈背景', false, '新对局没有可用的普通决策');
+  }
+  for (const player of observation.players) {
+    if (player.id === 99) {
+      continue;
+    }
+    const actorPending = { ...pending, actorId: player.id };
+    const freePrompt = buildDecisionPrompt({ observation, pendingDecision: actorPending }, 'free');
+    const freeValidation = validateGamePrompt(freePrompt);
+    check(`角色 ${player.name} 的免费赛后请求通过后端校验`, freeValidation.ok, JSON.stringify(freeValidation));
+  }
   // 全知原则：超长上下文也不截断（赛后必须完整复盘），契约 userContentMaxLength 才是最终防线
   const bigObservation = structuredClone(observation);
   for (let i = 0; i < 200; i += 1) {
