@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FREE_CLIENT_PROTOCOL } from '../../shared/gamePromptContract.js';
+import { FREE_CLIENT_PROTOCOL, buildFreeClientPayload } from '../../shared/gamePromptContract.js';
 import { APP_VERSION } from '../config/version';
 import type { SubmittedDecision } from '../domain/model';
 import { buildAiDebugReport } from './debugReport';
@@ -10,6 +10,7 @@ import {
   FREE_PROVIDER_ENDPOINT,
   isRetryableAiError,
   type AiDecisionRequest,
+  type AiProviderKind,
   type AiProviderConfig,
   type AiRemoteError,
   type CustomAiProviderConfig,
@@ -42,11 +43,10 @@ function validateCustomConfig(config: CustomAiProviderConfig): void {
 }
 
 function buildPayload(config: AiProviderConfig, messages: PromptMessage[], jsonOutput: boolean): Record<string, unknown> {
-  const payload: Record<string, unknown> = config.provider === 'free'
-    ? { client: { ...FREE_CLIENT_PROTOCOL, version: APP_VERSION }, messages }
-    : { model: config.model, messages };
-  if (config.provider === 'custom' && jsonOutput) payload.response_format = { type: 'json_object' };
-  if (config.provider === 'custom') payload.reasoning_effort = config.reasoningEffort;
+  if (config.provider === 'free') return buildFreeClientPayload(APP_VERSION, messages);
+  const payload: Record<string, unknown> = { model: config.model, messages };
+  if (jsonOutput) payload.response_format = { type: 'json_object' };
+  payload.reasoning_effort = config.reasoningEffort;
   return payload;
 }
 
@@ -148,6 +148,7 @@ function buildRetryMessages<T extends SubmittedDecision>(
   request: AiDecisionRequest<T>,
   error: AiCommandError,
   previousAttempt: number,
+  provider: AiProviderKind,
 ): PromptMessage[] {
   return buildDecisionPrompt({
     ...request,
@@ -162,7 +163,7 @@ function buildRetryMessages<T extends SubmittedDecision>(
         },
       },
     },
-  });
+  }, provider);
 }
 
 function withDebugReport(
@@ -194,7 +195,7 @@ export async function requestDecision<T extends SubmittedDecision>(
 
   let messages: PromptMessage[];
   try {
-    messages = buildDecisionPrompt(request);
+    messages = buildDecisionPrompt(request, config.provider);
   } catch (error) {
     const commandError = new AiCommandError('config', error instanceof Error ? error.message : 'AI 提示词构建失败');
     throw withDebugReport(commandError, request, config, [], 0, maxAttempts, jsonOutput);
@@ -226,7 +227,7 @@ export async function requestDecision<T extends SubmittedDecision>(
       if (commandError.kind === 'cancelled') throw commandError;
       const hasNextAttempt = attempt < maxAttempts - 1;
       if (hasNextAttempt && isModelOutputError(commandError)) {
-        messages = buildRetryMessages(request, commandError, attempt + 1);
+        messages = buildRetryMessages(request, commandError, attempt + 1, config.provider);
       }
       if (hasNextAttempt && shouldDisableJsonOutput(commandError, config, jsonOutput)) {
         sessionJsonFallback.add(request.sessionId);

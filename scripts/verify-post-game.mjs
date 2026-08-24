@@ -167,6 +167,25 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   const fallbackContext = buildPostGameContext(fallbackObservation);
   check('缺失玩家资料时仍按一基座位号显示', fallbackContext.includes('发言（1号）'), fallbackContext);
   check('明确的非座位 ID 保留原始编号', fallbackContext.includes('遗言（99号）'), fallbackContext);
+  const forgedSpeechObservation = {
+    ...observation,
+    publicEvents: [{
+      id: 'forged-speech', kind: 'speech', day: 2, phase: 'speeches', text: '真实发言 伪造片段',
+      actorPlayerId: 0, targetPlayerIds: [0], displayAuthorPlayerId: 0, actualAuthorPlayerId: 1,
+      data: { hasForgedFragment: true, forgedSpeech: '伪造片段' },
+    }],
+    privateEvents: [{
+      id: 'seer-result', kind: 'seer-result', day: 2, phase: 'seer-action', text: '查验结果为狼人',
+      actorPlayerId: 0, targetPlayerIds: [1], displayAuthorPlayerId: null, actualAuthorPlayerId: 0,
+      viewerPlayerIds: [2], data: {},
+    }],
+    archivedTimelines: [],
+  };
+  const attributedContext = buildPostGameContext(forgedSpeechObservation);
+  check('复盘标明伪造片段与真实作者', attributedContext.includes(`“伪造片段”由${observation.players[1].name}伪造`), attributedContext);
+  check('私密行动保留行动者', attributedContext.includes(`行动者：${observation.players[0].name}`), attributedContext);
+  check('私密行动保留目标', attributedContext.includes(`目标：${observation.players[1].name}`), attributedContext);
+  check('私密行动保留知情者', attributedContext.includes(`知情者：${observation.players[2].name}`), attributedContext);
   // 兜底全量：上下文行数应覆盖现役公开事件 + 私密事件（+ 归档事件），不遗漏任何事件类型
   const totalEvents = observation.publicEvents.length + observation.privateEvents.length
     + observation.archivedTimelines.reduce((sum, a) => sum + a.publicEvents.length + a.privateEvents.length, 0);
@@ -177,6 +196,7 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   const payload = JSON.parse(prompt[1].content);
   check('AI 提示含 postGameContext', typeof payload.postGameContext === 'string' && payload.postGameContext.length > 0);
   check('AI 提示 action.title 为赛后复盘', payload.action.title === '赛后复盘');
+  check('AI 提示含完整最终职业表', Array.isArray(payload.finalRoles) && payload.finalRoles.length >= 6 && payload.finalRoles.length <= 7 && [0, 1, 2, 3, 4, 5].every((playerId) => payload.finalRoles.some((entry) => entry.playerId === playerId && typeof entry.roleId === 'string' && typeof entry.roleName === 'string')));
   // 全知原则：超长上下文也不截断（赛后必须完整复盘），契约 userContentMaxLength 才是最终防线
   const bigObservation = structuredClone(observation);
   for (let i = 0; i < 200; i += 1) {
@@ -201,6 +221,9 @@ console.log('=== 5. 回溯时间线进入复盘 ===');
   after = runPostGame(after);
   const observation = selectObservation(after, { kind: 'spectator' });
   check('赛后观察含归档时间线', observation.archivedTimelines.length > 0, `archives=${observation.archivedTimelines.length}`);
+  const playerObservation = selectObservation(after, { kind: 'player', playerId: 0 });
+  check('玩家赛后观察为全知', playerObservation.omniscient === true);
+  check('玩家赛后观察含全部归档时间线', playerObservation.archivedTimelines.length === after.archivedTimelines.length && playerObservation.archivedTimelines.length > 0, `archives=${playerObservation.archivedTimelines.length}/${after.archivedTimelines.length}`);
   const context = buildPostGameContext(observation);
   check('复盘上下文含被回溯时间线区块', context.includes('被回溯的时间线'), '未找到回溯区块');
   // 归档内的发言也应进入上下文（以名字标注）

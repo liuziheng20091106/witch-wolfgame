@@ -12,6 +12,7 @@ import {
   POTION_CHOICE_CATALOG,
   PROMPT_FIELD_KEYS,
   PROMPT_LIMITS,
+  ROLE_CATALOG,
   ROLE_IDS,
   WITCH_SKILL_IDS,
   formatPublicSkill,
@@ -26,6 +27,7 @@ const CREATURE_NAMES = new Set(CHARACTER_CATALOG.map((character) => formatCreatu
 const BOARD_DESCRIPTIONS = new Set([BOARD_DESCRIPTION]);
 const PUBLIC_SKILLS = new Set(WITCH_SKILL_IDS.map((skillId) => formatPublicSkill(skillId)));
 const ROLE_VALUES = new Set(ROLE_IDS);
+const ROLE_NAMES_BY_ID = new Map(ROLE_CATALOG.map((role) => [role.id, role.name]));
 const ALIGNMENT_VALUES = new Set(ALIGNMENTS);
 const PLAYER_ID_VALUES = new Set(PLAYER_IDS);
 const ENTITY_ID_VALUES = new Set(GAME_ENTITY_IDS);
@@ -40,6 +42,7 @@ const DECISION_TRAIT_KEYS = new Set(PROMPT_FIELD_KEYS.decisionTraits);
 const OBSERVED_PLAYER_KEYS = new Set(PROMPT_FIELD_KEYS.observedPlayer);
 const PRIVATE_KNOWLEDGE_KEYS = new Set(PROMPT_FIELD_KEYS.privateKnowledge);
 const PUBLIC_SKILL_KEYS = new Set(PROMPT_FIELD_KEYS.publicSkill);
+const FINAL_ROLE_KEYS = new Set(PROMPT_FIELD_KEYS.finalRole);
 
 function validResult() {
   return { ok: true };
@@ -89,6 +92,16 @@ function validPublicSkill(value) {
     && PLAYER_ID_VALUES.has(value.playerId)
     && CHARACTER_NAMES.has(value.name)
     && PUBLIC_SKILLS.has(value.skill);
+}
+
+function validFinalRole(value) {
+  return isObject(value)
+    && hasOnlyKeys(value, FINAL_ROLE_KEYS)
+    && validEntityId(value.playerId)
+    && validEntityName(value.playerId, value.name)
+    && ROLE_VALUES.has(value.roleId)
+    && typeof value.roleName === 'string'
+    && ROLE_NAMES_BY_ID.get(value.roleId) === value.roleName;
 }
 
 export function validateGamePrompt(messages) {
@@ -171,8 +184,14 @@ export function validateGamePrompt(messages) {
   if (!Number.isInteger(prompt.day) || prompt.day < PROMPT_LIMITS.dayMin || prompt.day > PROMPT_LIMITS.dayMax) {
     return invalidResult('day', 'day');
   }
+  const postGamePrompt = prompt.phase === 'post-game'
+    && isObject(prompt.options)
+    && prompt.options.postGame === true;
+  const alivePlayersMinItems = postGamePrompt
+    ? PROMPT_LIMITS.postGameAlivePlayersMinItems
+    : PROMPT_LIMITS.alivePlayersMinItems;
   if (!Array.isArray(prompt.alivePlayers)
-    || prompt.alivePlayers.length < PROMPT_LIMITS.alivePlayersMinItems
+    || prompt.alivePlayers.length < alivePlayersMinItems
     || prompt.alivePlayers.length > PROMPT_LIMITS.alivePlayersMaxItems
     || !prompt.alivePlayers.every(validObservedPlayer)) {
     return invalidResult('alive_players_shape', 'alivePlayers');
@@ -195,6 +214,23 @@ export function validateGamePrompt(messages) {
   if (!isObject(prompt.options)) return invalidResult('options_shape', 'options');
   if (JSON.stringify(prompt.options).length > PROMPT_LIMITS.optionsMaxJsonLength) {
     return invalidResult('options_size', 'options');
+  }
+
+  if (prompt.finalRoles !== undefined) {
+    if (!postGamePrompt) return invalidResult('final_roles_post_game_only', 'finalRoles');
+    if (!Array.isArray(prompt.finalRoles)
+      || prompt.finalRoles.length < PROMPT_LIMITS.finalRolesMinItems
+      || prompt.finalRoles.length > PROMPT_LIMITS.finalRolesMaxItems
+      || !prompt.finalRoles.every(validFinalRole)) {
+      return invalidResult('final_roles_shape', 'finalRoles');
+    }
+    const finalRolePlayerIds = new Set(prompt.finalRoles.map((entry) => entry.playerId));
+    if (finalRolePlayerIds.size !== prompt.finalRoles.length) {
+      return invalidResult('final_roles_unique_player', 'finalRoles.playerId');
+    }
+    if (!PLAYER_IDS.every((playerId) => finalRolePlayerIds.has(playerId))) {
+      return invalidResult('final_roles_players', 'finalRoles.playerId');
+    }
   }
 
   if (!boundedStrings(prompt.currentDaySpeeches, PROMPT_LIMITS.currentDaySpeechesMaxItems, PROMPT_LIMITS.speechMaxLength)) {

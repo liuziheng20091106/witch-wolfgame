@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { createServer } from 'vite';
 import {
   BOARD_DESCRIPTION,
+  CHAT_COMPLETIONS_MAX_BODY_BYTES,
+  buildFreeClientPayload,
   buildGameSystemPrompt,
   CREATURE_ID,
   CHARACTER_CATALOG,
@@ -162,15 +164,58 @@ const postGamePending = {
   allowAbstain: true,
   options: { postGame: true },
 };
+const postGameRoleIds = ['wolf', 'wolf', 'seer', 'witch', 'villager', 'villager'];
 const postGameObservation = {
   ...observation,
   phase: 'post-game',
+  omniscient: true,
+  players: players.map((player, index) => ({ ...player, roleId: postGameRoleIds[index] })),
   pendingDecision: postGamePending,
 };
 const postGameMessages = buildDecisionPrompt({ observation: postGameObservation, pendingDecision: postGamePending, sessionId: 'contract-post-game' });
 const postGamePrompt = JSON.parse(postGameMessages[1].content);
 assert.equal(typeof postGamePrompt.postGameContext, 'string');
 assert.deepEqual(validateGamePrompt(postGameMessages), { ok: true }, '赛后复盘上下文必须被后端提示词契约识别');
+assert.equal(postGamePrompt.finalRoles.length, 6, '赛后提示必须提供六个座位的最终职业');
+assert.deepEqual(postGamePrompt.finalRoles.map((entry) => entry.roleId), postGameRoleIds);
+
+const legacyPostGameMessages = structuredClone(postGameMessages);
+const legacyPostGamePrompt = JSON.parse(legacyPostGameMessages[1].content);
+delete legacyPostGamePrompt.finalRoles;
+legacyPostGameMessages[1].content = JSON.stringify(legacyPostGamePrompt);
+assert.deepEqual(validateGamePrompt(legacyPostGameMessages), { ok: true }, '同版本旧客户端可不提供 finalRoles');
+
+const invalidFinalRoleMessages = structuredClone(postGameMessages);
+const invalidFinalRolePrompt = JSON.parse(invalidFinalRoleMessages[1].content);
+invalidFinalRolePrompt.finalRoles[0].roleName = '错误职业名';
+invalidFinalRoleMessages[1].content = JSON.stringify(invalidFinalRolePrompt);
+assert.deepEqual(validateGamePrompt(invalidFinalRoleMessages), { ok: false, reason: 'final_roles_shape', path: 'finalRoles' });
+
+const unknownFinalRoleMessages = structuredClone(postGameMessages);
+const unknownFinalRolePrompt = JSON.parse(unknownFinalRoleMessages[1].content);
+unknownFinalRolePrompt.finalRoles[0].roleId = 'unknown-role';
+delete unknownFinalRolePrompt.finalRoles[0].roleName;
+unknownFinalRoleMessages[1].content = JSON.stringify(unknownFinalRolePrompt);
+assert.deepEqual(validateGamePrompt(unknownFinalRoleMessages), { ok: false, reason: 'final_roles_shape', path: 'finalRoles' });
+
+const nonPostGameFinalRoleMessages = structuredClone(buildDecisionPrompt(request));
+const nonPostGameFinalRolePrompt = JSON.parse(nonPostGameFinalRoleMessages[1].content);
+nonPostGameFinalRolePrompt.finalRoles = postGamePrompt.finalRoles;
+nonPostGameFinalRoleMessages[1].content = JSON.stringify(nonPostGameFinalRolePrompt);
+assert.deepEqual(validateGamePrompt(nonPostGameFinalRoleMessages), { ok: false, reason: 'final_roles_post_game_only', path: 'finalRoles' });
+
+const zeroSurvivorObservation = {
+  ...postGameObservation,
+  players: postGameObservation.players.map((player) => ({ ...player, alive: false })),
+};
+const zeroSurvivorMessages = buildDecisionPrompt({ observation: zeroSurvivorObservation, pendingDecision: postGamePending, sessionId: 'contract-post-game-zero-survivors' });
+assert.deepEqual(validateGamePrompt(zeroSurvivorMessages), { ok: true }, '赛后合法允许零名存活玩家');
+const normalZeroSurvivorMessages = buildDecisionPrompt({
+  observation: { ...observation, players: players.map((player) => ({ ...player, alive: false })) },
+  pendingDecision,
+  sessionId: 'contract-vote-zero-survivors',
+});
+assert.deepEqual(validateGamePrompt(normalZeroSurvivorMessages), { ok: false, reason: 'alive_players_shape', path: 'alivePlayers' }, '非赛后提示仍至少需要一名存活玩家');
 
 const oversizedPostGameObservation = structuredClone(postGameObservation);
 oversizedPostGameObservation.publicEvents = Array.from({ length: 300 }, (_, index) => ({
@@ -193,6 +238,33 @@ const oversizedPostGamePrompt = JSON.parse(oversizedPostGameMessages[1].content)
 assert.ok(oversizedPostGameMessages[1].content.length <= PROMPT_LIMITS.userContentMaxLength, '超长赛后提示词必须符合完整 user 内容上限');
 assert.match(oversizedPostGamePrompt.postGameContext, /赛后复盘上下文过长/);
 assert.deepEqual(validateGamePrompt(oversizedPostGameMessages), { ok: true }, '截断后的赛后提示词必须通过后端协议校验');
+
+const cjkPostGameObservation = structuredClone(postGameObservation);
+cjkPostGameObservation.publicEvents = Array.from({ length: 100 }, (_, index) => ({
+  kind: 'system',
+  day: 1,
+  phase: 'post-game',
+  text: `中文复盘事件-${index}-${'中'.repeat(500)}`,
+  actorPlayerId: null,
+  targetPlayerIds: [],
+  displayAuthorPlayerId: null,
+  actualAuthorPlayerId: null,
+  data: {},
+}));
+const cjkPostGameRequest = {
+  observation: cjkPostGameObservation,
+  pendingDecision: postGamePending,
+  sessionId: 'contract-post-game-cjk-body',
+};
+const unfittedCjkMessages = buildDecisionPrompt(cjkPostGameRequest, 'custom');
+assert.deepEqual(validateGamePrompt(unfittedCjkMessages), { ok: true }, '完整中文赛后提示必须通过 96,000 字符协议校验');
+const unfittedCjkBody = JSON.stringify(buildFreeClientPayload('2.3.2', unfittedCjkMessages));
+assert.ok(Buffer.byteLength(unfittedCjkBody, 'utf8') > CHAT_COMPLETIONS_MAX_BODY_BYTES, '未按免费服务拟合的完整有效请求应超过 128 KiB');
+const fittedCjkMessages = buildDecisionPrompt(cjkPostGameRequest, 'free');
+const fittedCjkBody = JSON.stringify(buildFreeClientPayload('2.3.2', fittedCjkMessages));
+assert.ok(Buffer.byteLength(fittedCjkBody, 'utf8') <= CHAT_COMPLETIONS_MAX_BODY_BYTES, '免费提示构建器必须将完整 UTF-8 body 拟合到 128 KiB');
+assert.match(JSON.parse(fittedCjkMessages[1].content).postGameContext, /赛后复盘上下文过长/);
+assert.deepEqual(validateGamePrompt(fittedCjkMessages), { ok: true }, '按字节截断后的中文赛后提示必须通过后端协议校验');
 
 const creatureOwner = players[3];
 assert.ok(creatureOwner);
@@ -299,7 +371,7 @@ function errorResponse(status, body) {
 function installFetch(steps) {
   const calls = [];
   globalThis.fetch = async (input, init) => {
-    calls.push({ input, init, body: init?.body ? JSON.parse(init.body) : null });
+    calls.push({ input, init, rawBody: init?.body ?? null, body: init?.body ? JSON.parse(init.body) : null });
     const step = steps.shift();
     if (step instanceof Error) throw step;
     if (typeof step === 'function') return step(input, init);
@@ -326,8 +398,16 @@ const invalidRemoteBody = {
   reason: 'action_schema',
   path: 'action.schema',
 };
-let calls = installFetch([errorResponse(400, invalidRemoteBody)]);
+let calls = installFetch([chatResponse('{"speech":"复盘完成"}')]);
+const cjkPostGameDecision = await requestDecision(cjkPostGameRequest, { provider: 'free', retryCount: 0 }, new AbortController().signal);
+assert.equal(cjkPostGameDecision.speech, '复盘完成');
+assert.equal(calls.length, 1);
+assert.ok(Buffer.byteLength(calls[0].rawBody, 'utf8') <= CHAT_COMPLETIONS_MAX_BODY_BYTES, 'fetch 实际发送的免费请求 body 不得超过 128 KiB');
+assert.deepEqual(validateGamePrompt(calls[0].body.messages), { ok: true }, 'fetch 实际发送的免费提示必须通过后端协议校验');
+
+calls = installFetch([errorResponse(400, invalidRemoteBody)]);
 let requestError = await captureError(() => requestDecision(request, freeConfig, new AbortController().signal));
+
 assert.equal(calls.length, 1, '永久 HTTP 400 不应重试');
 assert.equal(requestError.kind, 'http');
 assert.equal(requestError.status, 400);

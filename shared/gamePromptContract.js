@@ -103,7 +103,7 @@ export const CHARACTER_IDS = freeze(CHARACTER_CATALOG.map((character) => charact
 
 export const WITCH_SKILL_CATALOG = freeze([
  freeze({ id: 'witch-killer', name: '魔女杀手', description: '每局一次，夜间指定一名无法被解药或治愈保护的目标。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
- freeze({ id: 'death-rewind', name: '死亡回溯', description: '首次死亡时回到当日发言前，旧时间线仅观战者可见。', timings: freeze(/** @type {const} */(['on-death'])), usage: 'passive' }),
+ freeze({ id: 'death-rewind', name: '死亡回溯', description: '首次死亡时回到当日发言前，旧时间线会在赛后完整记录中揭晓。', timings: freeze(/** @type {const} */(['on-death'])), usage: 'passive' }),
  freeze({ id: 'brainwash', name: '洗脑', description: '每天可发动一次：当天发言须含【1~6字】内容，作为强提示词影响其他玩家。', timings: freeze(/** @type {const} */(['before-speech'])), usage: 'once' }),
  freeze({ id: 'liquid-control', name: '操控液体', description: '每局一次，夜间用液体创造自己的造物：造物继承使用者的基础职业与阵营（不继承魔女技），使用者可选择给它解药或毒药。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
  freeze({ id: 'speech-restrain', name: '怪力', description: '使用怪力将一名玩家按在椅子上，使其本轮不能发言。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
@@ -119,19 +119,29 @@ export const WITCH_SKILL_CATALOG = freeze([
 ]);
 export const WITCH_SKILL_IDS = freeze(WITCH_SKILL_CATALOG.map((skill) => skill.id));
 
+export const CHAT_COMPLETIONS_MAX_BODY_BYTES = 128 * 1024;
 export const FREE_CLIENT_PROTOCOL = freeze(/** @type {const} */({ name: 'majo-wolf', protocol: 'majo-wolf-free-v1' }));
+
+/**
+ * @param {string} version
+ * @param {ReadonlyArray<{ role: 'system' | 'user', content: string }>} messages
+ */
+export function buildFreeClientPayload(version, messages) {
+ return { client: { ...FREE_CLIENT_PROTOCOL, version }, messages };
+}
 
 export const PROMPT_FIELD_KEYS = freeze({
  payload: freeze(/** @type {const} */(['client', 'messages', 'response_format'])),
  client: freeze(/** @type {const} */(['name', 'version', 'protocol'])),
  message: freeze(/** @type {const} */(['role', 'content'])),
- prompt: freeze(/** @type {const} */(['action', 'actor', 'phase', 'day', 'board', 'alivePlayers', 'legalCandidates', 'allowAbstain', 'options', 'currentDaySpeeches', 'historicalSpeeches', 'recentPublic', 'privateKnowledge', 'publicSkills', 'privateEvents', 'postGameContext'])),
+ prompt: freeze(/** @type {const} */(['action', 'actor', 'phase', 'day', 'board', 'alivePlayers', 'legalCandidates', 'allowAbstain', 'options', 'currentDaySpeeches', 'historicalSpeeches', 'recentPublic', 'privateKnowledge', 'publicSkills', 'privateEvents', 'finalRoles', 'postGameContext'])),
  action: freeze(/** @type {const} */(['kind', 'title', 'description', 'schema'])),
  actor: freeze(/** @type {const} */(['playerId', 'name', 'personality', 'speechStyle', 'decisionTraits', 'role', 'skill'])),
  decisionTraits: freeze(/** @type {const} */(['conservative', 'trusting', 'aggressive'])),
  observedPlayer: freeze(/** @type {const} */(['playerId', 'name'])),
  privateKnowledge: freeze(/** @type {const} */(['subjectPlayerId', 'kind', 'value', 'observedDay'])),
  publicSkill: freeze(/** @type {const} */(['playerId', 'name', 'skill'])),
+ finalRole: freeze(/** @type {const} */(['playerId', 'name', 'roleId', 'roleName'])),
 });
 
 export const PROMPT_LIMITS = freeze(/** @type {const} */({
@@ -149,7 +159,10 @@ export const PROMPT_LIMITS = freeze(/** @type {const} */({
  dayMin: 0,
  dayMax: 100,
  alivePlayersMinItems: 1,
+ postGameAlivePlayersMinItems: 0,
  alivePlayersMaxItems: 7,
+ finalRolesMinItems: 6,
+ finalRolesMaxItems: 7,
  legalCandidatesMaxItems: 7,
  optionsMaxJsonLength: 8_000,
  currentDaySpeechesMaxItems: 6,
