@@ -45,6 +45,7 @@ import { getAlivePlayerIds, getName, getPlayer, getRoleAssignment, getSkillInsta
 import { exhaustSkill } from '../skills/types';
 import { resolveVotes } from './vote';
 import { applyLastWords, getNextLastWordsDecision } from '../skills/lastWords';
+import { applyPostGameSpeech, getNextPostGameDecision } from '../skills/postGame';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return getName(state, playerId);
@@ -478,7 +479,15 @@ function advanceDayResolution(state: GameState): GameState {
 }
 
 function advance(state: GameState): GameState {
-  if (state.pendingDecision || state.phase === 'ended') {
+  if (state.pendingDecision) {
+    return state;
+  }
+  if (state.phase === 'ended') {
+    // 对局结束：若胜负已结算，切入赛后复盘阶段（全员依次发表赛后发言）
+    if (state.result) {
+      state.phase = 'post-game';
+      return advancePostGame(state);
+    }
     return state;
   }
   switch (state.phase) {
@@ -497,7 +506,18 @@ function advance(state: GameState): GameState {
     case 'voting': return advanceVoting(state);
     case 'runoff': return advanceRunoff(state);
     case 'day-resolution': return advanceDayResolution(state);
+    case 'post-game': return advancePostGame(state);
   }
+}
+
+/** 赛后复盘：逐个玩家（编号 0→5，跳过造物 99）产生赛后发言决策；全部发完后保持 post-game 终态。 */
+function advancePostGame(state: GameState): GameState {
+  const pending = getNextPostGameDecision(state);
+  if (pending) {
+    state.pendingDecision = pending;
+  }
+  // 全部发完：停留在 post-game（终态），避免 phase 回到 ended 重复触发历史记录
+  return state;
 }
 
 function validateTarget(state: GameState, decision: SubmittedDecision, pending: PendingDecision): PlayerId | null {
@@ -517,6 +537,11 @@ function validateTarget(state: GameState, decision: SubmittedDecision, pending: 
 
 function applyRoleDecision(state: GameState, pending: PendingDecision, decision: SubmittedDecision): GameState {
   if (pending.kind === 'speech') {
+    if (pending.options.postGame === true) {
+      // 赛后复盘：全员可见的赛后发言，不参与局内发言校验
+      applyPostGameSpeech(state, pending, decision);
+      return state;
+    }
     if (pending.options.lastWords === true) {
       // 遗言：死者发布的最后发言（公开事件），不受视线诱导约束
       applyLastWords(state, pending, decision);

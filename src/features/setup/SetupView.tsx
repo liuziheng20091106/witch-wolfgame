@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { AiProviderConfig } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
 import { characters } from '../../domain/catalog/characters';
+import { postGameDone } from '../../domain/skills/postGame';
 import type { CharacterId } from '../../domain/model';
 import type { GameHistoryEntry, SavedGameEnvelope, SetupPreferences } from '../../storage/browserStorage';
 import brandMark from '../../assets/icon.ico';
@@ -42,7 +43,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
   const [copiedSeed, setCopiedSeed] = useState<number | null>(null);
   const ready = hasUsableSettings(settings) && (setup.mode === 'spectator' || setup.humanCharacterId !== null);
   const savedLabel = savedGame
-    ? `${savedGame.state.day === 0 ? '首夜' : `第 ${savedGame.state.day} 天`} · ${savedGame.state.phase === 'ended' ? '已结束' : '进行中'}`
+    ? `${savedGame.state.day === 0 ? '首夜' : `第 ${savedGame.state.day} 天`} · ${savedGame.state.phase === 'ended' || savedGame.state.phase === 'post-game' ? '已结束' : '进行中'}`
     : null;
 
   const chooseCharacter = (characterId: CharacterId) => onUpdateSetup({ ...setup, humanCharacterId: characterId });
@@ -58,7 +59,10 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
     window.setTimeout(() => setCopiedSeed((current) => (current === seed ? null : current)), 1500);
   };
   const requestStart = () => {
-    if (savedGame && savedGame.state.phase !== 'ended') {
+    // ended 与"赛后已完成"（post-game 且全员已发言）可无确认直接开新局；
+    // 进行中的对局（含未完成的赛后复盘）需要覆盖确认，避免丢失未完成的赛后记录。
+    const postGameFinished = savedGame?.state.phase === 'post-game' && postGameDone(savedGame.state);
+    if (savedGame && savedGame.state.phase !== 'ended' && !postGameFinished) {
       setConfirming(true);
     } else {
       onStart();

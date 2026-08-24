@@ -11,6 +11,8 @@
 .meta { color: var(--muted); font-family: var(--sans); font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .speaker { display: flex; align-items: center; gap: 7px; margin-top: 7px; color: var(--verdict-dark); font-family: var(--sans); font-size: 13px; font-weight: 800; }
 .speaker img { width: 28px; height: 28px; border: 1px solid var(--line-strong); border-radius: 50%; object-fit: cover; object-position: top; }
+.speaker strong { display: flex; align-items: center; gap: 7px; }
+.speakerTag { padding: 1px 7px; border: 1px solid var(--magic-dark); border-radius: 999px; background: var(--magic-soft); color: var(--magic-dark); font-family: var(--sans); font-size: 10px; font-weight: 800; line-height: 1.4; transform: translateY(-1px); }
 .event p { margin: 4px 0 0; font-size: 17px; line-height: 1.72; overflow-wrap: anywhere; }
 .event small { display: block; margin-top: 7px; color: var(--magic-dark); font-family: var(--sans); font-size: 11px; }
 .major { margin: 12px 0; padding: 17px 16px; border: 1px solid var(--verdict); background: var(--verdict-soft); }

@@ -89,7 +89,7 @@ export function selectObservation(
   state: GameState,
   viewer: { kind: 'spectator' } | { kind: 'player'; playerId: PlayerId },
 ): GameObservation {
-  const omniscient = viewer.kind === 'spectator' || state.phase === 'ended';
+  const omniscient = viewer.kind === 'spectator' || state.phase === 'ended' || state.phase === 'post-game';
   const viewerPlayerId = viewer.kind === 'player' ? viewer.playerId : null;
   const viewerRole = viewerPlayerId === null ? null : getRoleAssignment(state, viewerPlayerId).roleId;
 
@@ -136,7 +136,7 @@ export function selectObservation(
   const publicEvents = omniscient
     ? state.publicEvents
     : state.publicEvents.map((event) => ({ ...event, actualAuthorPlayerId: null }));
-  const privateEvents = viewer.kind === 'spectator'
+  const privateEvents = viewer.kind === 'spectator' || state.phase === 'post-game'
     ? state.privateEvents
     : state.privateEvents.filter((event) => event.viewerPlayerIds.includes(viewer.playerId));
 

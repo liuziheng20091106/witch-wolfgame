@@ -156,12 +156,15 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
     onSubmit(decision);
   };
 
-  // 遗言表单文案：遗言与公开发言共用 speech 表单，用 if/else 区分文案（项目禁三目）
+  // 遗言/赛后复盘表单文案：与公开发言共用 speech 表单，用 if/else 区分文案（项目禁三目）
   let speechLabel = '公开发言';
   let speechPlaceholder = '也可以留空保持沉默';
   if (pending.options.lastWords === true) {
     speechLabel = '遗言';
     speechPlaceholder = '留下最后的话（可留空）';
+  } else if (pending.options.postGame === true) {
+    speechLabel = '赛后复盘';
+    speechPlaceholder = '说说你对这局的复盘（可留空）';
   }
 
   return <section className={styles.panel} aria-labelledby="decision-title">

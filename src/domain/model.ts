@@ -121,7 +121,8 @@ export type TimelineEventKind =
   | 'factor-recovered'
   | 'timeline-rewound'
   | 'ai-error'
-  | 'result';
+  | 'result'
+  | 'post-game-speech';
 
 export interface TimelineEvent {
   id: string;

@@ -34,6 +34,10 @@ function fallbackSpeech(state: GameState, speakerId: PlayerId, pending: PendingD
   if (pending.options.lastWords === true) {
     return { speech: selected.item.slice(0, 100), rngState: selected.state };
   }
+  // 赛后复盘：本地策略给出简短复盘总结（不套用视线诱导）
+  if (pending.options.postGame === true) {
+    return { speech: '对局结束了，我想再重新审视一遍今天每个人的选择。', rngState: selected.state };
+  }
   return { speech: guidedSpeech(state, pending.actorId, selected.item), rngState: selected.state };
 }
 
