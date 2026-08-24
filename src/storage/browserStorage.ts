@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BOARD_DESCRIPTION, CHARACTER_IDS, GAME_ENTITY_IDS, GAME_PHASES, ROLE_IDS, WITCH_SKILL_IDS } from '../../shared/gamePromptContract.js';
+import { APP_VERSION } from '../config/version';
 import type { CharacterId, GameMode, GameState, PlayerId, RewindSnapshot } from '../domain/model';
 import type { AiProviderConfig } from '../ai/types';
 
@@ -30,6 +31,7 @@ export interface SetupPreferences {
 
 export interface SavedGameEnvelope {
   schemaVersion: 1;
+  appVersion: string | null;
   savedAt: string;
   state: GameState;
 }
@@ -116,6 +118,7 @@ const stateSchema = z.object({
 });
 const envelopeSchema = z.strictObject({
   schemaVersion: z.literal(1),
+  appVersion: z.string().trim().min(1).max(64).nullable().default(null),
   savedAt: z.iso.datetime(),
   state: stateSchema,
 });
@@ -214,8 +217,16 @@ export function loadGame(): StorageResult<SavedGameEnvelope> {
   return { ok: true, value: envelope };
 }
 
-export function saveGame(state: GameState): SavedGameEnvelope {
-  const envelope: SavedGameEnvelope = { schemaVersion: 1, savedAt: new Date().toISOString(), state };
+export function getSavedGameCompatibilityWarning(envelope: SavedGameEnvelope): string | null {
+  if (envelope.appVersion === APP_VERSION) return null;
+  if (envelope.appVersion === null) {
+    return `此存档未记录创建版本，当前游戏为 v${APP_VERSION}，继续游戏可能出现兼容性问题。`;
+  }
+  return `此存档由 v${envelope.appVersion} 创建，当前游戏为 v${APP_VERSION}，继续游戏可能出现兼容性问题。`;
+}
+
+export function saveGame(state: GameState, appVersion: string | null): SavedGameEnvelope {
+  const envelope: SavedGameEnvelope = { schemaVersion: 1, appVersion, savedAt: new Date().toISOString(), state };
   envelopeSchema.parse(envelope);
   localStorage.setItem(GAME_KEY, JSON.stringify(envelope));
   return envelope;

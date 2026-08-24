@@ -1,11 +1,11 @@
-import { Bot, Check, ChevronRight, Copy, Eye, Play, Settings, Trash2, UserRound } from 'lucide-react';
+import { Bot, Check, ChevronRight, Copy, Eye, Play, Settings, Trash2, TriangleAlert, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import type { AiProviderConfig } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
 import { characters } from '../../domain/catalog/characters';
 import { postGameDone } from '../../domain/skills/postGame';
 import type { CharacterId } from '../../domain/model';
-import type { GameHistoryEntry, SavedGameEnvelope, SetupPreferences } from '../../storage/browserStorage';
+import { getSavedGameCompatibilityWarning, type GameHistoryEntry, type SavedGameEnvelope, type SetupPreferences } from '../../storage/browserStorage';
 import brandMark from '../../assets/icon.ico';
 import styles from './SetupView.module.css';
 
@@ -45,6 +45,10 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
   const savedLabel = savedGame
     ? `${savedGame.state.day === 0 ? '首夜' : `第 ${savedGame.state.day} 天`} · ${savedGame.state.phase === 'ended' || savedGame.state.phase === 'post-game' ? '已结束' : '进行中'}`
     : null;
+  let savedGameWarning: string | null = null;
+  if (savedGame !== null) {
+    savedGameWarning = getSavedGameCompatibilityWarning(savedGame);
+  }
 
   const chooseCharacter = (characterId: CharacterId) => onUpdateSetup({ ...setup, humanCharacterId: characterId });
   const copySeed = async (seed: number) => {
@@ -127,7 +131,10 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
         {historyError && <div className={styles.storageErrorAction} role="alert"><span>{historyError}</span><button type="button" onClick={onClearHistory}>清除损坏历史</button></div>}
         {copyError && <p className={styles.storageError} role="status">{copyError}</p>}
         <div className={styles.launchActions}>
-          {savedGame && <div className={styles.savedRun}><span>可恢复记录</span><strong>{savedLabel}</strong><button type="button" onClick={onContinue}><Play />继续上局</button><button type="button" className={styles.deleteButton} onClick={onDiscard} aria-label="删除存档"><Trash2 /></button></div>}
+          {savedGame && <div className={styles.savedGameGroup}>
+            {savedGameWarning && <p className={styles.saveVersionWarning} role="alert"><TriangleAlert aria-hidden="true" /><span>{savedGameWarning}</span></p>}
+            <div className={styles.savedRun}><span>可恢复记录</span><strong>{savedLabel}</strong><button type="button" onClick={onContinue}><Play />继续上局</button><button type="button" className={styles.deleteButton} onClick={onDiscard} aria-label="删除存档"><Trash2 /></button></div>
+          </div>}
           <button className={styles.startButton} type="button" disabled={!ready} onClick={requestStart}><Play />开始新局</button>
         </div>
       </section>

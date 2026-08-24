@@ -347,6 +347,34 @@
   align-items: stretch;
 }
 
+.savedGameGroup {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.saveVersionWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--magic);
+  background: var(--magic-soft);
+  color: var(--magic-dark);
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.saveVersionWarning svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .savedRun {
   display: grid;
   grid-template-columns: auto auto 44px;
@@ -660,6 +688,10 @@
   }
 
   .savedRun {
+    width: 100%;
+  }
+
+  .savedGameGroup {
     width: 100%;
   }
 
