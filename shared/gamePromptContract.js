@@ -182,11 +182,11 @@ export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成�
  */
 export function buildGameSystemPrompt(schemaKey) {
  if (!Object.hasOwn(DECISION_EXAMPLES, schemaKey)) throw new Error(`未知提示词响应契约：${String(schemaKey)}`);
- let useOnlyHint = '';
+ let promptHint = '性别与称谓边界：本作所有可选角色均为女性。佐伯米莉亚的“大叔我”只是她的自称和纪念，不代表男性身份；称呼其他角色时使用姓名、小姐、亲等女性或中性称谓，不使用“哥”“哥哥”“先生”等男性称谓。除非当前角色卡明确要求，否则不得改变角色性别。';
  if (schemaKey === 'ignition') {
-  useOnlyHint = '该决策只需回答是否使用（true 或 false），无需选择任何目标。';
+  promptHint += ' 该决策只需回答是否使用（true 或 false），无需选择任何目标。';
  }
- return `你正在进行六人魔女狼人杀。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${DECISION_EXAMPLES[schemaKey]}${useOnlyHint}`;
+ return `你正在进行六人魔女狼人杀。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。actor.personality 是当前角色的静态演绎卡，actor.speechStyle 是同一静态卡的声音指纹；两者只约束稳定性格、关系语气和表达边界，不提供本局身份、阵营、存活、技能或隐藏情报；actor.role、actor.skill、phase、day、board、alivePlayers、legalCandidates、currentDaySpeeches、historicalSpeeches、recentPublic、privateKnowledge、publicSkills、privateEvents 与其他观察字段才是本局事实来源。只能依据提供的观察作决定，不得假设隐藏身份，不得把静态卡或原作旧剧情中的死亡、凶手、证据、关系变化当成本局事实。当前对局默认不继承角色在其他作品时间线中的权能，只有 actor.skill 和本局事件明确授予的效果有效。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。若 options.postGame 为 true，这是温和的赛后复盘：finalRoles 是最终身份唯一来源，postGameContext 中的本局时间线是事件唯一来源，不要新增秘密计划或争吵。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${DECISION_EXAMPLES[schemaKey]}${promptHint}`;
 }
 
 /**

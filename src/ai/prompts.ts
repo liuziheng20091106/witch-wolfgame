@@ -13,6 +13,9 @@ import { roleDescriptions, roleNames } from '../domain/catalog/roles';
 import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
 import { buildPostGameContext } from '../domain/skills/postGame';
 import { APP_VERSION } from '../config/version';
+import { buildRoleplayPersonality, buildRoleplaySpeechStyle } from './roleplayLore';
+import { buildPostGamePromptContext } from './postGameLore';
+import type { CharacterId, PendingDecisionKind } from '../domain/model';
 import type { AiDecisionRequest, AiProviderKind } from './types';
 
 export interface PromptMessage {
@@ -37,7 +40,11 @@ function truncatePostGameContext(context: string, maxLength: number): string {
   const contentLength = maxLength - POST_GAME_TRUNCATION_MARKER.length;
   const headLength = Math.ceil(contentLength / 2);
   const tailLength = contentLength - headLength;
-  return `${context.slice(0, headLength)}${POST_GAME_TRUNCATION_MARKER}${tailLength > 0 ? context.slice(-tailLength) : ''}`;
+  let tail = '';
+  if (tailLength > 0) {
+    tail = context.slice(-tailLength);
+  }
+  return `${context.slice(0, headLength)}${POST_GAME_TRUNCATION_MARKER}${tail}`;
 }
 
 /**
@@ -45,13 +52,16 @@ function truncatePostGameContext(context: string, maxLength: number): string {
  */
 function fitPostGameContext(
   promptPayload: Record<string, unknown>,
-  context: string,
+  timelineContext: string,
   provider: AiProviderKind,
   systemContent: string,
 ): string {
-  const serializeUserContent = (candidate: string): string => JSON.stringify({ ...promptPayload, postGameContext: candidate });
-  const fitsCandidate = (candidate: string): boolean => {
-    const userContent = serializeUserContent(candidate);
+  const serializeUserContent = (candidateTimeline: string): string => JSON.stringify({
+    ...promptPayload,
+    postGameContext: buildPostGamePromptContext(candidateTimeline),
+  });
+  const fitsCandidate = (candidateTimeline: string): boolean => {
+    const userContent = serializeUserContent(candidateTimeline);
     if (userContent.length > PROMPT_LIMITS.userContentMaxLength) return false;
     if (provider !== 'free') return true;
     const body = JSON.stringify(buildFreeClientPayload(APP_VERSION, [
@@ -60,18 +70,18 @@ function fitPostGameContext(
     ]));
     return UTF8_ENCODER.encode(body).byteLength <= CHAT_COMPLETIONS_MAX_BODY_BYTES;
   };
-  if (fitsCandidate(context)) return context;
+  if (fitsCandidate(timelineContext)) return buildPostGamePromptContext(timelineContext);
   if (!fitsCandidate('')) {
     throw new Error('赛后复盘提示词的基础内容已超过提供方限制');
   }
 
   // 二分查找可放入完整请求的最大上下文长度，结果与事件顺序完全确定。
   let low = 0;
-  let high = context.length;
+  let high = timelineContext.length;
   let best = '';
   while (low <= high) {
     const middle = Math.floor((low + high) / 2);
-    const candidate = truncatePostGameContext(context, middle);
+    const candidate = truncatePostGameContext(timelineContext, middle);
     if (fitsCandidate(candidate)) {
       best = candidate;
       low = middle + 1;
@@ -79,14 +89,21 @@ function fitPostGameContext(
       high = middle - 1;
     }
   }
-  if (best.length === 0 && context.length > 0) {
+  if (best.length === 0 && timelineContext.length > 0) {
     throw new Error('赛后复盘上下文无法压缩到提供方限制内');
   }
-  return best;
+  return buildPostGamePromptContext(best);
 }
 
-/** 组装 actor 负载：造物（id=99）使用专属提示词，否则用角色原始数据。 */
-function buildActorPayload(actor: { id: number; name: string }, character: { personality: string; speechStyle: string; decisionTraits: { conservative: number; trusting: number; aggressive: number } }, visibleRole: string, visibleSkill: string) {
+/** 组装 actor 负载：造物（id=99）使用专属提示词，其余角色使用紧凑静态卡。 */
+function buildActorPayload(
+  actor: { id: number; name: string },
+  character: { id: CharacterId; decisionTraits: { conservative: number; trusting: number; aggressive: number } },
+  visibleRole: string,
+  visibleSkill: string,
+  decisionKind: PendingDecisionKind,
+  isPostGame: boolean,
+) {
   if (actor.id === CREATURE_ID) {
     return {
       playerId: actor.id,
@@ -99,7 +116,7 @@ function buildActorPayload(actor: { id: number; name: string }, character: { per
     };
   }
   // 诺亚（操控液体持有者）作为预言家时：提示她拥有自己与造物的双重查验结果
-  let personality = character.personality;
+  let personality = buildRoleplayPersonality(character.id, decisionKind, isPostGame);
   if (visibleRole.includes('预言家') && visibleSkill.includes('操控液体')) {
     personality = `${personality}你作为预言家，拥有自己和造物的查验结果，请善加利用这两条情报。`;
   }
@@ -107,7 +124,7 @@ function buildActorPayload(actor: { id: number; name: string }, character: { per
     playerId: actor.id,
     name: actor.name,
     personality,
-    speechStyle: character.speechStyle,
+    speechStyle: buildRoleplaySpeechStyle(character.id),
     decisionTraits: character.decisionTraits,
     role: visibleRole,
     skill: visibleSkill,
@@ -188,7 +205,14 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
 
   const promptPayload: Record<string, unknown> = {
     action: { kind: pendingDecision.kind, title: pendingDecision.title, description: pendingDecision.description, schema: pendingDecision.schemaKey },
-    actor: buildActorPayload(actor, character, visibleRole, visibleSkill),
+    actor: buildActorPayload(
+      actor,
+      character,
+      visibleRole,
+      visibleSkill,
+      pendingDecision.kind,
+      pendingDecision.options.postGame === true,
+    ),
     phase: observation.phase,
     day: observation.day,
     board: observation.board,
