@@ -156,7 +156,7 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   }
   const fallbackObservation = {
     ...observation,
-    players: observation.players.filter((player) => player.id !== 0),
+    players: observation.players.filter((player) => player.id !== 0 && player.id !== 99),
     publicEvents: [
       { kind: 'speech', day: 1, phase: 'speeches', text: '缺失座位信息的发言', actorPlayerId: 0, targetPlayerIds: [], displayAuthorPlayerId: 0, actualAuthorPlayerId: 0, data: {} },
       { kind: 'last-words', day: 1, phase: 'day-resolution', text: '明确的非座位实体', actorPlayerId: 99, targetPlayerIds: [], displayAuthorPlayerId: 99, actualAuthorPlayerId: 99, data: {} },
