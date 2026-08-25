@@ -142,7 +142,9 @@ assert.match(speechPersonality, /动态上下文.*propose-hypothesis/);
 assert.match(votePersonality, /动态上下文.*demand-evidence/);
 assert.equal(postGamePersonality.includes('argument.'), false, '赛后不应注入论证动作卡');
 const systemPrompt = buildGameSystemPrompt('speech');
-assert.match(systemPrompt, /actor\.speechStyle 是同一静态卡的声音指纹/);
+assert.match(systemPrompt, /actor\.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成/);
+assert.match(systemPrompt, /动态内容只提供行为指导或原作旧背景，不新增本局事实/);
+assert.match(systemPrompt, /actor\.speechStyle 是静态卡的声音指纹/);
 assert.match(systemPrompt, /finalRoles 是最终身份唯一来源/);
 assert.match(systemPrompt, /“名字\+亲”是泽渡可可的专属口癖/);
 assert.equal(systemPrompt.includes('姓名、小姐、亲等'), false, '通用称谓不得再建议使用“亲”');
@@ -232,7 +234,7 @@ const noahPublicSkill = dynamicPayload.publicSkills.find((entry) => entry.player
 assert.ok(noahPublicSkill, '公共技能列表必须包含诺亚');
 assert.match(noahPublicSkill.skill, /与主人始终共享同一基础职业与阵营/, '所有玩家必须知道造物与主人共享身份');
 assert.equal(validateGamePrompt(dynamicPrompt).ok, true, '动态案件提示词必须通过后端契约');
-const dynamicBodyBytes = Buffer.byteLength(JSON.stringify(buildFreeClientPayload('2.3.2', dynamicPrompt)), 'utf8');
+const dynamicBodyBytes = Buffer.byteLength(JSON.stringify(buildFreeClientPayload('2.4.0', dynamicPrompt)), 'utf8');
 maxPersonalityLength = Math.max(maxPersonalityLength, dynamicPayload.actor.personality.length);
 maxFreeBodyBytes = Math.max(maxFreeBodyBytes, dynamicBodyBytes);
 assert.ok(dynamicBodyBytes <= 32 * 1024, '动态案件提示词超过目标预算');
@@ -405,7 +407,7 @@ for (let playerId = 0; playerId < players.length; playerId += 1) {
   const payload = JSON.parse(prompt[1].content);
   assert.equal(validateGamePrompt(prompt).ok, true, `角色 ${playerId} 提示词契约校验失败`);
   assert.ok(payload.actor.personality.length <= PROMPT_LIMITS.actorPersonalityMaxLength, `角色 ${playerId} actor personality 超限`);
-  const body = JSON.stringify(buildFreeClientPayload('2.3.2', prompt));
+  const body = JSON.stringify(buildFreeClientPayload('2.4.0', prompt));
   const bodyBytes = Buffer.byteLength(body, 'utf8');
   maxFreeBodyBytes = Math.max(maxFreeBodyBytes, bodyBytes);
   assert.ok(bodyBytes <= CHAT_COMPLETIONS_MAX_BODY_BYTES, `角色 ${playerId} 免费请求体超限`);

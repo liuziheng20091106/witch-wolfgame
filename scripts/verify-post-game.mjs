@@ -210,7 +210,7 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   check('原始超长时间线保持完整', bigContext.includes('x'.repeat(500)), '原始时间线被截断');
   const bigPrompt = buildDecisionPrompt({ observation: bigObservation, pendingDecision: pending }, 'free');
   const bigPayload = JSON.parse(bigPrompt[1].content);
-  const bigBody = JSON.stringify(buildFreeClientPayload('2.3.2', bigPrompt));
+  const bigBody = JSON.stringify(buildFreeClientPayload('2.4.0', bigPrompt));
   check('超长赛后请求按目标预算截断', Buffer.byteLength(bigBody, 'utf8') <= 32 * 1024, `bytes=${Buffer.byteLength(bigBody, 'utf8')}`);
   check('超长赛后请求保留截断标记', bigPayload.postGameContext.includes('上下文过长'), '缺少截断标记');
   check('赛后不重复发送公开事件摘要', bigPayload.recentPublic.length === 0 && bigPayload.currentDaySpeeches.length === 0 && bigPayload.historicalSpeeches.length === 0);

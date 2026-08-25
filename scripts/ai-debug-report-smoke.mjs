@@ -270,7 +270,7 @@ const customCjkBody = JSON.stringify({ messages: customCjkMessages });
 assert.ok(Buffer.byteLength(customCjkBody, 'utf8') <= 32 * 1024, '自定义提供方提示必须符合 32 KiB 目标预算');
 assert.match(JSON.parse(customCjkMessages[1].content).postGameContext, /赛后复盘上下文过长/);
 const fittedCjkMessages = buildDecisionPrompt(cjkPostGameRequest, 'free');
-const fittedCjkBody = JSON.stringify(buildFreeClientPayload('2.3.2', fittedCjkMessages));
+const fittedCjkBody = JSON.stringify(buildFreeClientPayload('2.4.0', fittedCjkMessages));
 assert.ok(Buffer.byteLength(fittedCjkBody, 'utf8') <= CHAT_COMPLETIONS_MAX_BODY_BYTES, '免费提示构建器必须将完整 UTF-8 body 拟合到 128 KiB');
 assert.ok(Buffer.byteLength(fittedCjkBody, 'utf8') <= 32 * 1024, '免费提示构建器必须符合 32 KiB 目标预算');
 assert.match(JSON.parse(fittedCjkMessages[1].content).postGameContext, /赛后复盘上下文过长/);
