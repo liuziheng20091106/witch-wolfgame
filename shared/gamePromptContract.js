@@ -105,7 +105,7 @@ export const WITCH_SKILL_CATALOG = freeze([
  freeze({ id: 'witch-killer', name: '魔女杀手', description: '每局一次，夜间指定一名无法被解药或治愈保护的目标。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
  freeze({ id: 'death-rewind', name: '死亡回溯', description: '首次死亡时回到当日发言前，旧时间线会在赛后完整记录中揭晓。', timings: freeze(/** @type {const} */(['on-death'])), usage: 'passive' }),
  freeze({ id: 'brainwash', name: '洗脑', description: '每天可发动一次：当天发言须含【1~6字】内容，作为强提示词影响其他玩家。', timings: freeze(/** @type {const} */(['before-speech'])), usage: 'once' }),
- freeze({ id: 'liquid-control', name: '操控液体', description: '每局一次，夜间用液体创造自己的造物：造物继承使用者的基础职业与阵营（不继承魔女技），使用者可选择给它解药或毒药。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
+ freeze({ id: 'liquid-control', name: '操控液体', description: '每局一次，夜间用液体创造诺亚的造物：造物绑定当前主人（初始为诺亚），与主人始终共享同一基础职业与阵营（不继承魔女技），双方明确知道这一身份关系；造物可独立行动但投票跟随主人，使用者可选择给它解药或毒药。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
  freeze({ id: 'speech-restrain', name: '怪力', description: '使用怪力将一名玩家按在椅子上，使其本轮不能发言。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
  freeze({ id: 'levitation', name: '漂浮', description: '每局一次，夜间发动隐藏自己的脚印：直到第二天白天结束，你的行动不留任何可追溯记录，也无法被选中（女巫药、灵魂交换等失效）。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
  freeze({ id: 'healing', name: '治愈', description: '每夜保护一名存活者，移除其所有可防止死亡意图。', timings: freeze(/** @type {const} */(['night-protection'])), usage: 'nightly' }),
@@ -182,7 +182,7 @@ export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成�
  */
 export function buildGameSystemPrompt(schemaKey) {
  if (!Object.hasOwn(DECISION_EXAMPLES, schemaKey)) throw new Error(`未知提示词响应契约：${String(schemaKey)}`);
- let promptHint = ' 性别与称谓边界：本作所有可选角色均为女性。佐伯米莉亚的“大叔我”只是她的自称和纪念，不代表男性身份；称呼其他角色时使用姓名、小姐、亲等女性或中性称谓，不使用“哥”“哥哥”“先生”等男性称谓。除非当前角色卡明确要求，否则不得改变角色性别。';
+ let promptHint = ' 性别与称谓边界：本作所有可选角色均为女性。佐伯米莉亚的“大叔我”只是她的自称和纪念，不代表男性身份；称呼其他角色时使用姓名、小姐等女性或中性称谓，不使用“哥”“哥哥”“先生”等男性称谓。“名字+亲”是泽渡可可的专属口癖，其他角色不得使用。除非当前角色卡明确要求，否则不得改变角色性别。';
  if (schemaKey === 'ignition') {
   promptHint += ' 该决策只需回答是否使用（true 或 false），无需选择任何目标。';
  }

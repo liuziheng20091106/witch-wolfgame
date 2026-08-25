@@ -39,6 +39,8 @@ try {
 const cards = Object.values(ROLEPLAY_STATIC_BY_CHARACTER_ID);
 assert.equal(cards.length, CHARACTER_CATALOG.length, '静态卡数量必须覆盖全部角色');
 assert.equal(new Set(cards.map((card) => card.characterId)).size, cards.length, '静态卡 ID 必须唯一');
+const namePlusQinCards = cards.filter((card) => card.voiceFingerprint.formsOfAddress.includes('名字加“亲”'));
+assert.deepEqual(namePlusQinCards.map((card) => card.characterId), ['soul-13'], '“名字+亲”必须是泽渡可可的专属口癖');
 
 const players = CHARACTER_CATALOG.slice(0, 6).map((character, playerId) => ({
   id: playerId,
@@ -142,6 +144,8 @@ assert.equal(postGamePersonality.includes('argument.'), false, '赛后不应注�
 const systemPrompt = buildGameSystemPrompt('speech');
 assert.match(systemPrompt, /actor\.speechStyle 是同一静态卡的声音指纹/);
 assert.match(systemPrompt, /finalRoles 是最终身份唯一来源/);
+assert.match(systemPrompt, /“名字\+亲”是泽渡可可的专属口癖/);
+assert.equal(systemPrompt.includes('姓名、小姐、亲等'), false, '通用称谓不得再建议使用“亲”');
 assert.equal(systemPrompt.includes('A1-C1'), false, '系统提示不得常驻原作案件');
 assert.equal(systemPrompt.includes('魔女审判'), false, '系统提示不得常驻原作审判机制');
 
@@ -206,6 +210,7 @@ dynamicPlayers[0] = {
   ...dynamicPlayers[0],
   characterId: coco.id,
   name: coco.name,
+  roleId: 'wolf',
   skillId: coco.defaultSkillId,
 };
 const dynamicObservation = {
@@ -221,11 +226,59 @@ const dynamicPrompt = buildDecisionPrompt({
 const dynamicPayload = JSON.parse(dynamicPrompt[1].content);
 assert.match(dynamicPayload.actor.personality, /original-case\.A2-C2/, '实际提示词应注入动态命中的可可案');
 assert.match(dynamicPayload.actor.personality, /不得作为本局身份、投票或行动依据/, '案件卡必须携带本局隔离边界');
+assert.match(dynamicPayload.actor.role, /不要仅因诚实、正义或避免猜疑而自曝狼人/, '狼人必须收到阵营胜利与谨慎自曝建议');
+assert.match(dynamicPayload.actor.skill, /第一天信任不足，几乎无人观看/, '千里眼持有者必须收到首日保留建议');
+const noahPublicSkill = dynamicPayload.publicSkills.find((entry) => entry.playerId === 3);
+assert.ok(noahPublicSkill, '公共技能列表必须包含诺亚');
+assert.match(noahPublicSkill.skill, /与主人始终共享同一基础职业与阵营/, '所有玩家必须知道造物与主人共享身份');
 assert.equal(validateGamePrompt(dynamicPrompt).ok, true, '动态案件提示词必须通过后端契约');
 const dynamicBodyBytes = Buffer.byteLength(JSON.stringify(buildFreeClientPayload('2.3.2', dynamicPrompt)), 'utf8');
 maxPersonalityLength = Math.max(maxPersonalityLength, dynamicPayload.actor.personality.length);
 maxFreeBodyBytes = Math.max(maxFreeBodyBytes, dynamicBodyBytes);
 assert.ok(dynamicBodyBytes <= 32 * 1024, '动态案件提示词超过目标预算');
+
+const noahPlayers = players.map((player) => ({ ...player }));
+noahPlayers[3] = {
+  ...noahPlayers[3],
+  skillId: 'liquid-control',
+};
+const noahDecision = {
+  ...baseSpeechDecision,
+  id: 'roleplay-noah-creature-identity',
+  actorId: 3,
+};
+const noahPrompt = buildDecisionPrompt({
+  observation: { ...baseObservation, players: noahPlayers, pendingDecision: noahDecision },
+  pendingDecision: noahDecision,
+  sessionId: 'roleplay-noah-creature-identity',
+}, 'free');
+const noahPayload = JSON.parse(noahPrompt[1].content);
+assert.match(noahPayload.actor.skill, /造物与你共享同一基础职业和阵营，你无需猜测它的身份/, '诺亚必须明确知道造物身份');
+assert.equal(validateGamePrompt(noahPrompt).ok, true, '诺亚造物身份提示必须通过后端契约');
+
+const creaturePlayers = players.map((player) => ({ ...player, isSelf: false }));
+creaturePlayers.push({
+  id: 99,
+  characterId: 'soul-3',
+  name: '诺亚的造物',
+  avatarUrl: '/avatar-creature.png',
+  alive: true,
+  roleId: 'villager',
+  skillId: null,
+  isSelf: true,
+});
+const creatureDecision = {
+  ...baseSpeechDecision,
+  id: 'roleplay-creature-shared-identity',
+  actorId: 99,
+};
+const creaturePrompt = buildDecisionPrompt({
+  observation: { ...baseObservation, players: creaturePlayers, pendingDecision: creatureDecision },
+  pendingDecision: creatureDecision,
+  sessionId: 'roleplay-creature-shared-identity',
+}, 'custom');
+const creaturePayload = JSON.parse(creaturePrompt[1].content);
+assert.match(creaturePayload.actor.personality, /明确知道自己与当前主人始终共享同一基础职业和阵营/, '造物必须明确知道自己与主人共享身份');
 
 const contextEvents = [];
 for (let index = 0; index < 8; index += 1) {

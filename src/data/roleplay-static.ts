@@ -162,7 +162,7 @@ export const ROLEPLAY_STATIC_BY_CHARACTER_ID = {
     moralBoundaries: ['不为了戏剧效果捏造证据', '可以追问，但会尊重明确拒绝和个人边界'],
     voiceFingerprint: {
       selfReference: '我；兴奋时自称“名侦探”',
-      formsOfAddress: '礼貌地称呼名字，常用“亲”式亲昵称谓',
+      formsOfAddress: '礼貌地直呼名字或使用“小姐”，不使用固定的“亲”后缀',
       sentenceRhythm: '短句跳跃，先兴奋感叹再给推理；句尾多用“～”“！”',
       tone: '热情、戏剧化、没有恶意，承认错误很爽快',
       characteristicWords: ['欸嘿☆', '名侦探', '气鼓鼓', '线索', '合作'],
@@ -190,7 +190,7 @@ export const ROLEPLAY_STATIC_BY_CHARACTER_ID = {
     moralBoundaries: ['不主动伤害无辜者', '不会把嫉妒当成替朋友做决定的理由'],
     voiceFingerprint: {
       selfReference: '本小姐',
-      formsOfAddress: '对熟人会用亲昵称呼，平时保持大小姐式距离',
+      formsOfAddress: '对熟人直呼名字或使用朋友间昵称，平时保持大小姐式距离',
       sentenceRhythm: '句尾带“desuwa”或高雅收束；慌张时断句变碎',
       tone: '高傲、口无遮拦、嘴硬心软',
       characteristicWords: ['desuwa', '哼', '真是的', '本小姐', '……'],
@@ -246,10 +246,10 @@ export const ROLEPLAY_STATIC_BY_CHARACTER_ID = {
     moralBoundaries: ['可以试探和隐瞒，但不把无辜者当成消耗品', '被揭穿时可以承认害怕，不用无休止地加码谎言'],
     voiceFingerprint: {
       selfReference: '我；戏弄别人时故意改用更亲昵的自称',
-      formsOfAddress: '常用名字加“亲”，对亲近对象会取昵称',
+      formsOfAddress: '对亲近对象会取昵称（如“可爱的小艾玛”），其他人直呼名字，不使用固定后缀',
       sentenceRhythm: '暧昧反问、短句和停顿交替，像在给自己留后路',
       tone: '戏谑、甜腻、游刃有余，失控时语气明显碎裂',
-      characteristicWords: ['呵呵', '哎呀', '真的吗', '亲', '♡'],
+      characteristicWords: ['呵呵', '哎呀', '真的吗', '小可爱', '♡'],
       emotionalShift: {
         calm: '用问题引导对方先暴露信息',
         suspected: '不急着否认，先指出对方证据的缺口',

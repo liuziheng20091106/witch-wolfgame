@@ -9,7 +9,7 @@ import {
   isAllowedDecisionPair,
 } from '../../shared/gamePromptContract.js';
 import { characterById } from '../domain/catalog/characters';
-import { roleDescriptions, roleNames } from '../domain/catalog/roles';
+import { roleDescriptions, roleNames, roleUsageHints } from '../domain/catalog/roles';
 import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
 import { buildPostGameContext } from '../domain/skills/postGame';
 import { APP_VERSION } from '../config/version';
@@ -23,7 +23,7 @@ export interface PromptMessage {
   content: string;
 }
 
-const CREATURE_PERSONALITY = '你是诺亚用魔法创造出来的造物，你拥有和她一样的基础身份和阵营，但不拥有她的魔法。除了每天的投票权（跟随诺亚）以外，你的所有行动可以独立决策；如果你想制造混乱，也可以用毒药毒死主人（但这对你并没有好处）。';
+const CREATURE_PERSONALITY = '你是诺亚用魔法创造、与当前主人绑定的造物。你明确知道自己与当前主人始终共享同一基础职业和阵营，但不拥有她的魔女技。你的投票跟随当前主人，其他行动可以独立决策；伤害主人等同于损害自己的阵营，通常没有好处。';
 const POST_GAME_TRUNCATION_MARKER = '\n【赛后复盘上下文过长，已保留开头和结尾；省略部分不代表没有发生】\n';
 // 中文上下文按 UTF-8 计量时，32 KiB 通常落在约 5k～10k 模型 token 的目标区间。
 const PROMPT_TARGET_BODY_BYTES = 32 * 1024;
@@ -275,7 +275,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     }));
   let visibleRole = '未公开';
   if (actor.roleId !== null) {
-    visibleRole = `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}`;
+    visibleRole = `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}${roleUsageHints[actor.roleId] ?? ''}`;
   }
   let visibleSkill = '无可见技能';
   if (actor.skillId !== null) {
