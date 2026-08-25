@@ -286,6 +286,44 @@ assert.equal(contextPayload.historicalSpeeches.length, 6, '历史发言只保留
 assert.equal(contextPayload.recentPublic.includes('当前公开技能事件'), true, '近期非发言事件必须保留');
 assert.equal(contextPayload.recentPublic.some((entry) => entry.includes('历史发言')), false, 'recentPublic 不得重复携带发言');
 
+const oversizedRequiredEvents = [];
+for (let index = 0; index < 6; index += 1) {
+  oversizedRequiredEvents.push({
+    id: `oversized-current-${index}`,
+    kind: 'speech',
+    day: 2,
+    phase: 'speeches',
+    text: '\u4e2d'.repeat(1900),
+    actorPlayerId: index,
+    targetPlayerIds: [],
+    displayAuthorPlayerId: index,
+    actualAuthorPlayerId: index,
+    data: {},
+  });
+}
+const oversizedRequiredObservation = {
+  ...baseObservation,
+  day: 2,
+  phase: 'voting',
+  publicEvents: oversizedRequiredEvents,
+  pendingDecision: contextDecision,
+};
+const oversizedRequiredRequest = {
+  observation: oversizedRequiredObservation,
+  pendingDecision: contextDecision,
+  sessionId: 'roleplay-oversized-required-context',
+};
+assert.throws(
+  () => buildDecisionPrompt(oversizedRequiredRequest, 'custom'),
+  /必要上下文超过 32 KiB 目标预算/,
+  'custom provider must reject required context above the target budget',
+);
+assert.throws(
+  () => buildDecisionPrompt(oversizedRequiredRequest, 'free'),
+  /必要上下文超过 32 KiB 目标预算/,
+  'free provider must reject required context above the target budget',
+);
+
 for (let playerId = 0; playerId < players.length; playerId += 1) {
   const pendingDecision = {
     id: `roleplay-${playerId}`,

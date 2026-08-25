@@ -161,6 +161,9 @@ function fitRuntimeContext(
     throw new Error('AI 提示词的必要上下文已超过长度限制');
   }
   const bodyBytes = promptBodyByteLength(systemContent, userContent, provider);
+  if (bodyBytes > PROMPT_TARGET_BODY_BYTES) {
+    throw new Error('AI 提示词的必要上下文超过 32 KiB 目标预算，无法继续压缩');
+  }
   if (provider === 'free' && bodyBytes > CHAT_COMPLETIONS_MAX_BODY_BYTES) {
     throw new Error('免费提供方请求体的必要上下文已超过长度限制');
   }
