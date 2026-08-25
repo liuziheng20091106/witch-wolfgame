@@ -35,6 +35,9 @@ export interface OriginalCaseLoreCard {
   eventKinds: readonly TimelineEventKind[];
 }
 
+export const ORIGINAL_CASE_SUMMARY_MIN_LENGTH = 40;
+export const ORIGINAL_CASE_SUMMARY_MAX_LENGTH = 160;
+
 const ARGUMENT_CARD_BY_ID = {
   proposeHypothesis: {
     id: 'argument.propose-hypothesis',
@@ -88,7 +91,7 @@ export const ORIGINAL_CASE_LORE_CARDS = [
   {
     id: 'A1-C1',
     title: '诺亚案',
-    summary: '诺亚遭蕾雅以临时长枪刺杀；视线固定制造密室假象，苹果上的白颜料揭穿凶器与直播诡计。',
+    summary: '蕾雅以简易长矛从门外刺杀诺亚，并固定诺亚望向天花板的视线，又令路过者忽略尸体。她因幼时缺少母亲注视而渴望成为焦点，嫉妒知名画家“气球”诺亚夺走众人关注，遂起杀心。',
     characterIds: ['soul-3', 'soul-11'],
     skillIds: ['gaze-guidance'],
     eventKinds: ['speech', 'restrained', 'death'],
@@ -96,7 +99,7 @@ export const ORIGINAL_CASE_LORE_CARDS = [
   {
     id: 'A1-C2',
     title: '米莉亚案',
-    summary: '米莉亚为保护艾玛谎称交换身体并充当替身，安安误杀她后用录音与手机掉包伪造不在场证明。',
+    summary: '安安以洗脑魔法取得惩罚室钥匙，刺杀自称与艾玛交换身体的米莉亚，再用录音与手机掉包伪造不在场证明。监牢让孤独的她首次拥有诺亚、蕾雅、米莉亚和梅露露等朋友；她不愿艾玛的越狱计划夺走这份幸福，本想杀死艾玛，却被米莉亚舍身保护艾玛的谎言误导。',
     characterIds: ['soul-0', 'soul-2', 'soul-10'],
     skillIds: ['brainwash', 'soul-exchange'],
     eventKinds: ['role-exchange', 'speech', 'death'],
@@ -104,7 +107,7 @@ export const ORIGINAL_CASE_LORE_CARDS = [
   {
     id: 'A1-C3',
     title: '汉娜案',
-    summary: '汉娜担心魔女化而托付雪莉结束生命；雪莉以怪力调换建筑，伪造上吊密室并最终承担罪责。',
+    summary: '即将魔女化的汉娜托付雪莉结束生命；雪莉将她勒死并伪装成上吊，再以怪力调换两座招待所制造密室，又袭击奈叶香、刺伤自己伪造不在场证明，最终承担罪责。',
     characterIds: ['soul-4', 'soul-5'],
     skillIds: ['levitation', 'speech-restrain'],
     eventKinds: ['restrained', 'death', 'exile'],
@@ -112,7 +115,7 @@ export const ORIGINAL_CASE_LORE_CARDS = [
   {
     id: 'A1-C4',
     title: '亚里沙案',
-    summary: '亚里沙服药自尽却未立即死亡，艾玛误触机关令处刑台进入冷冻室，最终过失造成她冻死。',
+    summary: '首次审判一度认定：亚里沙服安眠药自尽未遂，艾玛误触机关，使昏睡的她随处刑台降入冷冻室，过失致其冻死。幕后黑手案则揭示，梅露露交给她的“安眠药”其实是杀死魔女的特雷德基姆，才是其真正死因。',
     characterIds: ['soul-0', 'soul-9'],
     skillIds: ['ignition'],
     eventKinds: ['witch-action', 'death', 'trial-by-fire'],
@@ -120,7 +123,7 @@ export const ORIGINAL_CASE_LORE_CARDS = [
   {
     id: 'A1-C5',
     title: '幕后黑手案',
-    summary: '梅露露为寻找大魔女运营监牢，以治愈掩盖奈叶香分尸痕迹，并用特雷德基姆害死亚里沙。',
+    summary: '梅露露为寻找大魔女月代雪而运营监牢。为灭口已查明监牢秘密的奈叶香，她从背后开枪杀人，以斧分尸，经地下处刑台小窗移送，再用治愈魔法复原尸体制造密室；她还把特雷德基姆伪装成安眠药交给亚里沙，造成其死亡。',
     characterIds: ['soul-8', 'soul-9', 'soul-12'],
     skillIds: ['healing'],
     eventKinds: ['protection', 'witch-action', 'death'],
@@ -128,7 +131,7 @@ export const ORIGINAL_CASE_LORE_CARDS = [
   {
     id: 'A2-C1',
     title: '梅露露案',
-    summary: '玛格刺杀照顾自己的梅露露，以模仿伪造通话和碎裂声，又利用昏迷的希罗跨过白色颜料。',
+    summary: '玛格因梅露露照顾自己而产生将爱等同伤害的扭曲占有欲，遂将她刺死；她以模仿魔法伪造通话和玻璃碎裂声，并把昏迷的希罗当作踏板跨越白色颜料，未留下自己的足迹。',
     characterIds: ['soul-1', 'soul-7', 'soul-8'],
     skillIds: ['voice-mimic'],
     eventKinds: ['speech', 'timeline-rewound', 'death'],
@@ -136,7 +139,7 @@ export const ORIGINAL_CASE_LORE_CARDS = [
   {
     id: 'A2-C2',
     title: '可可案',
-    summary: '奈叶香为阻止可可使用杀魔女药而开枪；焚烧炉与直播背景造成错觉，姐姐最终现身保护她。',
+    summary: '奈叶香为阻止可可使用杀死魔女的“13水”（特雷德基姆）而开枪杀死她；可可实际身处焚烧炉室，却用合成直播背景伪装成淋浴房，造成现场错觉。处刑时，已成为看守的姐姐惠叶香挺身保护奈叶香，令她在崩溃中魔女化。',
     characterIds: ['soul-12', 'soul-13'],
     skillIds: ['mind-reading', 'clairvoyance'],
     eventKinds: ['knowledge', 'skill', 'death'],
@@ -144,17 +147,17 @@ export const ORIGINAL_CASE_LORE_CARDS = [
   {
     id: 'A2-C3',
     title: '安安案',
-    summary: '诺亚害怕拙劣真画曝光，借安安的装死恶作剧制造画室冲突，导致她坠楼，艾玛随后伪造现场。',
-    characterIds: ['soul-0', 'soul-2', 'soul-3'],
+    summary: '安安与艾玛策划装死恶作剧；希罗阻止两人争执时意外使安安坠楼，艾玛为保护希罗而伪造现场。安安凭预设吊床成功假死后，害怕拙劣真画曝光的诺亚用铁栅将她刺死，并以魔法降雨冲去痕迹。',
+    characterIds: ['soul-0', 'soul-1', 'soul-2', 'soul-3'],
     skillIds: ['brainwash', 'liquid-control'],
     eventKinds: ['speech', 'death', 'exile'],
   },
   {
     id: 'A2-C4',
     title: '艾玛与蕾雅案',
-    summary: '汉娜因蕾雅无心之语失控，以冰块袭击蕾雅；艾玛撞见后也被刺死，希罗因此决定最后回溯。',
+    summary: '汉娜以大小姐幻想掩盖贫困与被母亲抛弃的创伤；蕾雅谈及她粗糙的手，又说“先走一步”，触发她对阶层差距与再次被抛弃的恐惧。汉娜以冰块击杀蕾雅，又为灭口用刺剑杀死目击的艾玛；她给艾玛穿上缝有自己头发的礼服，以漂浮魔法将尸体悬在电梯轿厢上方，希罗因此决定最后一次自杀回溯。',
     characterIds: ['soul-0', 'soul-1', 'soul-5', 'soul-11'],
-    skillIds: [],
+    skillIds: ['levitation'],
     eventKinds: ['death', 'timeline-rewound'],
   },
   {

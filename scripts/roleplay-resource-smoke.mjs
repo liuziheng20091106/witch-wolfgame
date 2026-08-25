@@ -16,13 +16,20 @@ const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
 let ROLEPLAY_STATIC_BY_CHARACTER_ID;
 let ORIGINAL_CASE_LORE_CARDS;
+let ORIGINAL_CASE_SUMMARY_MIN_LENGTH;
+let ORIGINAL_CASE_SUMMARY_MAX_LENGTH;
 let selectRoleplayRetrievalCards;
 let buildRoleplayPersonality;
 let buildRoleplaySpeechStyle;
 let buildDecisionPrompt;
 try {
   ({ ROLEPLAY_STATIC_BY_CHARACTER_ID } = await server.ssrLoadModule('/src/data/roleplay-static.ts'));
-  ({ ORIGINAL_CASE_LORE_CARDS, selectRoleplayRetrievalCards } = await server.ssrLoadModule('/src/data/roleplay-retrieval.ts'));
+  ({
+    ORIGINAL_CASE_LORE_CARDS,
+    ORIGINAL_CASE_SUMMARY_MIN_LENGTH,
+    ORIGINAL_CASE_SUMMARY_MAX_LENGTH,
+    selectRoleplayRetrievalCards,
+  } = await server.ssrLoadModule('/src/data/roleplay-retrieval.ts'));
   ({ buildRoleplayPersonality, buildRoleplaySpeechStyle } = await server.ssrLoadModule('/src/ai/roleplayLore.ts'));
   ({ buildDecisionPrompt } = await server.ssrLoadModule('/src/ai/prompts.ts'));
 } finally {
@@ -141,8 +148,8 @@ assert.equal(systemPrompt.includes('魔女审判'), false, '系统提示不得�
 assert.equal(ORIGINAL_CASE_LORE_CARDS.length, 11, '案件短卡必须覆盖十一场审判记录');
 assert.equal(new Set(ORIGINAL_CASE_LORE_CARDS.map((card) => card.id)).size, 11, '案件短卡 ID 必须唯一');
 for (const caseCard of ORIGINAL_CASE_LORE_CARDS) {
-  assert.ok(caseCard.summary.length >= 40, `${caseCard.id} 案件摘要少于 40 字`);
-  assert.ok(caseCard.summary.length <= 80, `${caseCard.id} 案件摘要超过 80 字`);
+  assert.ok(caseCard.summary.length >= ORIGINAL_CASE_SUMMARY_MIN_LENGTH, `${caseCard.id} 案件摘要过短`);
+  assert.ok(caseCard.summary.length <= ORIGINAL_CASE_SUMMARY_MAX_LENGTH, `${caseCard.id} 案件摘要过长`);
 }
 
 const retrievalDefaults = {
