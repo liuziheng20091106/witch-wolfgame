@@ -24,7 +24,8 @@ const SCHEMAS = new Set(DECISION_SCHEMA_KEYS);
 const PHASES = new Set(GAME_PHASES);
 const CHARACTER_NAMES = new Set(CHARACTER_CATALOG.map((character) => character.name));
 const CREATURE_NAMES = new Set(CHARACTER_CATALOG.map((character) => formatCreatureName(character.name)));
-const BOARD_DESCRIPTIONS = new Set([BOARD_DESCRIPTION]);
+const LEGACY_BOARD_DESCRIPTION = '6人局：狼人×2、预言家×1、女巫×1、村民×2';
+const BOARD_DESCRIPTIONS = new Set([BOARD_DESCRIPTION, LEGACY_BOARD_DESCRIPTION]);
 const PUBLIC_SKILLS = new Set(WITCH_SKILL_IDS.map((skillId) => formatPublicSkill(skillId)));
 const ROLE_VALUES = new Set(ROLE_IDS);
 const ROLE_NAMES_BY_ID = new Map(ROLE_CATALOG.map((role) => [role.id, role.name]));
@@ -228,7 +229,8 @@ export function validateGamePrompt(messages) {
     if (finalRolePlayerIds.size !== prompt.finalRoles.length) {
       return invalidResult('final_roles_unique_player', 'finalRoles.playerId');
     }
-    if (!PLAYER_IDS.every((playerId) => finalRolePlayerIds.has(playerId))) {
+    const expectedIds = prompt.finalRoles.length === 6 ? [0, 1, 2, 3, 4, 5] : PLAYER_IDS;
+    if (!expectedIds.every((playerId) => finalRolePlayerIds.has(playerId))) {
       return invalidResult('final_roles_players', 'finalRoles.playerId');
     }
   }
@@ -244,6 +246,13 @@ export function validateGamePrompt(messages) {
   }
   if (!boundedStrings(prompt.privateEvents, PROMPT_LIMITS.privateEventsMaxItems, PROMPT_LIMITS.speechMaxLength)) {
     return invalidResult('private_events', 'privateEvents');
+  }
+  if (!Array.isArray(prompt.currentVotes)
+    || !prompt.currentVotes.every((vote) => isObject(vote)
+      && Number.isInteger(vote.voterPlayerId)
+      && (vote.targetPlayerId === null || Number.isInteger(vote.targetPlayerId))
+      && (vote.round === 1 || vote.round === 2))) {
+    return invalidResult('current_votes', 'currentVotes');
   }
   if (prompt.postGameContext !== undefined
     && (typeof prompt.postGameContext !== 'string' || prompt.postGameContext.length > PROMPT_LIMITS.userContentMaxLength)) {
@@ -261,8 +270,9 @@ export function validateGamePrompt(messages) {
     && fact.observedDay <= prompt.day)) {
     return invalidResult('private_knowledge_entry', 'privateKnowledge');
   }
+  const expectedPublicSkills = prompt.publicSkills?.length === 6 ? 6 : PROMPT_LIMITS.publicSkillsItems;
   if (!Array.isArray(prompt.publicSkills)
-    || prompt.publicSkills.length !== PROMPT_LIMITS.publicSkillsItems
+    || prompt.publicSkills.length !== expectedPublicSkills
     || !prompt.publicSkills.every(validPublicSkill)) {
     return invalidResult('public_skills_shape', 'publicSkills');
   }

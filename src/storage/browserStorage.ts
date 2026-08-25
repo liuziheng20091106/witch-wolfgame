@@ -3,6 +3,8 @@ import { BOARD_DESCRIPTION, CHARACTER_IDS, GAME_ENTITY_IDS, GAME_PHASES, ROLE_ID
 import { APP_VERSION } from '../config/version';
 import type { CharacterId, GameMode, GameState, PlayerId, RewindSnapshot } from '../domain/model';
 import type { AiProviderConfig } from '../ai/types';
+import { characters } from '../domain/catalog/characters';
+import { defaultSkillByCharacterId, witchSkillDefinitions } from '../domain/catalog/witchSkills';
 
 export const SETTINGS_KEY = 'majo-wolf.settings.v1';
 export const GAME_KEY = 'majo-wolf.game.v1';
@@ -72,6 +74,7 @@ const setupSchema = z.strictObject({
 });
 const stateSchema = z.object({
   schemaVersion: z.literal(1),
+  seatCount: z.union([z.literal(6), z.literal(8)]).optional(),
   gameId: z.string().min(1),
   board: z.string().default(BOARD_DESCRIPTION),
   mode: z.enum(['spectator', 'player']),
@@ -88,7 +91,7 @@ const stateSchema = z.object({
     roleAssignmentId: z.string(),
     skillInstanceId: z.string().nullable(),
     alive: z.boolean(),
-  })).length(6),
+  })).refine((players) => players.length === 6 || players.length === 8),
   roleAssignments: z.array(z.object({
     id: z.string(), ownerPlayerId: playerIdSchema, roleId: roleIdSchema,
     resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
@@ -106,7 +109,8 @@ const stateSchema = z.object({
     alive: z.boolean(),
     resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
   })).default([]),
-  speechOrder: z.array(playerIdSchema).length(6),
+  speechOrder: z.array(playerIdSchema).refine((order) => order.length === 6 || order.length === 8),
+  freeSpeechOrder: z.array(playerIdSchema).optional(),
   publicEvents: z.array(z.unknown()),
   privateEvents: z.array(z.unknown()),
   archivedTimelines: z.array(z.unknown()),
@@ -208,12 +212,97 @@ function migrateCreatureFields(state: GameState | RewindSnapshot): void {
   if (!state.knowledgeByPlayer[99]) state.knowledgeByPlayer[99] = [];
 }
 
+function migrateSpeechFields(state: GameState | RewindSnapshot): void {
+  if (!Array.isArray(state.freeSpeechOrder)) state.freeSpeechOrder = [...state.speechOrder];
+  for (const event of state.publicEvents) {
+    if ((event.kind === 'speech' || event.kind === 'restrained') && typeof event.data.speechRound !== 'number') {
+      event.data.speechRound = 1;
+    }
+  }
+  if (state.pendingDecision?.kind === 'speech'
+    && state.pendingDecision.options.lastWords !== true
+    && state.pendingDecision.options.postGame !== true
+    && typeof state.pendingDecision.options.speechRound !== 'number') {
+    state.pendingDecision.options.speechRound = 1;
+  }
+}
+
+/** 仅扩展仍在进行的旧六人存档；已结束牌局保留原版型和既有胜负结果。 */
+function extendActiveSixPlayerGame(state: GameState): void {
+  state.seatCount ??= 6;
+  migrateSpeechFields(state);
+  if (state.seatCount !== 6 || state.players.length !== 6 || state.phase === 'ended' || state.phase === 'post-game' || state.result !== null) return;
+  const usedCharacters = new Set(state.players.map((player) => player.characterId));
+  const additions = characters.filter((character) => !usedCharacters.has(character.id)).slice(0, 2);
+  const roles = ['hunter', 'villager'] as const;
+  const migrated = [];
+  for (let index = 0; index < 2; index += 1) {
+    const playerId = (6 + index) as PlayerId;
+    const character = additions[index];
+    if (!character) throw new Error('旧存档缺少可用于扩展的角色');
+    const roleId = roles[index];
+    if (!roleId) throw new Error('旧存档扩展缺少职业');
+    const definitionId = defaultSkillByCharacterId[character.id];
+    const usage = witchSkillDefinitions[definitionId].usage;
+    const roleAssignmentId = `role-${playerId}`;
+    const skillInstanceId = `skill-${playerId}-${definitionId}`;
+    state.roleAssignments.push({ id: roleAssignmentId, ownerPlayerId: playerId, roleId, resources: {} });
+    state.skillInstances.push({ id: skillInstanceId, definitionId, ownerPlayerId: playerId, status: usage === 'passive' ? 'active' : 'ready', remainingUses: usage === 'once' ? 1 : null, data: {} });
+    state.players.push({ id: playerId, characterId: character.id, roleAssignmentId, skillInstanceId, alive: true });
+    state.knowledgeByPlayer[playerId] = [{ id: `${state.gameId}-fact-${playerId}-migrated`, subjectPlayerId: playerId, kind: 'role', value: roleId, observedDay: state.day, sourceEventId: 'migration' }];
+    state.speechOrder.push(playerId);
+    state.freeSpeechOrder.push(playerId);
+    migrated.push({ playerId, definitionId });
+  }
+  for (const owner of state.players.map((player) => player.id)) {
+    state.knowledgeByPlayer[owner] ??= [];
+    for (const entry of migrated) {
+      if (state.knowledgeByPlayer[owner].some((fact) => fact.subjectPlayerId === entry.playerId && fact.kind === 'skill')) continue;
+      state.knowledgeByPlayer[owner].push({
+        id: `${state.gameId}-fact-${owner}-migrated-skill-${entry.playerId}`,
+        subjectPlayerId: entry.playerId,
+        kind: 'skill',
+        value: entry.definitionId,
+        observedDay: state.day,
+        sourceEventId: 'migration',
+      });
+    }
+  }
+  state.seatCount = 8;
+  state.board = BOARD_DESCRIPTION;
+}
+
+function extendCheckpointFromState(state: GameState): void {
+  const checkpoint = state.morningCheckpoint;
+  if (!checkpoint || checkpoint.players.length !== 6 || state.players.length !== 8) return;
+  for (const player of state.players.filter((entry) => entry.id === 6 || entry.id === 7)) {
+    const assignment = state.roleAssignments.find((entry) => entry.id === player.roleAssignmentId);
+    const skill = state.skillInstances.find((entry) => entry.id === player.skillInstanceId);
+    if (!assignment || !skill) continue;
+    checkpoint.players.push(structuredClone(player));
+    checkpoint.roleAssignments.push(structuredClone(assignment));
+    checkpoint.skillInstances.push(structuredClone(skill));
+    checkpoint.knowledgeByPlayer[player.id] = structuredClone(state.knowledgeByPlayer[player.id]);
+    checkpoint.speechOrder.push(player.id);
+    checkpoint.freeSpeechOrder.push(player.id);
+  }
+  checkpoint.seatCount = 8;
+  checkpoint.board = BOARD_DESCRIPTION;
+}
+
 export function loadGame(): StorageResult<SavedGameEnvelope> {
   const result = readValue(GAME_KEY, envelopeSchema);
   if (!result.ok || result.value === null) return result as StorageResult<SavedGameEnvelope>;
   const envelope = result.value as unknown as SavedGameEnvelope;
+  envelope.state.seatCount ??= 6;
   migrateCreatureFields(envelope.state);
-  if (envelope.state.morningCheckpoint) migrateCreatureFields(envelope.state.morningCheckpoint);
+  migrateSpeechFields(envelope.state);
+  extendActiveSixPlayerGame(envelope.state);
+  extendCheckpointFromState(envelope.state);
+  if (envelope.state.morningCheckpoint) {
+    migrateCreatureFields(envelope.state.morningCheckpoint);
+    migrateSpeechFields(envelope.state.morningCheckpoint);
+  }
   return { ok: true, value: envelope };
 }
 

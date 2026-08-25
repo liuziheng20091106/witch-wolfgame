@@ -16,7 +16,7 @@ function nameOf(state: GameState, playerId: PlayerId): string {
 }
 
 /**
- * 赛后复盘（post-game）：对局结束（ended）后，全员按座位编号 0→5 依次发表赛后发言。
+ * 赛后复盘（post-game）：对局结束（ended）后，当前牌局的普通玩家按座位顺序依次发表赛后发言。
  * - 造物（id 99）不参与赛后发言
  * - 每个发言者可见：① 全量对局发言（含遗言）② 全部私密行动 ③ 前面玩家的赛后发言
  * - 决策复用 kind:'speech' + schemaKey:'speech'，options.postGame = true 标记区分

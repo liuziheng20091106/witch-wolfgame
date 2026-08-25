@@ -41,6 +41,28 @@ function fallbackSpeech(state: GameState, speakerId: PlayerId, pending: PendingD
   return { speech: guidedSpeech(state, pending.actorId, selected.item), rngState: selected.state };
 }
 
+function fallbackVote(state: GameState, pending: PendingDecision): FallbackResult {
+  // 首轮投票不能复用普通目标决策的随机候选：先跟随已公开形成的票型；
+  // 完全没有前票时，再按角色谨慎/激进倾向决定弃票或主动投票。
+  const votes = state.currentVotes.filter((vote) => vote.round === 1 && vote.targetPlayerId !== null);
+  const counts = new Map<PlayerId, number>();
+  for (const vote of votes) counts.set(vote.targetPlayerId as PlayerId, (counts.get(vote.targetPlayerId as PlayerId) ?? 0) + 1);
+  if (counts.size > 0) {
+    const highest = Math.max(...counts.values());
+    const leaders = pending.candidates.filter((candidate) => counts.get(candidate) === highest);
+    if (leaders.length > 0) {
+      const selected = chooseWithState(leaders, state.rngState);
+      return { decision: { targetPlayerId: selected.item }, rngState: selected.state };
+    }
+  }
+  const traits = characterById[getPlayer(state, pending.actorId).characterId].decisionTraits;
+  if (pending.allowAbstain && traits.conservative >= traits.aggressive) {
+    return { decision: { targetPlayerId: null }, rngState: state.rngState };
+  }
+  const selected = chooseCandidate(pending, state.rngState);
+  return { decision: { targetPlayerId: selected.playerId }, rngState: selected.rngState };
+}
+
 export function fallbackDecision(state: GameState, pending: PendingDecision): FallbackResult {
   if (pending.schemaKey === 'speech') {
     const speech = fallbackSpeech(state, pending.actorId, pending, state.rngState);
@@ -64,6 +86,9 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
       }
     }
     return { decision: { save: canSave, poisonTargetPlayerId }, rngState: rng };
+  }
+  if (pending.kind === 'vote') {
+    return fallbackVote(state, pending);
   }
   if (pending.schemaKey === 'ignition') {
     return { decision: { use: true }, rngState: state.rngState };

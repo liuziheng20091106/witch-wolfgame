@@ -11,6 +11,7 @@ import {
   DECISION_KIND_SCHEMAS,
   formatCreatureName,
   PROMPT_LIMITS,
+  WITCH_SKILL_CATALOG,
 } from '../shared/gamePromptContract.js';
 import { validateGamePrompt } from '../server/gameProtocol.mjs';
 
@@ -24,10 +25,14 @@ let parseRemoteError;
 let requestDecision;
 let sanitizeAiBaseUrl;
 let sanitizeApiKey;
+let skillUsageHints;
+let parseDecision;
 try {
   ({ AiCommandError } = await server.ssrLoadModule('/src/ai/types.ts'));
   ({ buildAiDebugReport, formatAiDebugReport, sanitizeAiBaseUrl, sanitizeApiKey } = await server.ssrLoadModule('/src/ai/debugReport.ts'));
   ({ buildDecisionPrompt } = await server.ssrLoadModule('/src/ai/prompts.ts'));
+  ({ parseDecision } = await server.ssrLoadModule('/src/ai/schemas.ts'));
+  ({ skillUsageHints } = await server.ssrLoadModule('/src/domain/catalog/witchSkills.ts'));
   ({ parseRemoteError, requestDecision } = await server.ssrLoadModule('/src/ai/client.ts'));
 } finally {
   await server.close();
@@ -134,6 +139,55 @@ for (const forbidden of [secret, 'private-api.example.com', 'debug-user', 'debug
 }
 
 assert.match(buildGameSystemPrompt('target'), /legalCandidates 是唯一合法目标集合/);
+assert.match(buildGameSystemPrompt('target'), /技能效果、时机、目标限制、知情范围和例外必须严格按 actor\.skill 理解/);
+assert.match(buildGameSystemPrompt('speech'), /不得因为某人的公开魔女技不是这些职业能力，就断言她不可能拥有或使用相应职业能力/);
+assert.match(buildGameSystemPrompt('speech'), /只有当前 action\.options\.requiredMention 才是对你本人的强制提及要求/);
+assert.match(buildGameSystemPrompt('speech'), /不要跟随多人重复同一直播或点名话题/);
+assert.match(buildGameSystemPrompt('speech'), /存活并不表示你知道自己曾被袭击、被女巫救下或被保护/);
+assert.match(buildGameSystemPrompt('speech'), /可以引用、质疑或分析公开发言中其他人声称的“银水”/);
+
+const guidedSpeechPending = {
+  ...pendingDecision,
+  kind: 'speech',
+  schemaKey: 'speech',
+  candidates: [],
+  options: { requiredMention: '莲见蕾雅', requiredSeatLabel: '3号' },
+};
+assert.deepEqual(parseDecision(guidedSpeechPending, { speech: '我暂时没有更多信息。' }), { speech: '我暂时没有更多信息。 莲见蕾雅' });
+assert.deepEqual(parseDecision(guidedSpeechPending, { speech: '我想听听3号的判断。' }), { speech: '我想听听3号的判断。' });
+assert.equal(parseDecision(guidedSpeechPending, { speech: '甲'.repeat(100) }).speech.length, 100, '自动补入必提对象后仍须符合 100 字上限');
+
+for (const definition of WITCH_SKILL_CATALOG) {
+  const skillObservation = {
+    ...observation,
+    players: players.map((player, index) => index === 0 ? { ...player, skillId: definition.id } : player),
+  };
+  const skillMessages = buildDecisionPrompt({ observation: skillObservation, pendingDecision, sessionId: `skill-cognition-${definition.id}` });
+  const skillPrompt = JSON.parse(skillMessages[1].content);
+  assert.match(skillPrompt.actor.skill, new RegExp(`你当前持有的魔女技：${definition.name}`), `${definition.name} 必须明确标为当前持有技能`);
+  assert.ok(skillPrompt.actor.skill.includes(definition.description), `${definition.name} 必须包含公开规则描述`);
+  assert.ok(typeof skillUsageHints[definition.id] === 'string' && skillUsageHints[definition.id].startsWith('认知：'), `${definition.name} 必须包含专属技能认知`);
+  assert.ok(skillPrompt.actor.skill.includes(skillUsageHints[definition.id]), `${definition.name} 专属认知必须进入 actor.skill`);
+  assert.ok(skillPrompt.actor.skill.length <= PROMPT_LIMITS.actorSkillMaxLength, `${definition.name} actor.skill 不得超过协议上限`);
+  assert.deepEqual(validateGamePrompt(skillMessages), { ok: true }, `${definition.name} 提示词必须通过后端协议校验`);
+}
+
+const cognitionById = Object.fromEntries(WITCH_SKILL_CATALOG.map((definition) => [definition.id, skillUsageHints[definition.id]]));
+assert.match(cognitionById['witch-killer'], /解药、治愈、漂浮都不能阻止/);
+assert.match(cognitionById['death-rewind'], /只有你保留/);
+assert.match(cognitionById.brainwash, /恰好含一个【1~6字】/);
+assert.match(cognitionById['liquid-control'], /投票严格跟随你/);
+assert.match(cognitionById['speech-restrain'], /当天第一轮和自由发言轮/);
+assert.match(cognitionById.levitation, /狼人袭击、解药、治愈、魔女杀手仍正常生效/);
+assert.match(cognitionById.healing, /目标不会因此自动知情/);
+assert.match(cognitionById.clairvoyance, /观看者知道自己的选择/);
+assert.match(cognitionById['gaze-guidance'], /可以是你，但不是必须/);
+assert.match(cognitionById['soul-exchange'], /双方私下得知交换后的职业/);
+assert.match(cognitionById['mind-reading'], /无论结果如何都不能再选此人/);
+assert.match(cognitionById['mind-reading'], /未显示某类行动不等于目标没做过或不是该职业/);
+assert.match(cognitionById.ignition, /目标无药则落空且仅你知晓/);
+assert.match(cognitionById['voice-mimic'], /赛后才揭晓/);
+assert.match(cognitionById['witch-factor-recovery'], /未耗尽、未被烧毁/);
 
 for (const [kind, schemaKeys] of Object.entries(DECISION_KIND_SCHEMAS)) {
   for (const schemaKey of schemaKeys) {

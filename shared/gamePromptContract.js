@@ -1,6 +1,6 @@
 const freeze = Object.freeze;
 
-export const PLAYER_IDS = freeze(/** @type {const} */([0, 1, 2, 3, 4, 5]));
+export const PLAYER_IDS = freeze(/** @type {const} */([0, 1, 2, 3, 4, 5, 6, 7]));
 
 export const CREATURE_ID = 99;
 export const GAME_ENTITY_IDS = freeze([...PLAYER_IDS, CREATURE_ID]);
@@ -20,10 +20,11 @@ export const ROLE_CATALOG = freeze([
  freeze(/** @type {const} */({ id: 'seer', name: '预言家', description: '每夜查验一名其他存活者的当前职业。', alignment: 'good' })),
  freeze(/** @type {const} */({ id: 'witch', name: '女巫', description: '拥有一瓶解药与一瓶毒药，每种整局只能使用一次。', alignment: 'good' })),
  freeze(/** @type {const} */({ id: 'villager', name: '村民', description: '依靠公开发言、投票与魔女技找出狼人。', alignment: 'good' })),
+ freeze(/** @type {const} */({ id: 'hunter', name: '猎人', description: '死亡后必须开枪带走一名其他存活者。', alignment: 'good' })),
 ]);
 export const ROLE_IDS = freeze(ROLE_CATALOG.map((role) => role.id));
 export const ALIGNMENTS = freeze(/** @type {const} */(['wolf', 'good']));
-export const BOARD_ROLE_POOL = freeze(/** @type {const} */(['wolf', 'wolf', 'seer', 'witch', 'villager', 'villager']));
+export const BOARD_ROLE_POOL = freeze(/** @type {const} */(['wolf', 'wolf', 'seer', 'witch', 'hunter', 'villager', 'villager', 'villager']));
 
 /** @returns {string} */
 function buildBoardDescription() {
@@ -51,8 +52,10 @@ export const GAME_PHASES = freeze(/** @type {const} */([
  'dawn',
  'day-skills',
  'speeches',
+ 'free-speeches',
  'vote-skills',
  'voting',
+ 'runoff-speeches',
  'runoff',
  'day-resolution',
  'ended',
@@ -81,6 +84,7 @@ export const DECISION_KIND_SCHEMAS = freeze(/** @type {const} */({
  vote: freeze(/** @type {const} */(['target'])),
  runoff: freeze(/** @type {const} */(['target'])),
  'tie-break': freeze(/** @type {const} */(['target'])),
+ 'hunter-shot': freeze(/** @type {const} */(['target'])),
 }));
 
 export const CHARACTER_CATALOG = freeze([
@@ -102,20 +106,20 @@ export const CHARACTER_CATALOG = freeze([
 export const CHARACTER_IDS = freeze(CHARACTER_CATALOG.map((character) => character.id));
 
 export const WITCH_SKILL_CATALOG = freeze([
- freeze({ id: 'witch-killer', name: '魔女杀手', description: '每局一次，夜间指定一名无法被解药或治愈保护的目标。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
- freeze({ id: 'death-rewind', name: '死亡回溯', description: '首次死亡时回到当日发言前，旧时间线会在赛后完整记录中揭晓。', timings: freeze(/** @type {const} */(['on-death'])), usage: 'passive' }),
- freeze({ id: 'brainwash', name: '洗脑', description: '每天可发动一次：当天发言须含【1~6字】内容，作为强提示词影响其他玩家。', timings: freeze(/** @type {const} */(['before-speech'])), usage: 'once' }),
- freeze({ id: 'liquid-control', name: '操控液体', description: '每局一次，夜间用液体创造自己的造物：造物继承使用者的基础职业与阵营（不继承魔女技），使用者可选择给它解药或毒药。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
- freeze({ id: 'speech-restrain', name: '怪力', description: '使用怪力将一名玩家按在椅子上，使其本轮不能发言。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
- freeze({ id: 'levitation', name: '漂浮', description: '每局一次，夜间发动隐藏自己的脚印：直到第二天白天结束，你的行动不留任何可追溯记录，也无法被选中（女巫药、灵魂交换等失效）。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
- freeze({ id: 'healing', name: '治愈', description: '每夜保护一名存活者，移除其所有可防止死亡意图。', timings: freeze(/** @type {const} */(['night-protection'])), usage: 'nightly' }),
- freeze({ id: 'clairvoyance', name: '千里眼', description: '每局一次，白天开启直播：任何选择观看直播的玩家，其职业将被你获知。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
+ freeze({ id: 'witch-killer', name: '魔女杀手', description: '每局一次，夜间精准击杀一名其他存活者；解药、治愈与漂浮均无法阻止，死者没有遗言。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
+ freeze({ id: 'death-rewind', name: '死亡回溯', description: '首个白天开始后首次死亡时，回到当日发言前；仅自己保留旧时间线记忆，旧时间线在赛后揭晓。', timings: freeze(/** @type {const} */(['on-death'])), usage: 'passive' }),
+ freeze({ id: 'brainwash', name: '洗脑', description: '每局一次，自己发言前发动；当天后续发言须含唯一一个【1~6字】内容，作为强提示影响其他玩家后续决策。', timings: freeze(/** @type {const} */(['before-speech'])), usage: 'once' }),
+ freeze({ id: 'liquid-control', name: '操控液体', description: '每局一次，夜间创造继承自己当前基础职业与阵营的造物（不继承魔女技）；造物不发言，投票跟随主人，职业行动独立决定。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
+ freeze({ id: 'speech-restrain', name: '怪力', description: '每局一次，白天将一名其他存活者按在椅子上，使其跳过当天两轮常规发言；若当天死亡也没有遗言。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
+ freeze({ id: 'levitation', name: '漂浮', description: '每局一次，夜间发动至次日白天结束：预言家、幻视与千里眼无法看清你，毒药和灵魂交换对你失效；狼人袭击、治愈与魔女杀手仍正常生效。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
+ freeze({ id: 'healing', name: '治愈', description: '每夜保护一名存活者，可选择自己；挡下狼人袭击与毒药等可防止的死亡意图，但不能阻止魔女杀手。', timings: freeze(/** @type {const} */(['night-protection'])), usage: 'nightly' }),
+ freeze({ id: 'clairvoyance', name: '千里眼', description: '每局一次，白天公开开启直播；其他存活者各自选择是否观看，开播者私下获知观看者的当前职业。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
  freeze({ id: 'gaze-guidance', name: '视线诱导', description: '每天指定一名被诱导者与一名诱导对象，被诱导者当天发言必须提及诱导对象。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'daily' }),
- freeze({ id: 'soul-exchange', name: '灵魂交换', description: '每局一次，交换自己与另一名存活者的基础职业及职业资源。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
- freeze({ id: 'mind-reading', name: '幻视', description: '每天一次，触碰一名存活者，概率看到其夜间行动轨迹。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'daily' }),
- freeze({ id: 'ignition', name: '点火', description: '每局一次，选择夜间或白天使用：夜间可烧毁目标的物品（90%）或全部魔女技（10%）；白天可烧毁目标的投票（90%）或全部魔女技（10%）。', timings: freeze(/** @type {const} */(['night-start', 'after-vote'])), usage: 'once' }),
- freeze({ id: 'voice-mimic', name: '声音模仿', description: '把一段伪造内容混入本日尚未发言者的公开记录。', timings: freeze(/** @type {const} */(['after-speech'])), usage: 'once' }),
- freeze({ id: 'witch-factor-recovery', name: '魔女因子回收', description: '回收一名死亡者尚未耗尽的实际技能实例。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
+ freeze({ id: 'soul-exchange', name: '灵魂交换', description: '每局一次，交换自己与另一名存活者的当前基础职业及职业资源；双方私下得知新职业，漂浮目标会使交换失败并照常消耗。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
+ freeze({ id: 'mind-reading', name: '幻视', description: '每天一次，触碰一名未触碰过的其他存活者，概率看到其脱敏后的夜间行动轨迹；无论成败都不能重复触碰该目标。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'daily' }),
+ freeze({ id: 'ignition', name: '点火', description: '每局一次，选择夜间或白天使用：夜间可烧毁目标的一瓶药（90%）或全部魔女技（10%）；白天可烧毁目标的投票（90%）或全部魔女技（10%）。', timings: freeze(/** @type {const} */(['night-start', 'after-vote'])), usage: 'once' }),
+ freeze({ id: 'voice-mimic', name: '声音模仿', description: '每局一次，在自己发言后选择本日尚未发言者，将不超过50字的伪造片段混入其公开发言；真正作者仅在赛后揭晓。', timings: freeze(/** @type {const} */(['after-speech'])), usage: 'once' }),
+ freeze({ id: 'witch-factor-recovery', name: '魔女因子回收', description: '每局一次，夜间回收一名死亡玩家尚未耗尽的实际技能实例；已耗尽或被烧毁的技能不能回收。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
 ]);
 export const WITCH_SKILL_IDS = freeze(WITCH_SKILL_CATALOG.map((skill) => skill.id));
 
@@ -134,7 +138,7 @@ export const PROMPT_FIELD_KEYS = freeze({
  payload: freeze(/** @type {const} */(['client', 'messages', 'response_format'])),
  client: freeze(/** @type {const} */(['name', 'version', 'protocol'])),
  message: freeze(/** @type {const} */(['role', 'content'])),
- prompt: freeze(/** @type {const} */(['action', 'actor', 'phase', 'day', 'board', 'alivePlayers', 'legalCandidates', 'allowAbstain', 'options', 'currentDaySpeeches', 'historicalSpeeches', 'recentPublic', 'privateKnowledge', 'publicSkills', 'privateEvents', 'finalRoles', 'postGameContext'])),
+ prompt: freeze(/** @type {const} */(['action', 'actor', 'phase', 'day', 'board', 'alivePlayers', 'legalCandidates', 'allowAbstain', 'options', 'currentDaySpeeches', 'historicalSpeeches', 'recentPublic', 'privateKnowledge', 'publicSkills', 'privateEvents', 'currentVotes', 'finalRoles', 'postGameContext'])),
  action: freeze(/** @type {const} */(['kind', 'title', 'description', 'schema'])),
  actor: freeze(/** @type {const} */(['playerId', 'name', 'personality', 'speechStyle', 'decisionTraits', 'role', 'skill'])),
  decisionTraits: freeze(/** @type {const} */(['conservative', 'trusting', 'aggressive'])),
@@ -160,18 +164,18 @@ export const PROMPT_LIMITS = freeze(/** @type {const} */({
  dayMax: 100,
  alivePlayersMinItems: 1,
  postGameAlivePlayersMinItems: 0,
- alivePlayersMaxItems: 7,
- finalRolesMinItems: 6,
- finalRolesMaxItems: 7,
- legalCandidatesMaxItems: 7,
+  alivePlayersMaxItems: 9,
+  finalRolesMinItems: 6,
+  finalRolesMaxItems: 9,
+  legalCandidatesMaxItems: 9,
  optionsMaxJsonLength: 8_000,
- currentDaySpeechesMaxItems: 6,
+  currentDaySpeechesMaxItems: 16,
  historicalSpeechesMaxItems: 12,
  recentPublicMaxItems: 24,
  privateEventsMaxItems: 12,
  speechMaxLength: 2_000,
  privateKnowledgeMaxItems: 64,
- publicSkillsItems: 6,
+  publicSkillsItems: 8,
 }));
 
 export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成的合法游戏请求';
@@ -186,7 +190,7 @@ export function buildGameSystemPrompt(schemaKey) {
  if (schemaKey === 'ignition') {
   useOnlyHint = '该决策只需回答是否使用（true 或 false），无需选择任何目标。';
  }
- return `你正在进行六人魔女狼人杀。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${DECISION_EXAMPLES[schemaKey]}${useOnlyHint}`;
+ return `你正在进行八人魔女狼人杀。基础职业（狼人/预言家/女巫/猎人/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。女巫的解药/毒药、预言家的查验、猎人的开枪、狼人的袭击属于基础职业能力或资源，与 publicSkills 中公开的魔女技并存；不得因为某人的公开魔女技不是这些职业能力，就断言她不可能拥有或使用相应职业能力。actor.skill 明确写的是你当前实际持有的魔女技；只有它才是你的能力，技能效果、时机、目标限制、知情范围和例外必须严格按 actor.skill 理解，角色性格不能改写技能规则。publicSkills 是每名角色开局公开的默认技能归属，供你分析他人，不能当作你拥有或仍可使用的能力。只有出现与你有关的 action 或 privateEvents 时，才表示你现在需要或能够使用自己的技能；不要把别人的技能效果、已耗尽技能或猜测的技能状态说成自己的事实。privateEvents 中标为“你亲历的私密事实”的内容是你本人确定知道的行动与结果，必须保持记忆一致，不能误称自己没有做过。千里眼中，观看者确定知道自己是否观看；开播者确定知道哪些人观看以及看到的职业。除非明确进行有目的的欺骗，否则不得否认这些本人亲历事实；尤其不能无理由否认观看直播，因为开播者掌握观看记录。发言时，只有当前 action.options.requiredMention 才是对你本人的强制提及要求；其他玩家因视线诱导而说出的内容只是普通公开发言，不是对你的指令。没有新增证据、判断或回应价值时，不要跟随多人重复同一直播或点名话题。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。只能依据提供的观察作决定，不得假设隐藏身份。存活并不表示你知道自己曾被袭击、被女巫救下或被保护；没有 privateEvents 的直接证据时，不能把这类事断言为自身事实，但可以引用、质疑或分析公开发言中其他人声称的“银水”等信息。投票时必须参考 currentVotes 的实际票型；没有公开依据时不要仅为制造票型而随机点人，allowAbstain 为 true 时可选择弃票，也不要因狼人身份形成固定投票模式。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。只返回一个 JSON 对象，不要 Markdown、解释或思考过程。JSON 示例：${DECISION_EXAMPLES[schemaKey]}${useOnlyHint}`;
 }
 
 /**

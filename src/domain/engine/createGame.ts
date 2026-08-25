@@ -36,7 +36,7 @@ export function createGame(setup: GameSetup): GameState {
     const humanSeat = chooseWithState(PLAYER_IDS, rngState);
     rngState = humanSeat.state;
     humanPlayerId = humanSeat.item;
-    const others = shuffled.items.slice(0, 5);
+    const others = shuffled.items.slice(0, PLAYER_IDS.length - 1);
     selectedCharacters = PLAYER_IDS.map((playerId) => {
       if (playerId === humanSeat.item) {
         return humanCharacterId;
@@ -51,13 +51,15 @@ export function createGame(setup: GameSetup): GameState {
   } else {
     const shuffled = shuffleWithState(characters.map((character) => character.id), rngState);
     rngState = shuffled.state;
-    selectedCharacters = shuffled.items.slice(0, 6);
+    selectedCharacters = shuffled.items.slice(0, PLAYER_IDS.length);
   }
 
   const shuffledRoles = shuffleWithState(BOARD_ROLE_POOL, rngState);
   rngState = shuffledRoles.state;
   const shuffledSpeech = shuffleWithState(PLAYER_IDS, rngState);
   rngState = shuffledSpeech.state;
+  const shuffledFreeSpeech = shuffleWithState(PLAYER_IDS, rngState);
+  rngState = shuffledFreeSpeech.state;
 
   const roleAssignments = PLAYER_IDS.map((playerId) => {
     const roleId = shuffledRoles.items[playerId];
@@ -101,6 +103,7 @@ export function createGame(setup: GameSetup): GameState {
 
   const state: GameState = {
     schemaVersion: 1,
+    seatCount: 8,
     gameId: `game-${seed}-${setup.mode}-${setup.humanCharacterId ?? 'auto'}`,
     board: BOARD_DESCRIPTION,
     mode: setup.mode,
@@ -115,8 +118,9 @@ export function createGame(setup: GameSetup): GameState {
     creatures: [],
     roleAssignments,
     skillInstances,
-    knowledgeByPlayer: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 99: [] },
+    knowledgeByPlayer: Object.fromEntries([...PLAYER_IDS, 99].map((playerId) => [playerId, []])) as unknown as GameState['knowledgeByPlayer'],
     speechOrder: shuffledSpeech.items,
+    freeSpeechOrder: shuffledFreeSpeech.items,
     publicEvents: [],
     privateEvents: [],
     archivedTimelines: [],
@@ -126,7 +130,7 @@ export function createGame(setup: GameSetup): GameState {
     causalLocks: [],
     result: null,
   };
-  const startEvent = addPublicEvent(state, 'system', `本局版型：${BOARD_DESCRIPTION}。六名少女进入审判庭，首夜开始。`);
+  const startEvent = addPublicEvent(state, 'system', `本局版型：${BOARD_DESCRIPTION}。八名少女进入审判庭，首夜开始。`);
   const speechOrderText = shuffledSpeech.items.map((playerId, index) => {
     const characterId = selectedCharacters[playerId];
     if (!characterId) {

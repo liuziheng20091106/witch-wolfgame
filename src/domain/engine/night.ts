@@ -12,7 +12,36 @@ function nameOf(state: GameState, playerId: PlayerId): string {
 function sourceLabel(source: DeathIntent['source']): string {
   if (source === 'wolf') return '狼人袭击';
   if (source === 'poison') return '女巫毒药';
+  if (source === 'hunter-shot') return '猎人开枪';
   return '魔女杀手';
+}
+
+/**
+ * 从已经完成死亡结算的玩家中寻找尚未开枪的猎人。
+ * 开枪事件本身作为去重标记，因此夜死、放逐和连锁死亡共用同一流程。
+ */
+export function getNextHunterShotDecision(state: GameState) {
+  const fired = new Set(state.publicEvents
+    .filter((event) => event.kind === 'skill' && event.data.actionKind === 'hunter-shot')
+    .map((event) => event.actorPlayerId));
+  const hunter = state.players.find((player) => !player.alive
+    && !fired.has(player.id)
+    && state.roleAssignments.find((entry) => entry.id === player.roleAssignmentId)?.roleId === 'hunter');
+  if (!hunter) return null;
+  const candidates = state.players.filter((player) => player.alive && player.id !== hunter.id).map((player) => player.id);
+  if (candidates.length === 0) return null;
+  return {
+    id: `${state.gameId}-decision-${state.day}-hunter-shot-${hunter.id}`,
+    kind: 'hunter-shot' as const,
+    schemaKey: 'target' as const,
+    actorId: hunter.id,
+    title: '猎人开枪',
+    description: '你已死亡，必须开枪带走一名其他存活玩家。',
+    candidates,
+    allowAbstain: false,
+    skillInstanceId: null,
+    options: {},
+  };
 }
 
 function rewindForDeath(state: GameState, deadPlayerIds: PlayerId[]): GameState | null {
@@ -174,6 +203,12 @@ export function resolveNight(state: GameState): GameState {
   );
   // 死亡回溯返回晨间快照，当前死亡批次已被撤销，不进入遗言或胜负结算。
   if (resolved !== state) return resolved;
+  const hunterShot = getNextHunterShotDecision(resolved);
+  if (hunterShot) {
+    resolved.pendingDecision = hunterShot;
+    resolved.phase = 'night-resolution';
+    return resolved;
+  }
   // 遗言：夜间死亡结算后，若有合格死者需要发布遗言，保持 night-resolution 阶段等待遗言决策。
   // 多个死者时逐个询问；只有全部遗言结束后才确认最终胜负。
   const lastWords = getNextLastWordsDecision(resolved);

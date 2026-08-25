@@ -156,7 +156,7 @@ export interface VoteRecord {
 
 export interface DeathIntent {
   targetPlayerId: PlayerId;
-  source: 'wolf' | 'poison' | 'precise-kill';
+  source: 'wolf' | 'poison' | 'precise-kill' | 'hunter-shot';
   preventable: boolean;
 }
 
@@ -229,6 +229,7 @@ export interface GameResult {
 
 export interface GameState {
   schemaVersion: 1;
+  seatCount: 6 | 8;
   gameId: string;
   board: string;
   mode: GameMode;
@@ -245,6 +246,7 @@ export interface GameState {
   skillInstances: WitchSkillInstance[];
   knowledgeByPlayer: Record<PlayerId, KnowledgeFact[]>;
   speechOrder: PlayerId[];
+  freeSpeechOrder: PlayerId[];
   publicEvents: TimelineEvent[];
   privateEvents: PrivateTimelineEvent[];
   archivedTimelines: ArchivedTimeline[];

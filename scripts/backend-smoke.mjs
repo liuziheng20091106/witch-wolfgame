@@ -46,7 +46,7 @@ function sseChunk(content, finishReason = null) {
 const SENSITIVE_MARKER = 'DO_NOT_ECHO_PRIVATE_PROMPT_VALUE';
 
 function validPayload() {
-  const players = CHARACTER_CATALOG.slice(0, 6).map((character, playerId) => ({
+  const players = CHARACTER_CATALOG.slice(0, 8).map((character, playerId) => ({
     playerId,
     name: character.name,
   }));
@@ -79,12 +79,13 @@ function validPayload() {
           historicalSpeeches: [],
           recentPublic: [],
           privateKnowledge: [],
-          publicSkills: CHARACTER_CATALOG.slice(0, 6).map((character, playerId) => ({
+          publicSkills: CHARACTER_CATALOG.slice(0, 8).map((character, playerId) => ({
             playerId,
             name: character.name,
             skill: formatPublicSkill(character.defaultSkillId),
           })),
           privateEvents: [SENSITIVE_MARKER],
+          currentVotes: [],
         }),
       },
     ],

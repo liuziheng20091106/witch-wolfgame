@@ -349,7 +349,7 @@ function lockBrainwashContent(state: GameState, actorId: PlayerId, text: string)
   brainwash.data.brainwashContent = content;
 }
 
-export function publishSpeech(state: GameState, actorId: PlayerId, decision: SpeechDecision): void {
+export function publishSpeech(state: GameState, actorId: PlayerId, decision: SpeechDecision, speechRound: number = 1): void {
   const speech = decision.speech.trim();
   if (speech.length > 100) {
     throw new Error('发言不能超过 100 字');
@@ -374,7 +374,7 @@ export function publishSpeech(state: GameState, actorId: PlayerId, decision: Spe
     targetPlayerIds: [actorId],
     displayAuthorPlayerId: actorId,
     actualAuthorPlayerId: forgedSpeech ? mimic?.ownerPlayerId ?? actorId : actorId,
-    data: forgedSpeech ? { hasForgedFragment: true, forgedSpeech } : {},
+    data: forgedSpeech ? { hasForgedFragment: true, forgedSpeech, speechRound } : { speechRound },
   });
   lockBrainwashContent(state, actorId, merged);
 }

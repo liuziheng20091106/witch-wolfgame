@@ -40,10 +40,11 @@ import {
   publishSpeech,
 } from '../skills/registry';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from './events';
-import { finalizeGameIfWon, refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
+import { finalizeGameIfWon, getNextHunterShotDecision, refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
 import { getAlivePlayerIds, getName, getPlayer, getRoleAssignment, getSkillInstance } from './selectors';
 import { exhaustSkill } from '../skills/types';
 import { resolveVotes } from './vote';
+import { shuffleWithState } from './random';
 import { applyLastWords, getNextLastWordsDecision } from '../skills/lastWords';
 import { applyPostGameSpeech, getNextPostGameDecision } from '../skills/postGame';
 
@@ -137,7 +138,11 @@ function advanceWolfSuggestions(state: GameState): GameState {
 
 function advanceWolfDecision(state: GameState): GameState {
   const wolves = livingWolves(state);
-  const actorId = wolves[0];
+  // 参与模式下，存活的玩家狼人固定拥有最终夜刀决定权；队友的 wolf-suggestion 仍作为建议提供。
+  // 玩家不是狼人或已经死亡时，保持原规则，由当前列表中的首名存活狼人自动决策。
+  const actorId = state.mode === 'player' && state.humanPlayerId !== null && wolves.includes(state.humanPlayerId)
+    ? state.humanPlayerId
+    : wolves[0];
   if (actorId === undefined) {
     state.phase = 'night-resolution';
     return state;
@@ -260,6 +265,10 @@ function advanceProtection(state: GameState): GameState {
 
 function advanceDawn(state: GameState): GameState {
   state.day += 1;
+  // 第二轮发言顺序每天在黎明生成，并回写 rngState，确保同一种子和同一时间线可复现。
+  const shuffled = shuffleWithState(state.players.map((player) => player.id), state.rngState);
+  state.rngState = shuffled.state;
+  state.freeSpeechOrder = shuffled.items;
   addPublicEvent(state, 'dawn', `第 ${state.day} 天，审判庭重新亮起。`);
   state.phase = 'day-skills';
   return state;
@@ -276,11 +285,21 @@ function advanceDaySkills(state: GameState): GameState {
   return state;
 }
 
-function spokenToday(state: GameState): PlayerId[] {
+function spokenToday(state: GameState, round: number): PlayerId[] {
   return state.publicEvents
-    .filter((event) => event.day === state.day && (event.kind === 'speech' || event.kind === 'restrained'))
+    .filter((event) => event.day === state.day
+      && ((event.kind === 'speech' && event.data.speechRound === round)
+        || (event.kind === 'restrained' && event.data.speechRound === round)))
     .map((event) => event.targetPlayerIds[0] ?? event.actorPlayerId)
     .filter((value): value is PlayerId => value !== null);
+}
+
+function speechRound(state: GameState): 1 | 2 {
+  return state.phase === 'free-speeches' ? 2 : 1;
+}
+
+function speechOrderForRound(state: GameState): PlayerId[] {
+  return speechRound(state) === 1 ? state.speechOrder : state.freeSpeechOrder;
 }
 
 function advanceSpeeches(state: GameState): GameState {
@@ -293,10 +312,11 @@ function advanceSpeeches(state: GameState): GameState {
       return state;
     }
   }
-  const spoken = spokenToday(state);
-  const actorId = state.speechOrder.find((playerId) => getPlayer(state, playerId).alive && !spoken.includes(playerId));
+  const currentRound = speechRound(state);
+  const spoken = spokenToday(state, currentRound);
+  const actorId = speechOrderForRound(state).find((playerId) => getPlayer(state, playerId).alive && !spoken.includes(playerId));
   if (actorId === undefined) {
-    state.phase = 'vote-skills';
+    state.phase = speechRound(state) === 1 ? 'free-speeches' : 'vote-skills';
     return state;
   }
   // 禁言检查先于发言前技能：被"怪力"禁言者今天无法发言，不应被询问洗脑等发言前技能
@@ -306,6 +326,7 @@ function advanceSpeeches(state: GameState): GameState {
       targetPlayerIds: [actorId],
       displayAuthorPlayerId: actorId,
       actualAuthorPlayerId: actorId,
+      data: { speechRound: currentRound },
     });
     return state;
   }
@@ -314,7 +335,8 @@ function advanceSpeeches(state: GameState): GameState {
     state.pendingDecision = beforeDecision;
     return state;
   }
-  const speechDecision = makeRoleDecision(state, 'speech', actorId, `${nameOf(state, actorId)} 发言`, '公开发言不超过 100 字。', [], true, 'speech');
+  const speechDecision = makeRoleDecision(state, 'speech', actorId, `${nameOf(state, actorId)} 发言`, `${speechRound(state) === 1 ? '第一轮' : '自由发言轮'}公开发言不超过 100 字。`, [], true, 'speech');
+  speechDecision.options = { ...speechDecision.options, speechRound: speechRound(state) };
   const gazeMention = gazeRequiredMention(state, actorId);
   if (gazeMention) {
     speechDecision.options = {
@@ -395,12 +417,18 @@ function advanceVoting(state: GameState): GameState {
   }
   attachCreatureVotes(state, 1);
   const resolution = resolveVotes(state.currentVotes, 1, burnedVoters(state));
-  if (resolution.outcome === 'runoff') {
+  if (resolution.outcome === 'runoff' && resolution.tiedPlayerIds.length === 2) {
     addPublicEvent(state, 'vote', `最高票并列：${resolution.tiedPlayerIds.map((id) => nameOf(state, id)).join('、')}，进行一次重投。`, {
       targetPlayerIds: resolution.tiedPlayerIds,
       data: { tiedPlayerIds: resolution.tiedPlayerIds },
     });
-    state.phase = 'runoff';
+    state.phase = 'runoff-speeches';
+  } else if (resolution.outcome === 'runoff') {
+    addPublicEvent(state, 'vote', `最高票三人或以上并列：${resolution.tiedPlayerIds.map((id) => nameOf(state, id)).join('、')}，本日无人出局。`, {
+      targetPlayerIds: resolution.tiedPlayerIds,
+      data: { tiedPlayerIds: resolution.tiedPlayerIds },
+    });
+    state.phase = 'day-resolution';
   } else {
     if (resolution.outcome === 'exile' && resolution.targetPlayerId !== null) {
       addExileIntent(state, resolution.targetPlayerId);
@@ -409,6 +437,31 @@ function advanceVoting(state: GameState): GameState {
     }
     state.phase = 'day-resolution';
   }
+  return state;
+}
+
+function latestRunoffSpeechCandidates(state: GameState): PlayerId[] {
+  const event = state.publicEvents.findLast((entry) => entry.day === state.day && Array.isArray(entry.data.tiedPlayerIds));
+  const tied = Array.isArray(event?.data.tiedPlayerIds)
+    ? event.data.tiedPlayerIds.filter((value): value is PlayerId => typeof value === 'number')
+    : [];
+  return state.speechOrder.filter((playerId) => tied.includes(playerId) && getPlayer(state, playerId).alive);
+}
+
+function advanceRunoffSpeeches(state: GameState): GameState {
+  const candidates = latestRunoffSpeechCandidates(state);
+  const spoken = state.publicEvents
+    .filter((event) => event.day === state.day && event.kind === 'speech' && event.data.speechRound === 3)
+    .map((event) => event.actorPlayerId)
+    .filter((value): value is PlayerId => value !== null);
+  const actorId = candidates.find((playerId) => !spoken.includes(playerId));
+  if (actorId === undefined) {
+    state.phase = 'runoff';
+    return state;
+  }
+  const pending = makeRoleDecision(state, 'speech', actorId, `${nameOf(state, actorId)} 平票发言`, '平票候选人追加发言不超过 100 字。', [], true, 'speech');
+  pending.options = { ...pending.options, speechRound: 3, runoffSpeech: true };
+  state.pendingDecision = pending;
   return state;
 }
 
@@ -457,6 +510,11 @@ function advanceDayResolution(state: GameState): GameState {
       if (resolved !== state) return resolved;
     }
   }
+  const hunterShot = getNextHunterShotDecision(state);
+  if (hunterShot) {
+    state.pendingDecision = hunterShot;
+    return state;
+  }
   // 遗言：白天放逐死亡结算后，若有合格死者需要发布遗言，保持 day-resolution 阶段等待遗言决策。
   // 提交遗言后 advance 会再次进入本阶段，此时 exile 目标已死跳过结算，再检查是否还有遗言。
   // （resolveDeathBatch 原地修改并返回同一引用，正常路径会继续执行到本检查，不会提前返回。）
@@ -502,15 +560,17 @@ function advance(state: GameState): GameState {
     case 'dawn': return advanceDawn(state);
     case 'day-skills': return advanceDaySkills(state);
     case 'speeches': return advanceSpeeches(state);
+    case 'free-speeches': return advanceSpeeches(state);
     case 'vote-skills': return advanceVoteSkills(state);
     case 'voting': return advanceVoting(state);
     case 'runoff': return advanceRunoff(state);
+    case 'runoff-speeches': return advanceRunoffSpeeches(state);
     case 'day-resolution': return advanceDayResolution(state);
     case 'post-game': return advancePostGame(state);
   }
 }
 
-/** 赛后复盘：逐个玩家（编号 0→5，跳过造物 99）产生赛后发言决策；全部发完后保持 post-game 终态。 */
+/** 赛后复盘：逐个普通玩家（跳过造物 99）产生赛后发言决策；全部发完后保持 post-game 终态。 */
 function advancePostGame(state: GameState): GameState {
   const pending = getNextPostGameDecision(state);
   if (pending) {
@@ -547,7 +607,7 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
       applyLastWords(state, pending, decision);
       return state;
     }
-    publishSpeech(state, pending.actorId, decision as SpeechDecision);
+    publishSpeech(state, pending.actorId, decision as SpeechDecision, typeof pending.options.speechRound === 'number' ? pending.options.speechRound : 1);
     return state;
   }
   if (pending.kind === 'witch-action') {
@@ -647,6 +707,13 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
   } else if (pending.kind === 'tie-break') {
     addExileIntent(state, targetPlayerId as PlayerId);
     state.phase = 'day-resolution';
+  } else if (pending.kind === 'hunter-shot') {
+    addPublicEvent(state, 'skill', `${nameOf(state, pending.actorId)} 开枪带走 ${nameOf(state, targetPlayerId as PlayerId)}。`, {
+      actorPlayerId: pending.actorId,
+      targetPlayerIds: [targetPlayerId as PlayerId],
+      data: { actionKind: 'hunter-shot' },
+    });
+    return resolveDeathBatch(state, [{ playerId: targetPlayerId as PlayerId, sources: ['hunter-shot'] }]);
   }
   return state;
 }

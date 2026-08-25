@@ -142,7 +142,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
   };
   const currentDaySpeeches = observation.publicEvents
     .filter((event) => event.kind === 'speech' && event.day === observation.day)
-    .map(speechWithAuthor);
+    .map((event) => `发言轮次：${typeof event.data.speechRound === 'number' ? event.data.speechRound : 1}。${speechWithAuthor(event)}`);
   const historicalSpeeches = observation.publicEvents
     .filter((event) => event.kind === 'speech' && event.day < observation.day)
     .slice(-12)
@@ -161,7 +161,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
       value: fact.value,
       observedDay: fact.observedDay,
     }));
-  // 公开技能按角色默认技生成：与开局公开播报一致，始终恰好 6 项且唯一；
+  // 公开技能按角色默认技生成：与开局公开播报一致，始终恰好 8 项且唯一；
   // 魔女因子回收等技能转移通过公开事件（factor-recovered）向 AI 呈现。
   const publicSkills = observation.players
     .filter((player) => player.id !== CREATURE_ID)
@@ -172,8 +172,8 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     }));
   const visibleRole = actor.roleId ? `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}` : '未公开';
   const visibleSkill = actor.skillId
-    ? `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}${skillUsageHints[actor.skillId] ?? ''}`
-    : '无可见技能';
+    ? `你当前持有的魔女技：${witchSkillDefinitions[actor.skillId].name}。${witchSkillDefinitions[actor.skillId].description}${skillUsageHints[actor.skillId] ?? ''}`
+    : '你当前不持有魔女技。';
   const legalCandidates = pendingDecision.candidates.map((playerId) => {
     if (pendingDecision.options.potionChoice === true) {
       const potion = POTION_CHOICE_CATALOG.find((choice) => choice.playerId === playerId);
@@ -201,7 +201,10 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     recentPublic,
     privateKnowledge,
     publicSkills,
-    privateEvents: observation.privateEvents.slice(-12).map((event) => event.text),
+    // 当前票型必须结构化发送，避免模型从自然语言时间线猜测谁已经投给谁。
+    currentVotes: observation.currentVotes.map((vote) => ({ voterPlayerId: vote.voterPlayerId, targetPlayerId: vote.targetPlayerId, round: vote.round })),
+    // 这里只包含当前行动者实际可见的私密事件；前缀用于阻止模型把本人行动误当成传闻。
+    privateEvents: observation.privateEvents.slice(-12).map((event) => `【你亲历的私密事实】${event.text}`),
   };
   if (pendingDecision.options.postGame === true) {
     promptPayload.finalRoles = observation.players.map((player) => {

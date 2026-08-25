@@ -73,4 +73,41 @@ const restartedSaved = saveGame(restartedGame, APP_VERSION);
 assert.equal(restartedSaved.appVersion, APP_VERSION);
 assert.equal(getSavedGameCompatibilityWarning(restartedSaved), null);
 
+function asLegacySixPlayerSave(source) {
+  const legacySave = structuredClone(source);
+  const state = legacySave.state;
+  delete state.seatCount;
+  delete state.freeSpeechOrder;
+  state.players = state.players.filter((player) => player.id < 6);
+  state.roleAssignments = state.roleAssignments.filter((assignment) => assignment.ownerPlayerId < 6);
+  state.skillInstances = state.skillInstances.filter((skill) => skill.ownerPlayerId < 6);
+  delete state.knowledgeByPlayer[6];
+  delete state.knowledgeByPlayer[7];
+  state.speechOrder = state.speechOrder.filter((playerId) => playerId < 6);
+  state.morningCheckpoint = null;
+  state.pendingDecision = null;
+  state.board = '6人局：狼人×2、预言家×1、女巫×1、村民×2';
+  return legacySave;
+}
+
+const activeSixPlayer = asLegacySixPlayerSave(saved);
+localStorage.setItem(GAME_KEY, JSON.stringify(activeSixPlayer));
+const migratedActive = loadGame();
+assert.equal(migratedActive.ok, true);
+assert.equal(migratedActive.value.state.seatCount, 8);
+assert.equal(migratedActive.value.state.players.length, 8);
+assert.equal(migratedActive.value.state.freeSpeechOrder.length, 8);
+assert.equal(migratedActive.value.state.roleAssignments.find((assignment) => assignment.ownerPlayerId === 6).roleId, 'hunter');
+assert.equal(migratedActive.value.state.roleAssignments.find((assignment) => assignment.ownerPlayerId === 7).roleId, 'villager');
+
+const endedSixPlayer = asLegacySixPlayerSave(saved);
+endedSixPlayer.state.phase = 'ended';
+endedSixPlayer.state.result = { winner: 'good', reason: 'wolves-eliminated', finishedDay: 2 };
+localStorage.setItem(GAME_KEY, JSON.stringify(endedSixPlayer));
+const preservedEnded = loadGame();
+assert.equal(preservedEnded.ok, true);
+assert.equal(preservedEnded.value.state.seatCount, 6);
+assert.equal(preservedEnded.value.state.players.length, 6);
+assert.deepEqual(preservedEnded.value.state.result, endedSixPlayer.state.result);
+
 console.log('PASS 存档版本兼容性验证全部通过');

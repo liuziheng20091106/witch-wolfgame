@@ -32,7 +32,7 @@ interface GameViewProps {
 const phaseNames: Record<GameObservation['phase'], string> = {
   'first-night': '首夜', 'night-skills': '夜间·魔女们正在行动', 'wolf-suggestions': '狼人正在密议...', 'wolf-decision': '狼人正在准备袭击...',
   'witch-action': '女巫正在行动...', 'seer-action': '预言家正在行动...', 'night-protection': '选择夜间保护...', 'night-resolution': '正在结算夜间行动...',
-  dawn: '黎明', 'day-skills': '白天·魔女们正在行动', speeches: '魔女们正在发言', 'vote-skills': '即将投票...', voting: '正在投票...',
+  dawn: '黎明', 'day-skills': '白天·魔女们正在行动', speeches: '第一轮发言', 'free-speeches': '自由发言轮', 'vote-skills': '即将投票...', voting: '正在投票...', 'runoff-speeches': '平票候选发言',
   runoff: '平票？重投！', 'day-resolution': '正在结算白天行动...', ended: '审判结束', 'post-game': '赛后复盘',
 };
 

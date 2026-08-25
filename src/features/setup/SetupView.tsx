@@ -104,7 +104,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
       </section>
 
       {setup.mode === 'player' && <section className={styles.characterSection} aria-labelledby="character-title">
-        <div className={styles.sectionHeading}><div><span>PLAYER SEAT</span><h2 id="character-title">选择出庭角色</h2></div><p>基础职业将在六人入场后随机分配。</p></div>
+        <div className={styles.sectionHeading}><div><span>PLAYER SEAT</span><h2 id="character-title">选择出庭角色</h2></div><p>基础职业将在八人入场后随机分配。</p></div>
         <div className={styles.characterGrid}>
           {characters.map((character, index) => {
             const selected = setup.humanCharacterId === character.id;
