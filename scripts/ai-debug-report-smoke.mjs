@@ -47,16 +47,24 @@ const pendingDecision = {
   skillInstanceId: null,
   options: {},
 };
-const players = CHARACTER_CATALOG.slice(0, 6).map((character, id) => ({
-  id,
-  characterId: character.id,
-  name: character.name,
-  avatarUrl: `/avatar-${id}.png`,
-  alive: id !== 5,
-  roleId: id === 0 ? 'villager' : null,
-  skillId: id === 0 ? 'healing' : null,
-  isSelf: id === 0,
-}));
+const players = CHARACTER_CATALOG.slice(0, 6).map((character, id) => {
+  let roleId = null;
+  let skillId = null;
+  if (id === 0) {
+    roleId = 'villager';
+    skillId = 'healing';
+  }
+  return {
+    id,
+    characterId: character.id,
+    name: character.name,
+    avatarUrl: `/avatar-${id}.png`,
+    alive: id !== 5,
+    roleId,
+    skillId,
+    isSelf: id === 0,
+  };
+});
 const observation = {
   gameId: 'debug-game',
   mode: 'spectator',
@@ -256,13 +264,15 @@ const cjkPostGameRequest = {
   pendingDecision: postGamePending,
   sessionId: 'contract-post-game-cjk-body',
 };
-const unfittedCjkMessages = buildDecisionPrompt(cjkPostGameRequest, 'custom');
-assert.deepEqual(validateGamePrompt(unfittedCjkMessages), { ok: true }, '完整中文赛后提示必须通过 96,000 字符协议校验');
-const unfittedCjkBody = JSON.stringify(buildFreeClientPayload('2.3.2', unfittedCjkMessages));
-assert.ok(Buffer.byteLength(unfittedCjkBody, 'utf8') > CHAT_COMPLETIONS_MAX_BODY_BYTES, '未按免费服务拟合的完整有效请求应超过 128 KiB');
+const customCjkMessages = buildDecisionPrompt(cjkPostGameRequest, 'custom');
+assert.deepEqual(validateGamePrompt(customCjkMessages), { ok: true }, '预算内中文赛后提示必须通过协议校验');
+const customCjkBody = JSON.stringify({ messages: customCjkMessages });
+assert.ok(Buffer.byteLength(customCjkBody, 'utf8') <= 32 * 1024, '自定义提供方提示必须符合 32 KiB 目标预算');
+assert.match(JSON.parse(customCjkMessages[1].content).postGameContext, /赛后复盘上下文过长/);
 const fittedCjkMessages = buildDecisionPrompt(cjkPostGameRequest, 'free');
 const fittedCjkBody = JSON.stringify(buildFreeClientPayload('2.3.2', fittedCjkMessages));
 assert.ok(Buffer.byteLength(fittedCjkBody, 'utf8') <= CHAT_COMPLETIONS_MAX_BODY_BYTES, '免费提示构建器必须将完整 UTF-8 body 拟合到 128 KiB');
+assert.ok(Buffer.byteLength(fittedCjkBody, 'utf8') <= 32 * 1024, '免费提示构建器必须符合 32 KiB 目标预算');
 assert.match(JSON.parse(fittedCjkMessages[1].content).postGameContext, /赛后复盘上下文过长/);
 assert.deepEqual(validateGamePrompt(fittedCjkMessages), { ok: true }, '按字节截断后的中文赛后提示必须通过后端协议校验');
 
@@ -371,7 +381,12 @@ function errorResponse(status, body) {
 function installFetch(steps) {
   const calls = [];
   globalThis.fetch = async (input, init) => {
-    calls.push({ input, init, rawBody: init?.body ?? null, body: init?.body ? JSON.parse(init.body) : null });
+    const rawBody = init?.body ?? null;
+    let body = null;
+    if (init?.body) {
+      body = JSON.parse(init.body);
+    }
+    calls.push({ input, init, rawBody, body });
     const step = steps.shift();
     if (step instanceof Error) throw step;
     if (typeof step === 'function') return step(input, init);

@@ -182,7 +182,7 @@ export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成�
  */
 export function buildGameSystemPrompt(schemaKey) {
  if (!Object.hasOwn(DECISION_EXAMPLES, schemaKey)) throw new Error(`未知提示词响应契约：${String(schemaKey)}`);
- let promptHint = '性别与称谓边界：本作所有可选角色均为女性。佐伯米莉亚的“大叔我”只是她的自称和纪念，不代表男性身份；称呼其他角色时使用姓名、小姐、亲等女性或中性称谓，不使用“哥”“哥哥”“先生”等男性称谓。除非当前角色卡明确要求，否则不得改变角色性别。';
+ let promptHint = ' 性别与称谓边界：本作所有可选角色均为女性。佐伯米莉亚的“大叔我”只是她的自称和纪念，不代表男性身份；称呼其他角色时使用姓名、小姐、亲等女性或中性称谓，不使用“哥”“哥哥”“先生”等男性称谓。除非当前角色卡明确要求，否则不得改变角色性别。';
  if (schemaKey === 'ignition') {
   promptHint += ' 该决策只需回答是否使用（true 或 false），无需选择任何目标。';
  }

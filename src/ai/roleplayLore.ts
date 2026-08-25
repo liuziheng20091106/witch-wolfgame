@@ -1,6 +1,13 @@
 import { formatRoleplaySpeechStyle, getRoleplayStaticCard } from '../data/roleplay-static';
-import { getRoleplayRetrievalCard } from '../data/roleplay-retrieval';
-import type { CharacterId, PendingDecisionKind } from '../domain/model';
+import { selectRoleplayRetrievalCards } from '../data/roleplay-retrieval';
+import type {
+  CharacterId,
+  GameObservation,
+  PendingDecision,
+  PlayerId,
+  TimelineEvent,
+  TimelineEventKind,
+} from '../domain/model';
 
 function joinValues(values: readonly string[]): string {
   return values.join('；');
@@ -13,17 +20,99 @@ function formatRelationships(characterId: CharacterId): string {
     .join('；');
 }
 
+function addCharacterId(
+  characterIds: Set<CharacterId>,
+  characterIdByPlayerId: ReadonlyMap<PlayerId, CharacterId>,
+  playerId: PlayerId | null,
+): void {
+  if (playerId === null) {
+    return;
+  }
+  const characterId = characterIdByPlayerId.get(playerId);
+  if (characterId !== undefined) {
+    characterIds.add(characterId);
+  }
+}
+
+function collectEventSignals(
+  events: readonly TimelineEvent[],
+  characterIdByPlayerId: ReadonlyMap<PlayerId, CharacterId>,
+): { characterIds: readonly CharacterId[]; eventKinds: readonly TimelineEventKind[] } {
+  const characterIds = new Set<CharacterId>();
+  const eventKinds = new Set<TimelineEventKind>();
+  for (const event of events) {
+    eventKinds.add(event.kind);
+    addCharacterId(characterIds, characterIdByPlayerId, event.actorPlayerId);
+    addCharacterId(characterIds, characterIdByPlayerId, event.displayAuthorPlayerId);
+    addCharacterId(characterIds, characterIdByPlayerId, event.actualAuthorPlayerId);
+    for (const targetPlayerId of event.targetPlayerIds) {
+      addCharacterId(characterIds, characterIdByPlayerId, targetPlayerId);
+    }
+  }
+  return { characterIds: [...characterIds], eventKinds: [...eventKinds] };
+}
+
+function buildRetrievalQuery(
+  characterId: CharacterId,
+  observation: GameObservation,
+  pendingDecision: PendingDecision,
+) {
+  const actor = observation.players.find((player) => player.id === pendingDecision.actorId);
+  if (actor === undefined) {
+    throw new Error('动态角色上下文缺少当前行动者');
+  }
+  const characterIdByPlayerId = new Map<PlayerId, CharacterId>(
+    observation.players.map((player) => [player.id, player.characterId]),
+  );
+  const focusedCharacterIds: CharacterId[] = [];
+  if (pendingDecision.options.potionChoice !== true && pendingDecision.candidates.length <= 2) {
+    for (const playerId of pendingDecision.candidates) {
+      const focusedCharacterId = characterIdByPlayerId.get(playerId);
+      if (focusedCharacterId !== undefined) {
+        focusedCharacterIds.push(focusedCharacterId);
+      }
+    }
+  }
+  const recentEvents = [
+    ...observation.publicEvents.slice(-12),
+    ...observation.privateEvents.slice(-8),
+  ];
+  const eventSignals = collectEventSignals(recentEvents, characterIdByPlayerId);
+  const currentSpeechCount = observation.publicEvents.filter(
+    (event) => event.kind === 'speech' && event.day === observation.day,
+  ).length;
+  const votesAgainstActor = observation.currentVotes.filter(
+    (vote) => vote.targetPlayerId === pendingDecision.actorId,
+  ).length;
+  return {
+    actorCharacterId: characterId,
+    actorSkillId: actor.skillId,
+    decisionKind: pendingDecision.kind,
+    isPostGame: pendingDecision.options.postGame === true,
+    focusedCharacterIds,
+    recentCharacterIds: eventSignals.characterIds,
+    recentEventKinds: eventSignals.eventKinds,
+    privateKnowledgeCount: observation.knowledge.filter(
+      (fact) => fact.kind === 'role' || fact.kind === 'alignment',
+    ).length,
+    currentSpeechCount,
+    votesAgainstActor,
+  };
+}
+
 /**
- * 只返回当前 actor 需要的静态人格卡，不包含来源、案件、旧时间线或本局状态。
- * 本局身份、阵营、存活与技能由 actor.role、actor.skill 和观察字段提供。
+ * 返回当前 actor 的静态人格卡和本轮动态检索片段，不包含来源元数据或本局隐藏状态。
+ * 案件片段会明确标记为旧时间线；本局身份、存活与技能仍由观察字段提供。
  */
 export function buildRoleplayPersonality(
   characterId: CharacterId,
-  decisionKind: PendingDecisionKind,
-  isPostGame: boolean,
+  observation: GameObservation,
+  pendingDecision: PendingDecision,
 ): string {
   const card = getRoleplayStaticCard(characterId);
-  const retrieval = getRoleplayRetrievalCard(decisionKind, isPostGame);
+  const retrievalCards = selectRoleplayRetrievalCards(
+    buildRetrievalQuery(characterId, observation, pendingDecision),
+  );
   const sections = [
     `【角色静态卡｜版本：${card.canonicalVersion}】`,
     `身份核心：${joinValues(card.identityCore)}`,
@@ -34,8 +123,8 @@ export function buildRoleplayPersonality(
     `关系锚点：${formatRelationships(characterId)}`,
     `演绎限制：${joinValues(card.roleplayConstraints)}`,
   ];
-  if (retrieval !== null) {
-    sections.push(`【按需论证卡｜${retrieval.id}】${retrieval.content}`);
+  for (const retrievalCard of retrievalCards) {
+    sections.push(`【动态上下文｜${retrievalCard.id}】${retrievalCard.content}`);
   }
   return sections.join('\n');
 }

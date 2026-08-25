@@ -38,7 +38,7 @@ export interface RoleplayStaticCard {
 
 /**
  * 狼人杀运行卡的编译结果：只保留稳定人格、表达方式和两条关系锚点。
- * 原作案件、旧时间线状态与来源元数据留在工作目录，不进入前端常驻数据。
+ * 原作案件详情、旧时间线状态与来源元数据留在工作目录；案件仅以短摘要进入按需检索库，不进入静态卡。
  */
 export const ROLEPLAY_STATIC_BY_CHARACTER_ID = {
   'soul-0': {
