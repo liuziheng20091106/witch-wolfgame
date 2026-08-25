@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate tag version
+        shell: bash
+        run: |
+          expected_tag="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $expected_tag"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Package release assets
+        id: package
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p release
+          dist_archive="release/majo-wolf-${TAG}-dist.zip"
+          backend_archive="release/majo-wolf-${TAG}-backend.zip"
+
+          zip -r "$dist_archive" dist
+          git archive \
+            --format=zip \
+            --output="$backend_archive" \
+            "$GITHUB_SHA" \
+            proxy shared server
+
+          echo "dist_archive=$dist_archive" >> "$GITHUB_OUTPUT"
+          echo "backend_archive=$backend_archive" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          DIST_ARCHIVE: ${{ steps.package.outputs.dist_archive }}
+          BACKEND_ARCHIVE: ${{ steps.package.outputs.backend_archive }}
+        run: |
+          if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              "$DIST_ARCHIVE" \
+              "$BACKEND_ARCHIVE" \
+              --clobber \
+              --repo "$GH_REPO"
+          else
+            gh release create "$TAG" \
+              "$DIST_ARCHIVE" \
+              "$BACKEND_ARCHIVE" \
+              --title "$TAG" \
+              --generate-notes \
+              --verify-tag \
+              --repo "$GH_REPO"
+          fi

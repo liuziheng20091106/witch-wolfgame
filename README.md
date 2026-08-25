@@ -44,6 +44,8 @@ npm run preview
 
 生产文件输出到 `dist/`。Vite 使用相对资源路径，可部署到静态站点或子路径。公益服务使用独立 API 域名，避免 Cloudflare 静态 Worker 对同域 `POST /api/*` 返回 405；也可在构建时通过 `VITE_MAIN_BACKEND_ENDPOINT` 覆盖完整入口。
 
+推送与 `package.json` 版本一致的 `vX.Y.Z` tag 后，GitHub Actions 会创建对应 Release，并上传 `majo-wolf-vX.Y.Z-dist.zip`（静态站点）及 `majo-wolf-vX.Y.Z-backend.zip`（`proxy/`、`shared/`、`server/` 三合一后端源码）。发布包只包含该 tag 已跟踪的后端文件，不包含 `.env`、证书或其他本地文件。
+
 ## 主后端与代理服务
 
 主后端接受浏览器公益请求，校验客户端版本、固定游戏提示词协议和 JSON 响应要求，并按客户端 IP 执行滑动窗口与并发限制。代理节点保存服务商、模型和 API Key 池；主后端可配置多个代理节点并在网络错误或 5xx 时切换。代理向服务商发送 `stream: true`，按 SSE 数据块接收并聚合为现有 Chat Completions JSON 后再返回主后端，因此浏览器协议不变。代理节点默认监听 `34023`，主后端与代理之间使用 TLS 1.3 双向证书认证及带时间戳、nonce、请求体摘要的 HMAC-SHA256 连接密码。
