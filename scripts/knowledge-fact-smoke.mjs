@@ -138,23 +138,46 @@ function soulExchangePending() {
 
 {
   const speechPending = {
-    id: 'speech-required-mention',
+    id: 'gaze-guidance-speech',
     kind: 'speech',
     schemaKey: 'speech',
     actorId: 0,
-    title: '发言',
-    description: '公开发言',
+    title: '视线诱导发言',
+    description: '发言必须提及诱导对象',
     candidates: [],
     allowAbstain: true,
     skillInstanceId: null,
     options: { requiredMention: '莲见蕾雅', requiredSeatLabel: '6号' },
   };
-  const normalizedSpeech = parseDecision(speechPending, { speech: '我会继续观察当前公开信息。' });
-  assert.equal(normalizedSpeech.speech.includes('莲见蕾雅'), true);
-  assert.ok(normalizedSpeech.speech.length <= 100);
-  assert.equal(
-    parseDecision(speechPending, { speech: '我会继续观察6号的发言。' }).speech,
-    '我会继续观察6号的发言。',
+
+  const normalized = parseDecision(speechPending, { speech: '我会继续观察其他人的发言。' });
+  assert.equal(normalized.speech, '我会继续观察其他人的发言。 莲见蕾雅');
+
+  const normalizedAtLimit = parseDecision(speechPending, { speech: '很'.repeat(100) });
+  assert.equal(normalizedAtLimit.speech.length, 100);
+  assert.ok(normalizedAtLimit.speech.endsWith(' 莲见蕾雅'));
+
+  const mentionIncluded = parseDecision(speechPending, { speech: '我会继续观察莲见蕾雅的发言。' });
+  assert.equal(mentionIncluded.speech, '我会继续观察莲见蕾雅的发言。');
+
+  const seatIncluded = parseDecision(speechPending, { speech: '我会继续观察6号的发言。' });
+  assert.equal(seatIncluded.speech, '我会继续观察6号的发言。');
+
+  const maximumMentionPending = structuredClone(speechPending);
+  maximumMentionPending.options.requiredMention = '满'.repeat(100);
+  const maximumMention = parseDecision(maximumMentionPending, { speech: '测试发言。' });
+  assert.equal(maximumMention.speech, '满'.repeat(100));
+
+  const oversizedMentionPending = structuredClone(speechPending);
+  oversizedMentionPending.options.requiredMention = '长'.repeat(101);
+  assert.throws(
+    () => parseDecision(oversizedMentionPending, { speech: '测试发言。' }),
+    (caught) => {
+      assert.ok(caught instanceof AiCommandError);
+      assert.equal(caught.kind, 'schema');
+      assert.equal(caught.message, '视线诱导必提文本超过发言长度上限');
+      return true;
+    },
   );
 }
 

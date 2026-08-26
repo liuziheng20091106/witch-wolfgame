@@ -1,12 +1,13 @@
 import { z } from 'zod';
-import type { PendingDecision, PlayerId, SubmittedDecision, WitchDecision } from '../domain/model';
+import type { PendingDecision, PlayerId, SpeechDecision, SubmittedDecision, WitchDecision } from '../domain/model';
 import { AiCommandError } from './types';
 
 // 注意：使用 z.object（默认 strip 未知键）而非 z.strictObject。
 // 模型常自创多余顶层字段（如把思考内容里的 skill/target 塞进 JSON），strictObject 会因此整单失败；
 // z.object 会在解析时自动剥离未知键（且不修改输入对象），schema 本身即是唯一的字段白名单，
 // 避免手写白名单与 schema 双重定义导致的漂移。必填缺失/类型错误仍会被拦截。
-export const speechDecisionSchema = z.object({ speech: z.string().max(100) });
+const SPEECH_MAX_LENGTH = 100;
+export const speechDecisionSchema = z.object({ speech: z.string().max(SPEECH_MAX_LENGTH) });
 export const targetDecisionSchema = z.object({ targetPlayerId: z.number().int().min(0).max(99).nullable() });
 export const optionalTargetDecisionSchema = z.object({
   use: z.boolean(),
@@ -95,14 +96,36 @@ export function parseDecision(pending: PendingDecision, value: unknown): Submitt
 
 function normalizeRequiredMention(pending: PendingDecision, decision: SubmittedDecision): SubmittedDecision {
   if (pending.schemaKey !== 'speech') return decision;
-  const requiredMention = typeof pending.options.requiredMention === 'string' ? pending.options.requiredMention : null;
-  const requiredSeatLabel = typeof pending.options.requiredSeatLabel === 'string' ? pending.options.requiredSeatLabel : null;
-  const speech = (decision as { speech: string }).speech;
-  if (!requiredMention || speech.includes(requiredMention) || (requiredSeatLabel !== null && speech.includes(requiredSeatLabel))) {
-    return decision;
+
+  let requiredMention: string | null = null;
+  if (typeof pending.options.requiredMention === 'string') {
+    requiredMention = pending.options.requiredMention;
   }
-  const suffix = ` ${requiredMention}`;
-  return { speech: `${speech.slice(0, Math.max(0, 100 - suffix.length))}${suffix}` };
+  if (requiredMention === null || requiredMention.length === 0) return decision;
+
+  let requiredSeatLabel: string | null = null;
+  if (typeof pending.options.requiredSeatLabel === 'string') {
+    requiredSeatLabel = pending.options.requiredSeatLabel;
+  }
+  const speech = (decision as SpeechDecision).speech;
+  if (speech.includes(requiredMention)) return decision;
+  if (requiredSeatLabel !== null && requiredSeatLabel.length > 0 && speech.includes(requiredSeatLabel)) return decision;
+  if (requiredMention.length > SPEECH_MAX_LENGTH) {
+    throw new AiCommandError('schema', '视线诱导必提文本超过发言长度上限');
+  }
+
+  let separator = '';
+  if (speech.length > 0 && requiredMention.length < SPEECH_MAX_LENGTH) {
+    separator = ' ';
+  }
+  const suffix = `${separator}${requiredMention}`;
+  const normalized = speechDecisionSchema.safeParse({
+    speech: `${speech.slice(0, SPEECH_MAX_LENGTH - suffix.length)}${suffix}`,
+  });
+  if (!normalized.success) {
+    throw new AiCommandError('schema', '补全视线诱导对象后的发言不符合 speech 契约');
+  }
+  return normalized.data;
 }
 
 function validateWitchDecision(pending: PendingDecision, decision: SubmittedDecision): void {
