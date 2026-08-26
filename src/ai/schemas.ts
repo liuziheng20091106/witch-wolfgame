@@ -87,10 +87,22 @@ export function parseDecision(pending: PendingDecision, value: unknown): Submitt
   if (!result.success) {
     throw new AiCommandError('schema', `AI JSON 不符合 ${pending.schemaKey} 契约：${result.error.issues[0]?.message ?? '未知结构错误'}`);
   }
-  const decision = result.data as SubmittedDecision;
+  const decision = normalizeRequiredMention(pending, result.data as SubmittedDecision);
   validateWitchDecision(pending, decision);
   validateDecisionTargets(pending, decision);
   return decision;
+}
+
+function normalizeRequiredMention(pending: PendingDecision, decision: SubmittedDecision): SubmittedDecision {
+  if (pending.schemaKey !== 'speech') return decision;
+  const requiredMention = typeof pending.options.requiredMention === 'string' ? pending.options.requiredMention : null;
+  const requiredSeatLabel = typeof pending.options.requiredSeatLabel === 'string' ? pending.options.requiredSeatLabel : null;
+  const speech = (decision as { speech: string }).speech;
+  if (!requiredMention || speech.includes(requiredMention) || (requiredSeatLabel !== null && speech.includes(requiredSeatLabel))) {
+    return decision;
+  }
+  const suffix = ` ${requiredMention}`;
+  return { speech: `${speech.slice(0, Math.max(0, 100 - suffix.length))}${suffix}` };
 }
 
 function validateWitchDecision(pending: PendingDecision, decision: SubmittedDecision): void {

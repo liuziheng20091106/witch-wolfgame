@@ -137,6 +137,28 @@ function soulExchangePending() {
 }
 
 {
+  const speechPending = {
+    id: 'speech-required-mention',
+    kind: 'speech',
+    schemaKey: 'speech',
+    actorId: 0,
+    title: '发言',
+    description: '公开发言',
+    candidates: [],
+    allowAbstain: true,
+    skillInstanceId: null,
+    options: { requiredMention: '莲见蕾雅', requiredSeatLabel: '6号' },
+  };
+  const normalizedSpeech = parseDecision(speechPending, { speech: '我会继续观察当前公开信息。' });
+  assert.equal(normalizedSpeech.speech.includes('莲见蕾雅'), true);
+  assert.ok(normalizedSpeech.speech.length <= 100);
+  assert.equal(
+    parseDecision(speechPending, { speech: '我会继续观察6号的发言。' }).speech,
+    '我会继续观察6号的发言。',
+  );
+}
+
+{
   const state = makeState();
   const ownerFacts = state.knowledgeByPlayer[0];
   const targetFacts = state.knowledgeByPlayer[1];
