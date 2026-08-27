@@ -46,6 +46,9 @@ import { exhaustSkill } from '../skills/types';
 import { resolveVotes } from './vote';
 import { applyLastWords, getNextLastWordsDecision } from '../skills/lastWords';
 import { applyPostGameSpeech, getNextPostGameDecision } from '../skills/postGame';
+import { withFactionStrategyGuidance } from '../skills/decisionGuidance';
+
+const DAY_SPEECH_DESCRIPTION = '公开发言不超过 100 字。系统规则只作为内部决策边界，不得当作默认发言素材。先检查本日已有发言；不得换一种说法重复已有共识。至少贡献一项新的观察、质疑、矛盾、回应或后续验证建议；确无新增时可简短保留判断，但不要复述规则。';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return getName(state, playerId);
@@ -199,7 +202,7 @@ function advanceWitch(state: GameState): GameState {
     if (canSave && canPoison) {
       description += '同时用药时，不能毒杀被救者。';
     }
-    state.pendingDecision = {
+    const witchDecision: PendingDecision = {
       ...makeRoleDecision(state, 'witch-action', witch, title, description, candidates, true, 'witch'),
       options: {
         attackedPlayerId,
@@ -207,6 +210,7 @@ function advanceWitch(state: GameState): GameState {
         canPoison,
       },
     };
+    state.pendingDecision = withFactionStrategyGuidance(state, witchDecision);
     return state;
   }
   state.phase = 'seer-action';
@@ -314,7 +318,16 @@ function advanceSpeeches(state: GameState): GameState {
     state.pendingDecision = beforeDecision;
     return state;
   }
-  const speechDecision = makeRoleDecision(state, 'speech', actorId, `${nameOf(state, actorId)} 发言`, '公开发言不超过 100 字。', [], true, 'speech');
+  const speechDecision = makeRoleDecision(
+    state,
+    'speech',
+    actorId,
+    `${nameOf(state, actorId)} 发言`,
+    DAY_SPEECH_DESCRIPTION,
+    [],
+    true,
+    'speech',
+  );
   const gazeMention = gazeRequiredMention(state, actorId);
   if (gazeMention) {
     speechDecision.options = {
