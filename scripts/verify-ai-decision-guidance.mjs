@@ -100,6 +100,10 @@ console.log('=== 狼人治愈本队狼刀 ===');
   const pending = getHealingDecision(state);
   assert.notEqual(pending, null);
   assert.ok(pending.candidates.includes(targetId), '策略提示不得硬性排除狼刀目标');
+  assert.match(pending.description, /治愈只会移除本夜的死亡意图，不能复活死者/);
+  assert.match(pending.description, /应优先保护自己或存活狼队友/);
+  assert.match(pending.description, new RegExp(`当前优先考虑：[^。]*${getName(state, ownerId)}`));
+  assert.match(pending.description, /不要保护好人阵营角色/);
   assert.match(pending.description, new RegExp(`狼队决定袭击${getName(state, targetId)}`));
   assert.match(pending.description, /治愈她会直接抵消本队狼刀/);
   const messages = promptForPending(state, pending);
@@ -120,6 +124,7 @@ console.log('=== 狼人治愈本队狼刀 ===');
   const goodPending = getHealingDecision(goodState);
   assert.notEqual(goodPending, null);
   assert.doesNotMatch(goodPending.description, /本队狼刀/, '好人治愈者不得收到隐藏狼刀提示');
+  assert.doesNotMatch(goodPending.description, /当前优先考虑/, '好人治愈者不得收到狼方保护优先级');
 }
 
 console.log('=== 用药同阵营伤害提示 ===');

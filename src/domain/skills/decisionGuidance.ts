@@ -33,6 +33,10 @@ function appendGuidance(pending: PendingDecision, hints: readonly string[]): Pen
 export function withFactionStrategyGuidance(state: GameState, pending: PendingDecision): PendingDecision {
   const hints: string[] = [];
   if (pending.kind === 'healing' && getPlayerAlignment(state, pending.actorId) === 'wolf') {
+    const wolfProtectionTargetNames = pending.candidates
+      .filter((targetPlayerId) => getPlayerAlignment(state, targetPlayerId) === 'wolf')
+      .map((targetPlayerId) => getName(state, targetPlayerId));
+    hints.push(`治愈只会移除本夜的死亡意图，不能复活死者；没有明确战术时，应优先保护自己或存活狼队友（当前优先考虑：${wolfProtectionTargetNames.join('、')}），不要保护好人阵营角色`);
     const attackedPlayerId = knownWolfAttackTarget(state, pending.actorId);
     if (attackedPlayerId !== null && pending.candidates.includes(attackedPlayerId)) {
       hints.push(`本夜狼队决定袭击${getName(state, attackedPlayerId)}，治愈她会直接抵消本队狼刀；除非有明确的空刀或伪装计划，否则不要选择她`);
