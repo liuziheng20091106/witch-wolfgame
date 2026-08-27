@@ -479,12 +479,12 @@ function revealVoteRound(state: GameState, round: 1 | 2): void {
     }
   }
   const playerName = (playerId: PlayerId) => nameOf(state, playerId);
-  addPublicEvent(state, 'vote', `第 ${round} 轮投票结果：${formatVoteRound(votes, round, playerName)}。\n票数汇总：${formatVoteTally(voteTally, playerName)}。`, {
+  addPublicEvent(state, 'vote', `第 ${round} 轮完整提交票型（点火前）：${formatVoteRound(votes, round, playerName)}。\n提交票数汇总（点火前）：${formatVoteTally(voteTally, playerName)}。`, {
     targetPlayerIds,
     data: {
       revealedVoteRound: round,
       voteRecords: votes.map((vote) => ({ ...vote })),
-      voteTally: voteTally.map((entry) => ({ ...entry })),
+      submittedVoteTally: voteTally.map((entry) => ({ ...entry })),
     },
   });
 }

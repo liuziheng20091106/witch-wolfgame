@@ -636,7 +636,7 @@ export function getDayIgnitionDecision(state: GameState): PendingDecision | null
     state,
     skill,
     '点火-白天',
-    `第 ${round} 轮完整票型已经公布：${voteSummary}。票数汇总：${voteTally}。选择一名目标：火焰将随机烧毁她的投票（90%）或全部魔女技（10%）。`,
+    `第 ${round} 轮完整提交票型已经公布：${voteSummary}。提交票数汇总（点火前）：${voteTally}。选择一名目标：火焰将随机烧毁她的投票（90%）或全部魔女技（10%）。`,
     candidates,
     'optional-target',
   );
