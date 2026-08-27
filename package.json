@@ -17,6 +17,7 @@
     "test:debug-report": "node scripts/ai-debug-report-smoke.mjs",
     "test:roleplay": "node scripts/roleplay-resource-smoke.mjs",
     "test:wolf-council": "node scripts/verify-wolf-council.mjs",
+    "test:ai-guidance": "node scripts/verify-ai-decision-guidance.mjs",
     "sim": "node scripts/monte-carlo.mjs"
   },
   "dependencies": {

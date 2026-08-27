@@ -17,6 +17,7 @@ import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events'
 import { chooseWithState } from '../engine/random';
 import { getAlivePlayerIds, getName, getPlayer, getPlayerAlignment, getRoleAssignment, getSkillInstance } from '../engine/selectors';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
+import { withFactionStrategyGuidance } from './decisionGuidance';
 
 const priority: Record<string, number> = {
   'soul-exchange': 0,
@@ -130,7 +131,15 @@ export function getHealingDecision(state: GameState): PendingDecision | null {
   if (!skill) {
     return null;
   }
-  return makeSkillDecision(state, skill, '治愈', '选择一名存活者，移除她本夜所有可防止的死亡意图。', getAlivePlayerIds(state), 'target');
+  const pending = makeSkillDecision(
+    state,
+    skill,
+    '治愈',
+    '选择一名存活者，移除她本夜所有可防止的死亡意图。',
+    getAlivePlayerIds(state),
+    'target',
+  );
+  return withFactionStrategyGuidance(state, pending);
 }
 
 function requireTarget(decision: SubmittedDecision, candidates: PlayerId[]): PlayerId {
