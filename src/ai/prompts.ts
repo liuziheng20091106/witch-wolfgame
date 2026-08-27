@@ -253,7 +253,10 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
   if (isPostGame) {
     recentPublic = [];
   }
-  let privateEvents = observation.privateEvents.slice(-8).map((event) => event.text);
+  let privateEvents = observation.privateEvents
+    .filter((event) => event.day !== observation.day || event.data.actionKind !== 'wolf-suggestion')
+    .slice(-8)
+    .map((event) => event.text);
   if (isPostGame) {
     privateEvents = [];
   }

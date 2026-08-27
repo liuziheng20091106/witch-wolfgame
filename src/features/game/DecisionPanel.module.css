@@ -36,6 +36,41 @@
   overflow-y: auto;
 }
 
+.councilLog {
+  display: grid;
+  gap: 8px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.councilLog h3 {
+  margin: 0;
+  color: var(--verdict);
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+.councilLog div {
+  padding-left: 9px;
+  border-left: 3px solid var(--verdict);
+}
+
+.councilLog strong,
+.councilLog span {
+  font-family: var(--sans);
+  font-size: 11px;
+}
+
+.councilLog p {
+  margin: 3px 0 !important;
+  color: var(--ink) !important;
+  overflow-wrap: anywhere;
+}
+
+.councilLog span {
+  color: var(--muted);
+}
+
 .candidates {
   display: grid;
   grid-template-columns: 1fr 1fr;

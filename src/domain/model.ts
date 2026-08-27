@@ -189,6 +189,11 @@ export interface SpeechDecision {
   speech: string;
 }
 
+export interface WolfCouncilDecision {
+  message: string;
+  recommendedTargetPlayerId: PlayerId;
+}
+
 export interface WitchDecision {
   save: boolean;
   poisonTargetPlayerId: PlayerId | null;
@@ -215,6 +220,7 @@ export type SubmittedDecision =
   | TargetDecision
   | OptionalTargetDecision
   | SpeechDecision
+  | WolfCouncilDecision
   | WitchDecision
   | LiquidControlDecision
   | LevitationDecision

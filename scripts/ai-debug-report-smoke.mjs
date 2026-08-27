@@ -145,11 +145,16 @@ assert.match(buildGameSystemPrompt('target'), /legalCandidates 是唯一合法�
 
 for (const [kind, schemaKeys] of Object.entries(DECISION_KIND_SCHEMAS)) {
   for (const schemaKey of schemaKeys) {
+    let options = {};
+    if (schemaKey === 'wolf-council') {
+      options = { wolfCouncilMessages: [] };
+    }
     const pending = {
       ...pendingDecision,
       id: `contract-${kind}-${schemaKey}`,
       kind,
       schemaKey,
+      options,
     };
     const contractRequest = {
       observation: { ...observation, pendingDecision: pending },
