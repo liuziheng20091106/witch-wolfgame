@@ -45,7 +45,7 @@ import { addKnowledge, addPrivateEvent, addPublicEvent } from './events';
 import { finalizeGameIfWon, refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
 import { getAlivePlayerIds, getName, getPlayer, getRoleAssignment, getSkillInstance } from './selectors';
 import { exhaustSkill } from '../skills/types';
-import { resolveVotes } from './vote';
+import { formatVoteRound, formatVoteTally, resolveVotes, tallyVoteRound } from './vote';
 import { applyLastWords, getNextLastWordsDecision } from '../skills/lastWords';
 import { applyPostGameSpeech, getNextPostGameDecision } from '../skills/postGame';
 import { withFactionStrategyGuidance } from '../skills/decisionGuidance';
@@ -459,6 +459,36 @@ function attachCreatureVotes(state: GameState, round: 1 | 2): void {
   }
 }
 
+function voteRoundIsRevealed(state: GameState, round: 1 | 2): boolean {
+  return state.publicEvents.some(
+    (event) => event.day === state.day && event.kind === 'vote' && event.data.revealedVoteRound === round,
+  );
+}
+
+/** 所有投票收齐后一次性公开完整票型，提交期间不产生公开事件。 */
+function revealVoteRound(state: GameState, round: 1 | 2): void {
+  if (voteRoundIsRevealed(state, round)) {
+    return;
+  }
+  const votes = state.currentVotes.filter((vote) => vote.round === round);
+  const voteTally = tallyVoteRound(votes, round);
+  const targetPlayerIds: PlayerId[] = [];
+  for (const vote of votes) {
+    if (vote.targetPlayerId !== null && !targetPlayerIds.includes(vote.targetPlayerId)) {
+      targetPlayerIds.push(vote.targetPlayerId);
+    }
+  }
+  const playerName = (playerId: PlayerId) => nameOf(state, playerId);
+  addPublicEvent(state, 'vote', `第 ${round} 轮投票结果：${formatVoteRound(votes, round, playerName)}。\n票数汇总：${formatVoteTally(voteTally, playerName)}。`, {
+    targetPlayerIds,
+    data: {
+      revealedVoteRound: round,
+      voteRecords: votes.map((vote) => ({ ...vote })),
+      voteTally: voteTally.map((entry) => ({ ...entry })),
+    },
+  });
+}
+
 function votingPending(state: GameState, round: 1 | 2, candidates: PlayerId[] | null): PendingDecision | null {
   const order = getVoteOrder(state);
   const voter = order.find((playerId) => !state.currentVotes.some((vote) => vote.round === round && vote.voterPlayerId === playerId));
@@ -470,7 +500,23 @@ function votingPending(state: GameState, round: 1 | 2, candidates: PlayerId[] | 
     state.currentVotes.push({ voterPlayerId: voter, targetPlayerId: null, round });
     return votingPending(state, round, candidates);
   }
-  return makeRoleDecision(state, round === 1 ? 'vote' : 'runoff', voter, round === 1 ? '公开投票' : '平票重投', '选择一名候选，当前票会立即公开。', targets, round === 1);
+  let kind: PendingDecision['kind'] = 'vote';
+  let title = '秘密投票';
+  let allowAbstain = true;
+  if (round === 2) {
+    kind = 'runoff';
+    title = '平票秘密重投';
+    allowAbstain = false;
+  }
+  return makeRoleDecision(
+    state,
+    kind,
+    voter,
+    title,
+    '秘密选择一名候选；所有人完成本轮投票后统一公布完整票型，提交期间无法查看其他人的选择。',
+    targets,
+    allowAbstain,
+  );
 }
 
 function advanceVoting(state: GameState): GameState {
@@ -479,13 +525,14 @@ function advanceVoting(state: GameState): GameState {
     state.pendingDecision = pending;
     return state;
   }
-  // 投票全部完成：先询问白天点火（烧票/烧技能），再计票
+  // 投票全部完成：先补齐造物跟票并统一揭票，再询问点火，最后计票。
+  attachCreatureVotes(state, 1);
+  revealVoteRound(state, 1);
   const ignition = getDayIgnitionDecision(state);
   if (ignition) {
     state.pendingDecision = ignition;
     return state;
   }
-  attachCreatureVotes(state, 1);
   const resolution = resolveVotes(state.currentVotes, 1, burnedVoters(state));
   if (resolution.outcome === 'runoff') {
     addPublicEvent(state, 'vote', `最高票并列：${resolution.tiedPlayerIds.map((id) => nameOf(state, id)).join('、')}，进行一次重投。`, {
@@ -521,6 +568,12 @@ function advanceRunoff(state: GameState): GameState {
     return state;
   }
   attachCreatureVotes(state, 2);
+  revealVoteRound(state, 2);
+  const ignition = getDayIgnitionDecision(state);
+  if (ignition) {
+    state.pendingDecision = ignition;
+    return state;
+  }
   const resolution = resolveVotes(state.currentVotes, 2, burnedVoters(state));
   if (resolution.outcome === 'exile' && resolution.targetPlayerId !== null) {
     addExileIntent(state, resolution.targetPlayerId);
@@ -770,13 +823,11 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
       }
     }
   } else if (pending.kind === 'vote' || pending.kind === 'runoff') {
-    const round: VoteRecord['round'] = pending.kind === 'vote' ? 1 : 2;
+    let round: VoteRecord['round'] = 1;
+    if (pending.kind === 'runoff') {
+      round = 2;
+    }
     state.currentVotes.push({ voterPlayerId: pending.actorId, targetPlayerId, round });
-    addPublicEvent(state, 'vote', `${nameOf(state, pending.actorId)} ${targetPlayerId === null ? '选择弃权' : `投给 ${nameOf(state, targetPlayerId)}`}。`, {
-      actorPlayerId: pending.actorId,
-      targetPlayerIds: targetPlayerId === null ? [] : [targetPlayerId],
-      data: { round, targetPlayerId },
-    });
   } else if (pending.kind === 'tie-break') {
     addExileIntent(state, targetPlayerId as PlayerId);
     state.phase = 'day-resolution';

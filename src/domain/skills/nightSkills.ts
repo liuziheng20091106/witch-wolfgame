@@ -16,6 +16,7 @@ import type {
 import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events';
 import { chooseWithState } from '../engine/random';
 import { getAlivePlayerIds, getName, getPlayer, getPlayerAlignment, getRoleAssignment, getSkillInstance } from '../engine/selectors';
+import { formatVoteRound, formatVoteTally, tallyVoteRound } from '../engine/vote';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
 import { withFactionStrategyGuidance } from './decisionGuidance';
 
@@ -624,7 +625,21 @@ export function getDayIgnitionDecision(state: GameState): PendingDecision | null
   if (candidates.length === 0) {
     return null;
   }
-  return makeSkillDecision(state, skill, '点火-白天', '选择一名目标：火焰将随机烧毁她的投票（90%）或全部魔女技（10%）。', candidates, 'optional-target');
+  let round: 1 | 2 = 1;
+  if (state.phase === 'runoff') {
+    round = 2;
+  }
+  const playerName = (playerId: PlayerId) => nameOf(state, playerId);
+  const voteSummary = formatVoteRound(state.currentVotes, round, playerName);
+  const voteTally = formatVoteTally(tallyVoteRound(state.currentVotes, round), playerName);
+  return makeSkillDecision(
+    state,
+    skill,
+    '点火-白天',
+    `第 ${round} 轮完整票型已经公布：${voteSummary}。票数汇总：${voteTally}。选择一名目标：火焰将随机烧毁她的投票（90%）或全部魔女技（10%）。`,
+    candidates,
+    'optional-target',
+  );
 }
 
 /** 白天点火结算：90% 烧投票 / 10% 烧技能。 */

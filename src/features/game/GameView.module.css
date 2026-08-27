@@ -172,6 +172,10 @@
   line-height: 1.5;
 }
 
+.historyBody p {
+  white-space: pre-line;
+}
+
 .mobileTabs,
 .historyPane {
   display: none;
