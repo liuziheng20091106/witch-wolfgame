@@ -27,6 +27,14 @@ npm run dev
 
 开发服务器默认使用 `http://127.0.0.1:5173/`。开发时可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
 
+多人服务默认监听 `127.0.0.1:34024`，开发时 Vite 会代理 `/multiplayer`：
+
+```bash
+npm run server:multiplayer
+```
+
+公网部署应在反向代理上把 `/multiplayer` 升级为 WebSocket，并用 `VITE_MULTIPLAYER_ENDPOINT=wss://example.com/multiplayer` 覆盖前端地址。房间状态原子写入 `.runtime/multiplayer-rooms.json`；恢复令牌只保存在参与者浏览器和服务端状态文件中。
+
 
 ## 模型提供商验证工具
 
@@ -43,6 +51,7 @@ API Key 以遮蔽文本输入，仅在当前进程中通过 `Authorization: Bear
 ```bash
 npm run build
 npm run preview
+npm run test:multiplayer
 ```
 
 生产文件输出到 `dist/`。Vite 使用相对资源路径，可部署到静态站点或子路径。公益服务使用独立 API 域名，避免 Cloudflare 静态 Worker 对同域 `POST /api/*` 返回 405；也可在构建时通过 `VITE_MAIN_BACKEND_ENDPOINT` 覆盖完整入口。

@@ -47,3 +47,18 @@ services:
       - ./.runtime:/app/.runtime:rw
     depends_on:
       - proxy
+
+  multiplayer:
+    <<: *node-service
+    container_name: majowolf-multiplayer
+    command: ["node", "node_modules/tsx/dist/cli.mjs", "multiplayer/server.ts"]
+    environment:
+      MAJO_MULTIPLAYER_HOST: 0.0.0.0
+      MAJO_MULTIPLAYER_PORT: 34024
+      MAJO_MULTIPLAYER_STATE: /app/.runtime/multiplayer-rooms.json
+    volumes:
+      - ./multiplayer:/app/multiplayer:ro
+      - ./src:/app/src:ro
+      - ./shared:/app/shared:ro
+      - ./node_modules:/app/node_modules:ro
+      - ./.runtime:/app/.runtime:rw

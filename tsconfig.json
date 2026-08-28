@@ -29,6 +29,7 @@
   },
   "include": [
     "src",
+    "multiplayer",
     "shared/gamePromptContract.js",
     "vite.config.ts"
   ]

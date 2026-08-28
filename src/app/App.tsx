@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { resolveTheme } from './theme';
 import { useGameController } from './useGameController';
 import { SetupView } from '../features/setup/SetupView';
+import { useMultiplayerRoom } from '../multiplayer/useMultiplayerRoom';
 
 // Static imports would merge these optional surfaces into the setup entry chunk; React.lazy requires dynamic module loading for this split.
 const LazyGameView = lazy(async () => ({ default: (await import('../features/game/GameView')).GameView }));
@@ -13,9 +14,13 @@ function getSystemDark(): boolean {
 
 export function App() {
   const controller = useGameController();
+  const multiplayer = useMultiplayerRoom();
+  const multiplayerObservation = multiplayer.room?.status === 'playing' || multiplayer.room?.status === 'ended'
+    ? multiplayer.room.observation
+    : null;
   const [systemDark, setSystemDark] = useState(getSystemDark);
   const previousThemeRef = useRef<string | null>(null);
-  const judgmentPhase = controller.view === 'game' ? controller.observation?.phase : null;
+  const judgmentPhase = multiplayerObservation?.phase ?? (controller.view === 'game' ? controller.observation?.phase : null);
   const effectiveTheme = resolveTheme(controller.theme.preference, systemDark, controller.theme.judgmentMode, judgmentPhase);
 
   useEffect(() => {
@@ -46,13 +51,14 @@ export function App() {
   }, [effectiveTheme]);
 
   return <>
-    {controller.view === 'setup' || !controller.observation ? <SetupView
+    {multiplayerObservation === null && (controller.view === 'setup' || !controller.observation) ? <SetupView
       settings={controller.settings}
       setup={controller.setup}
       history={controller.history}
       historyError={controller.historyError}
       savedGame={controller.savedGame}
       storageError={controller.storageError}
+      multiplayer={multiplayer}
       onUpdateSetup={controller.updateSetup}
       onOpenSettings={() => controller.setSettingsOpen(true)}
       onContinue={controller.continueSavedGame}

@@ -31,12 +31,52 @@ interface RoundInput {
   automationMode: GameState['automationMode'];
 }
 
+<<<<<<< HEAD
 function createRound(input: RoundInput): GameState {
   const activePlayerIds = PLAYER_IDS.slice(0, input.playerCount);
   const rolePool = rolePoolForPlayerCount(input.playerCount);
   const board = formatBoardDescription(rolePool);
   let rngState = input.initialRngState;
   const shuffledRoles = shuffleWithState(rolePool, rngState);
+=======
+  if (setup.seatCharacterIds !== undefined) {
+    if (setup.seatCharacterIds.length !== PLAYER_IDS.length || new Set(setup.seatCharacterIds).size !== PLAYER_IDS.length) {
+      throw new Error('指定席位角色必须是六名不重复角色');
+    }
+    selectedCharacters = [...setup.seatCharacterIds];
+    const seatHumanPlayerId = humanCharacterId === null ? -1 : selectedCharacters.indexOf(humanCharacterId);
+    if (setup.mode === 'player' && seatHumanPlayerId < 0) throw new Error('参与角色不在指定席位中');
+    humanPlayerId = seatHumanPlayerId < 0 ? null : seatHumanPlayerId as PlayerId;
+  } else if (setup.mode === 'player') {
+    if (!humanCharacterId) {
+      throw new Error('参与模式必须选择角色');
+    }
+    const remaining = characters.map((character) => character.id).filter((id) => id !== humanCharacterId);
+    const shuffled = shuffleWithState(remaining, rngState);
+    rngState = shuffled.state;
+    const humanSeat = chooseWithState(PLAYER_IDS, rngState);
+    rngState = humanSeat.state;
+    humanPlayerId = humanSeat.item;
+    const others = shuffled.items.slice(0, 5);
+    selectedCharacters = PLAYER_IDS.map((playerId) => {
+      if (playerId === humanSeat.item) {
+        return humanCharacterId;
+      }
+      const offset = playerId < humanSeat.item ? playerId : playerId - 1;
+      const characterId = others[offset];
+      if (!characterId) {
+        throw new Error(`座位 ${playerId} 缺少角色`);
+      }
+      return characterId;
+    });
+  } else {
+    const shuffled = shuffleWithState(characters.map((character) => character.id), rngState);
+    rngState = shuffled.state;
+    selectedCharacters = shuffled.items.slice(0, 6);
+  }
+
+  const shuffledRoles = shuffleWithState(BOARD_ROLE_POOL, rngState);
+>>>>>>> 8c2eb76 (实现权威多人房间与混合席位驱动)
   rngState = shuffledRoles.state;
   const shuffledSpeech = shuffleWithState(activePlayerIds, rngState);
   rngState = shuffledSpeech.state;

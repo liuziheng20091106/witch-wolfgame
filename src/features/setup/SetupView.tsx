@@ -8,6 +8,8 @@ import { postGameDone } from '../../domain/skills/postGame';
 import type { CharacterId } from '../../domain/model';
 import { getSavedGameCompatibilityWarning, type GameHistoryEntry, type SavedGameEnvelope, type SetupPreferences } from '../../storage/browserStorage';
 import brandMark from '../../assets/icon.ico';
+import type { MultiplayerController } from '../../multiplayer/useMultiplayerRoom';
+import { MultiplayerLobby } from './MultiplayerLobby';
 import styles from './SetupView.module.css';
 
 
@@ -18,6 +20,7 @@ interface SetupViewProps {
   savedGame: SavedGameEnvelope | null;
   historyError: string | null;
   storageError: string | null;
+  multiplayer: MultiplayerController;
   onUpdateSetup(setup: SetupPreferences): void;
   onOpenSettings(): void;
   onContinue(): void;
@@ -38,7 +41,7 @@ function hasUsableSettings(settings: AiProviderConfig): boolean {
   }
 }
 
-export function SetupView({ settings, setup, history, historyError, savedGame, storageError, onUpdateSetup, onOpenSettings, onContinue, onStart, onClearHistory, onDiscard }: SetupViewProps) {
+export function SetupView({ settings, setup, history, historyError, savedGame, storageError, multiplayer, onUpdateSetup, onOpenSettings, onContinue, onStart, onClearHistory, onDiscard }: SetupViewProps) {
   const [confirming, setConfirming] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copiedSeed, setCopiedSeed] = useState<number | null>(null);

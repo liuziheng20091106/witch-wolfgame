@@ -6,6 +6,12 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   server: {
+    proxy: {
+      '/multiplayer': {
+        target: 'ws://127.0.0.1:34024',
+        ws: true,
+      },
+    },
     watch: {
       usePolling: true,
       interval: 300,

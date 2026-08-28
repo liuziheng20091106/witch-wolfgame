@@ -1,0 +1,57 @@
+import { Copy, LogIn, Play, Radio, UserRound, Users, Wifi, WifiOff } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import type { MultiplayerController } from '../../multiplayer/useMultiplayerRoom';
+import { characters } from '../../domain/catalog/characters';
+import type { CharacterId } from '../../domain/model';
+import { copyTextToClipboard } from '../../app/clipboard';
+import styles from './MultiplayerLobby.module.css';
+
+interface MultiplayerLobbyProps {
+  multiplayer: MultiplayerController;
+  defaultCharacterId: CharacterId | null;
+}
+
+export function MultiplayerLobby({ multiplayer, defaultCharacterId }: MultiplayerLobbyProps) {
+  const [playerName, setPlayerName] = useState('玩家');
+  const [roomCode, setRoomCode] = useState('');
+  const [characterId, setCharacterId] = useState<CharacterId>(defaultCharacterId ?? 'soul-0');
+  const [copied, setCopied] = useState(false);
+  const room = multiplayer.room;
+  const self = room?.participants.find((participant) => participant.participantId === room.selfParticipantId) ?? null;
+  const selectedCharacters = useMemo(() => new Set(room?.participants.map((participant) => participant.characterId) ?? []), [room?.participants]);
+  const host = room !== null && room.hostParticipantId === room.selfParticipantId;
+  const canStart = host && room?.participants.every((participant) => participant.ready) === true;
+
+  if (room !== null) {
+    return <section className={styles.lobby} aria-labelledby="multiplayer-lobby-title">
+      <header><Radio /><div><span>ONLINE ROOM</span><h2 id="multiplayer-lobby-title">房间 {room.roomCode}</h2></div><button type="button" className={styles.copy} onClick={() => { void copyTextToClipboard(room.roomCode).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }); }}><Copy />{copied ? '已复制' : '复制房间号'}</button></header>
+      <div className={styles.status}><span>{multiplayer.connected ? <Wifi /> : <WifiOff />}{multiplayer.connected ? '已连接' : '连接中断'}</span><strong>{room.status === 'lobby' ? '等待准备' : room.status === 'playing' ? '审判进行中' : '审判已结束'}</strong></div>
+      <div className={styles.participants}>
+        {room.participants.map((participant) => <article key={participant.participantId} className={participant.participantId === room.selfParticipantId ? styles.self : ''}>
+          <img src={characters.find((character) => character.id === participant.characterId)?.avatarUrl} alt="" />
+          <div><strong>{participant.playerName}{participant.host ? ' · 房主' : ''}</strong><span>{characters.find((character) => character.id === participant.characterId)?.name} · {participant.playerId + 1}号席</span></div>
+          <small>{participant.connected ? participant.ready ? '已准备' : '未准备' : '等待重连'}</small>
+        </article>)}
+        {room.drivers.map((driver, index) => driver.kind === 'ai' && <article key={`ai-${index}`} className={styles.aiSeat}><UserRound /><div><strong>AI 驱动</strong><span>{index + 1}号席</span></div><small>自动</small></article>)}
+      </div>
+      {room.status === 'lobby' && <div className={styles.actions}>
+        <button type="button" className={self?.ready ? styles.ready : ''} onClick={() => multiplayer.setReady(!self?.ready)}>{self?.ready ? '取消准备' : '准备'}</button>
+        {host && <button type="button" className={styles.start} disabled={!canStart} onClick={multiplayer.startGame}><Play />开始游戏</button>}
+        <button type="button" onClick={multiplayer.leaveRoom}>离开房间</button>
+      </div>}
+      {multiplayer.error && <p className={styles.error} role="alert">{multiplayer.error}</p>}
+    </section>;
+  }
+
+  return <section className={styles.join} aria-labelledby="multiplayer-title">
+    <header><Users /><div><span>MULTIPLAYER</span><h2 id="multiplayer-title">多人联机</h2><p>真人占用的席位由浏览器驱动，其余席位继续由确定性 AI 驱动。</p></div></header>
+    <div className={styles.fields}>
+      <label>显示名<input maxLength={24} value={playerName} onChange={(event) => setPlayerName(event.target.value)} /></label>
+      <label>角色<select value={characterId} onChange={(event) => setCharacterId(event.target.value as CharacterId)}>{characters.map((character) => <option key={character.id} value={character.id} disabled={selectedCharacters.has(character.id)}>{character.name}</option>)}</select></label>
+      <label>房间号<input maxLength={6} value={roomCode} onChange={(event) => setRoomCode(event.target.value.toUpperCase())} placeholder="ABC234" /></label>
+    </div>
+    <div className={styles.actions}><button type="button" onClick={() => multiplayer.createRoom(playerName.trim(), characterId)} disabled={multiplayer.connecting || !playerName.trim()}><Radio />创建房间</button><button type="button" onClick={() => multiplayer.joinRoom(roomCode, playerName.trim(), characterId)} disabled={multiplayer.connecting || roomCode.length !== 6 || !playerName.trim()}><LogIn />加入房间</button></div>
+    {multiplayer.connecting && <p>正在连接多人服务器…</p>}
+    {multiplayer.error && <p className={styles.error} role="alert">{multiplayer.error}</p>}
+  </section>;
+}
