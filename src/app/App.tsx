@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { resolveTheme } from './theme';
 import { useGameController } from './useGameController';
-import { GameView } from '../features/game/GameView';
-import { AiSettingsDrawer } from '../features/settings/AiSettingsDrawer';
 import { SetupView } from '../features/setup/SetupView';
+
+// Static imports would merge these optional surfaces into the setup entry chunk; React.lazy requires dynamic module loading for this split.
+const LazyGameView = lazy(async () => ({ default: (await import('../features/game/GameView')).GameView }));
+const LazyAiSettingsDrawer = lazy(async () => ({ default: (await import('../features/settings/AiSettingsDrawer')).AiSettingsDrawer }));
 
 function getSystemDark(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -57,7 +59,7 @@ export function App() {
       onStart={controller.startNewGame}
       onClearHistory={controller.clearHistory}
       onDiscard={controller.discardSavedGame}
-    /> : <GameView
+    /> : <Suspense fallback={null}><LazyGameView
       observation={controller.observation}
       aiError={controller.aiError}
       awaitingRetry={controller.awaitingRetry}
@@ -71,13 +73,13 @@ export function App() {
       onPaused={controller.setPaused}
       onRestart={controller.startNewGame}
       onExit={controller.returnToSetup}
-    />}
-    <AiSettingsDrawer
+    /></Suspense>}
+    {controller.settingsOpen && <Suspense fallback={null}><LazyAiSettingsDrawer
       open={controller.settingsOpen}
       config={controller.settings}
       theme={controller.theme}
       onClose={() => controller.setSettingsOpen(false)}
       onSave={controller.saveAiSettings}
-    />
+    /></Suspense>}
   </>;
 }

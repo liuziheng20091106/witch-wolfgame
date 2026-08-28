@@ -146,8 +146,17 @@ assert.match(buildGameSystemPrompt('target'), /legalCandidates 是唯一合法�
 for (const [kind, schemaKeys] of Object.entries(DECISION_KIND_SCHEMAS)) {
   for (const schemaKey of schemaKeys) {
     let options = {};
+    let candidates = pendingDecision.candidates;
     if (schemaKey === 'wolf-council') {
       options = { wolfCouncilMessages: [] };
+    } else if (kind === 'wolf-decision') {
+      candidates = [1, 2, 4];
+      options = {
+        wolfCouncilMessages: [
+          { speakerPlayerId: 0, speakerName: players[0].name, message: '优先排除公开判断最准确的目标。', recommendedTargetPlayerId: 1 },
+          { speakerPlayerId: 3, speakerName: players[3].name, message: '同意，并避免让票型暴露队友。', recommendedTargetPlayerId: 1 },
+        ],
+      };
     }
     const pending = {
       ...pendingDecision,
@@ -155,6 +164,7 @@ for (const [kind, schemaKeys] of Object.entries(DECISION_KIND_SCHEMAS)) {
       kind,
       schemaKey,
       options,
+      candidates,
     };
     const contractRequest = {
       observation: { ...observation, pendingDecision: pending },
