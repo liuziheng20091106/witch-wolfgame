@@ -112,11 +112,6 @@ function validateWolfCouncilOptions(prompt) {
     return validResult();
   }
   const messages = prompt.options.wolfCouncilMessages;
-  if (messages === undefined
-    && actionKind === 'wolf-suggestion'
-    && prompt.action.schema === 'target') {
-    return validResult();
-  }
   if (!Array.isArray(messages) || messages.length > PROMPT_LIMITS.wolfCouncilMessagesMaxItems) {
     return invalidResult('wolf_council_options', 'options.wolfCouncilMessages');
   }
