@@ -76,14 +76,16 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
   return (
     <main className={styles.page}>
       <header className={styles.masthead}>
-        <img className={styles.brandMark} src={brandMark} alt="魔女狼人杀" />
+        <div className={styles.brandLockup}><img className={styles.brandMark} src={brandMark} alt="" /><div><span>MAJO WOLF / CASE SYSTEM</span><strong>魔女狼人杀</strong></div></div>
+        <p>在封闭审判中观察证言、身份与魔法留下的裂痕。</p>
         <button className={styles.settingsButton} type="button" onClick={onOpenSettings}><Settings />设置</button>
       </header>
 
       <section className={styles.commandBand} aria-labelledby="setup-title">
         <div className={styles.intro}>
-          <span>审判准备</span>
-          <h2 id="setup-title">选择你的观察位置</h2>
+          <span>FILE 01 · 审判准备</span>
+          <h2 id="setup-title">决定你如何进入这桩案件</h2>
+          <p>旁观所有真相，或认领一名少女的席位。</p>
         </div>
         <div className={styles.modeSwitch} role="group" aria-label="游戏模式">
           <button type="button" className={setup.mode === 'spectator' ? styles.activeMode : ''} onClick={() => onUpdateSetup({ ...setup, mode: 'spectator', humanCharacterId: null })}><Eye />全自动观战</button>
@@ -104,7 +106,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
       </section>
 
       {setup.mode === 'player' && <section className={styles.characterSection} aria-labelledby="character-title">
-        <div className={styles.sectionHeading}><div><span>PLAYER SEAT</span><h2 id="character-title">选择出庭角色</h2></div><p>基础职业将在六人入场后随机分配。</p></div>
+        <div className={styles.sectionHeading}><div><span>FILE 02 · PLAYER DOSSIER</span><h2 id="character-title">认领出庭角色</h2></div><p>角色决定你的声音与魔女技；基础职业仍在六人入场后秘密分配。</p></div>
         <div className={styles.characterGrid}>
           {characters.map((character, index) => {
             const selected = setup.humanCharacterId === character.id;
@@ -119,7 +121,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
         </div>
       </section>}
 
-      <section className={styles.launchBand}>
+      <section className={styles.launchBand} aria-label="案件启动">
         <div className={styles.aiStatus}>
           <div className={styles.aiSummary}>
             <span className={styles.aiIcon}><Bot /></span>
@@ -135,12 +137,12 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
             {savedGameWarning && <p className={styles.saveVersionWarning} role="alert"><TriangleAlert aria-hidden="true" /><span>{savedGameWarning}</span></p>}
             <div className={styles.savedRun}><span>可恢复记录</span><strong>{savedLabel}</strong><button type="button" onClick={onContinue}><Play />继续上局</button><button type="button" className={styles.deleteButton} onClick={onDiscard} aria-label="删除存档"><Trash2 /></button></div>
           </div>}
-          <button className={styles.startButton} type="button" disabled={!ready} onClick={requestStart}><Play />开始新局</button>
+          <button className={styles.startButton} type="button" disabled={!ready} onClick={requestStart}><span>OPEN CASE</span><Play />开启审判</button>
         </div>
       </section>
 
       {history.length > 0 && <section className={styles.historySection} aria-labelledby="seed-history-title">
-        <div className={styles.sectionHeading}><div><span>SEED ARCHIVE</span><h2 id="seed-history-title">对局历史</h2></div><p>复制种子分享给他人；对方把种子填入上方输入框后点「开始新局」即可复现同一阵容。</p></div>
+        <div className={styles.sectionHeading}><div><span>FILE 03 · SEED ARCHIVE</span><h2 id="seed-history-title">封存案件</h2></div><p>种子是案件编号；复制后即可复现完全相同的入场阵容。</p></div>
         <div className={styles.historyList}>
           {history.map((entry) => (
             <div key={entry.gameId} className={styles.historyEntry}>
