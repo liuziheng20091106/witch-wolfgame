@@ -14,7 +14,7 @@ import { addKnowledge, addPublicEvent } from './events';
 import { chooseWithState, nextRandom, shuffleWithState } from './random';
 
 export function createRewindSnapshot(state: GameState): RewindSnapshot {
-  const { morningCheckpoint: _checkpoint, causalLocks: _locks, archivedTimelines: _archives, usedFreeProvider: _freeProvider, ...snapshot } = state;
+  const { morningCheckpoint: _checkpoint, causalLocks: _locks, archivedTimelines: _archives, usedFreeProvider: _freeProvider, aiFailureOccurred: _aiFailure, ...snapshot } = state;
   return structuredClone(snapshot);
 }
 
@@ -84,8 +84,14 @@ function createRound(input: RoundInput): GameState {
     mode: input.mode,
     automationMode: input.automationMode,
     usedFreeProvider: false,
+<<<<<<< HEAD
     humanPlayerId: input.humanPlayerId,
     seed: input.seed,
+=======
+    aiFailureOccurred: false,
+    humanPlayerId,
+    seed,
+>>>>>>> 156adb9 (改善 AI 决策失败恢复逻辑)
     rngState,
     day: 0,
     phase: 'first-night',

@@ -162,6 +162,7 @@ export function selectObservation(
     board: state.board,
     seed: state.seed,
     usedFreeProvider: state.usedFreeProvider,
+    aiFailureOccurred: state.aiFailureOccurred,
     day: state.day,
     phase: state.phase,
     viewerPlayerId,

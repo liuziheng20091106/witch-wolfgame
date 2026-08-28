@@ -145,7 +145,8 @@ function isModelOutputError(error: AiCommandError): boolean {
   return error.kind === 'empty'
     || error.kind === 'json'
     || error.kind === 'schema'
-    || error.kind === 'target';
+    || error.kind === 'target'
+    || error.kind === 'decision';
 }
 
 function buildRetryMessages<T extends SubmittedDecision>(
@@ -192,6 +193,7 @@ export async function requestDecision<T extends SubmittedDecision>(
   request: AiDecisionRequest<T>,
   config: AiProviderConfig,
   signal: AbortSignal,
+  validateDecision?: (decision: T) => void,
 ): Promise<T> {
   const profile = config.provider === 'custom' ? resolveAiProfile(config, request.pendingDecision) : null;
   const maxAttempts = retryLimit(config) + 1;
@@ -218,12 +220,14 @@ export async function requestDecision<T extends SubmittedDecision>(
         throw new AiCommandError('json', 'AI 内容不是合法 JSON 对象', { rawOutput: content });
       }
       try {
-        return parseDecision(request.pendingDecision, value) as T;
+        const decision = parseDecision(request.pendingDecision, value) as T;
+        validateDecision?.(decision);
+        return decision;
       } catch (error) {
         if (error instanceof AiCommandError) {
           throw new AiCommandError(error.kind, error.message, { status: error.status, rawOutput: content, remoteError: error.remoteError });
         }
-        throw error;
+        throw new AiCommandError('decision', error instanceof Error ? error.message : '游戏拒绝了 AI 决策', { rawOutput: content });
       }
     } catch (error) {
       const commandError = error instanceof AiCommandError

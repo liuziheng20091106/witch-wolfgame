@@ -104,6 +104,7 @@ const stateSchema = z.object({
   mode: z.enum(['spectator', 'player']),
   automationMode: z.enum(['remote', 'local']),
   usedFreeProvider: z.boolean().default(false),
+  aiFailureOccurred: z.boolean().default(false),
   humanPlayerId: playerIdSchema.nullable(),
   seed: z.number().int().min(0).max(0xffff_ffff),
   rngState: z.number().int().min(0).max(0xffff_ffff),

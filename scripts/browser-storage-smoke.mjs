@@ -78,6 +78,7 @@ const currentResult = loadGame();
 assert.equal(currentResult.ok, true);
 assert.notEqual(currentResult.value, null);
 assert.equal(currentResult.value.appVersion, APP_VERSION);
+assert.equal(currentResult.value.state.aiFailureOccurred, false);
 assert.equal(getSavedGameCompatibilityWarning(currentResult.value), null);
 
 const mismatched = { ...saved, appVersion: '0.0.0' };
@@ -103,7 +104,25 @@ const legacyResaved = saveGame(legacyResult.value.state, legacyResult.value.appV
 assert.equal(legacyResaved.appVersion, null);
 assert.match(getSavedGameCompatibilityWarning(legacyResaved), /未记录创建版本/);
 
+<<<<<<< HEAD
 const restartedGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58, playerCount: 6, selectedCharacterIds: [] });
+=======
+const legacyFailureState = structuredClone(saved);
+delete legacyFailureState.state.aiFailureOccurred;
+localStorage.setItem(GAME_KEY, JSON.stringify(legacyFailureState));
+const migratedFailureResult = loadGame();
+assert.equal(migratedFailureResult.ok, true);
+assert.equal(migratedFailureResult.value.state.aiFailureOccurred, false);
+
+const failedGame = structuredClone(game);
+failedGame.aiFailureOccurred = true;
+saveGame(failedGame, APP_VERSION);
+const failedGameResult = loadGame();
+assert.equal(failedGameResult.ok, true);
+assert.equal(failedGameResult.value.state.aiFailureOccurred, true);
+
+const restartedGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58 });
+>>>>>>> 156adb9 (改善 AI 决策失败恢复逻辑)
 assert.equal(restartedGame.gameId, game.gameId);
 const restartedSaved = saveGame(restartedGame, APP_VERSION);
 assert.equal(restartedSaved.appVersion, APP_VERSION);

@@ -560,6 +560,30 @@ assert.deepEqual(correctedTargetPrompt.options.retryCorrection, {
 });
 assert.deepEqual(validateGamePrompt(calls[1].body.messages), { ok: true }, '纠错重试提示必须通过后端契约校验');
 
+calls = installFetch([
+  chatResponse('{"targetPlayerId":1}'),
+  chatResponse('{"targetPlayerId":2}'),
+]);
+let reducerChecks = 0;
+const reducerCorrectedDecision = await requestDecision(
+  { ...request, sessionId: 'reducer-rejection-correction' },
+  { ...config, retryCount: 1 },
+  new AbortController().signal,
+  (decision) => {
+    reducerChecks += 1;
+    if (reducerChecks === 1) throw new Error(`状态已拒绝目标 ${decision.targetPlayerId}`);
+  },
+);
+assert.equal(reducerCorrectedDecision.targetPlayerId, 2);
+assert.equal(calls.length, 2, '游戏 reducer 拒绝决策后应按配置重试');
+const reducerCorrectedPrompt = JSON.parse(calls[1].body.messages[1].content);
+assert.deepEqual(reducerCorrectedPrompt.options.retryCorrection, {
+  previousAttempt: 1,
+  errorKind: 'decision',
+  message: '状态已拒绝目标 1',
+});
+assert.deepEqual(validateGamePrompt(calls[1].body.messages), { ok: true }, 'reducer 拒绝原因必须进入合法的纠错提示');
+
 const cancelled = new AbortController();
 cancelled.abort();
 calls = installFetch([]);

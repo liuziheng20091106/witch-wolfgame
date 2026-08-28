@@ -231,7 +231,16 @@ export function useGameController(): GameController {
     const actorObservation = pending.options.postGame === true
       ? selectObservation(game, { kind: 'spectator' })
       : selectObservation(game, { kind: 'player', playerId: pending.actorId });
-    void requestDecision({ observation: actorObservation, pendingDecision: pending, sessionId: sessionIdRef.current }, settings, controller.signal)
+    void requestDecision(
+      { observation: actorObservation, pendingDecision: pending, sessionId: sessionIdRef.current },
+      settings,
+      controller.signal,
+      (decision) => {
+        const current = gameRef.current;
+        if (!current || current.pendingDecision?.id !== pending.id) throw new Error('待处理决策已变化');
+        reduceGame(current, { type: 'submit-decision', pendingDecisionId: pending.id, actorId: pending.actorId, decision });
+      },
+    )
       .then((decision) => {
         if (disposed) return;
         const current = gameRef.current;
@@ -242,7 +251,7 @@ export function useGameController(): GameController {
       .catch((error: unknown) => {
         if (disposed || controller.signal.aborted) return;
         const commandError = error instanceof AiCommandError ? error : new AiCommandError('network', error instanceof Error ? error.message : '未知 AI 错误');
-        dispatch({ type: 'record-ai-error', message: commandError.message }, pending.id);
+        dispatch({ type: 'mark-ai-failure' }, pending.id);
         setAiError(commandError);
       })
       .finally(() => {

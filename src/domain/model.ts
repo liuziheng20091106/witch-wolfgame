@@ -120,7 +120,6 @@ export type TimelineEventKind =
   | 'role-exchange'
   | 'factor-recovered'
   | 'timeline-rewound'
-  | 'ai-error'
   | 'result'
   | 'post-game-speech';
 
@@ -242,6 +241,7 @@ export interface GameState {
   mode: GameMode;
   automationMode: AutomationMode;
   usedFreeProvider: boolean;
+  aiFailureOccurred: boolean;
   humanPlayerId: PlayerId | null;
   seed: number;
   rngState: number;
@@ -262,7 +262,7 @@ export interface GameState {
   causalLocks: string[];
   result: GameResult | null;
 }
-export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks' | 'archivedTimelines' | 'usedFreeProvider'>;
+export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks' | 'archivedTimelines' | 'usedFreeProvider' | 'aiFailureOccurred'>;
 
 export interface GameSetup {
   mode: GameMode;
@@ -278,7 +278,7 @@ export type GameEvent =
   | { type: 'set-automation'; automationMode: AutomationMode }
   | { type: 'set-rng-state'; rngState: number }
   | { type: 'mark-free-provider-used' }
-  | { type: 'record-ai-error'; message: string };
+  | { type: 'mark-ai-failure' };
 
 export interface GameCommand {
   type: 'decision';
@@ -304,6 +304,7 @@ export interface GameObservation {
   seed: number;
   roundNumber: number;
   usedFreeProvider: boolean;
+  aiFailureOccurred: boolean;
   day: number;
   phase: GamePhase;
   viewerPlayerId: PlayerId | null;

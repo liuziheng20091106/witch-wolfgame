@@ -84,7 +84,7 @@ export interface AiDecisionRequest<T extends SubmittedDecision = SubmittedDecisi
   resultType?: T;
 }
 
-export type AiCommandErrorKind = 'config' | 'http' | 'timeout' | 'network' | 'empty' | 'json' | 'schema' | 'target' | 'cancelled';
+export type AiCommandErrorKind = 'config' | 'http' | 'timeout' | 'network' | 'empty' | 'json' | 'schema' | 'target' | 'decision' | 'cancelled';
 
 export interface AiRemoteError {
   code: string;
@@ -128,7 +128,8 @@ export function isRetryableAiError(error: Pick<AiCommandError, 'kind' | 'status'
     || error.kind === 'empty'
     || error.kind === 'json'
     || error.kind === 'schema'
-    || error.kind === 'target';
+    || error.kind === 'target'
+    || error.kind === 'decision';
 }
 
 export const defaultAiConfig: FreeAiProviderConfig = {
