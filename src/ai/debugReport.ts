@@ -1,7 +1,7 @@
 import { APP_VERSION } from '../config/version';
 import type { GameObservation } from '../domain/model';
 import type { PromptMessage } from './prompts';
-import { FREE_PROVIDER_ENDPOINT, isRetryableAiError, type AiCommandError, type AiDecisionRequest, type AiProviderConfig } from './types';
+import { FREE_PROVIDER_ENDPOINT, isRetryableAiError, type AiCommandError, type AiDecisionRequest, type AiProviderConfig, type ResolvedAiProfile } from './types';
 
 export interface AiDebugReport {
   formatVersion: 2;
@@ -41,6 +41,7 @@ export interface AiDebugReport {
       apiKey: string;
       model: string | null;
       reasoningEffort: string | null;
+      profile: ResolvedAiProfile['kind'] | null;
       retryCount: number;
       jsonOutputMode: string | null;
     };
@@ -58,6 +59,7 @@ interface BuildAiDebugReportOptions {
   attempt: number;
   maxAttempts: number;
   jsonOutputRequested: boolean;
+  profile: ResolvedAiProfile | null;
   generatedAt?: Date;
 }
 
@@ -134,8 +136,9 @@ export function buildAiDebugReport(options: BuildAiDebugReportOptions): AiDebugR
           kind: config.provider,
           baseUrl: sanitizeAiBaseUrl(config.endpoint),
           apiKey: sanitizeApiKey(config.apiKey),
-          model: config.model,
-          reasoningEffort: config.reasoningEffort,
+          model: options.profile?.model ?? config.profiles.default.model,
+          reasoningEffort: options.profile?.reasoningEffort ?? config.profiles.default.reasoningEffort,
+          profile: options.profile?.kind ?? 'default',
           retryCount: config.retryCount,
           jsonOutputMode: config.jsonOutputMode,
         }
@@ -145,6 +148,7 @@ export function buildAiDebugReport(options: BuildAiDebugReportOptions): AiDebugR
           apiKey: '[not used by browser]',
           model: null,
           reasoningEffort: null,
+          profile: null,
           retryCount: config.retryCount,
           jsonOutputMode: null,
         },

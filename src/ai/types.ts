@@ -10,17 +10,70 @@ export interface FreeAiProviderConfig {
   retryCount: number;
 }
 
+export type AiProfileKind = 'default' | 'fast' | 'deep';
+
+export interface AiModelProfile {
+  model: string;
+  reasoningEffort: ReasoningEffort;
+}
+
+export interface AiModelProfileOverride {
+  model: string;
+  reasoningEffort: ReasoningEffort | null;
+}
+
+export interface AiModelProfiles {
+  default: AiModelProfile;
+  fast: AiModelProfileOverride;
+  deep: AiModelProfileOverride;
+}
+
+export interface ResolvedAiProfile extends AiModelProfile {
+  kind: AiProfileKind;
+}
 export interface CustomAiProviderConfig {
   provider: 'custom';
   endpoint: string;
   apiKey: string;
-  model: string;
-  reasoningEffort: ReasoningEffort;
+  profiles: AiModelProfiles;
   retryCount: number;
   jsonOutputMode: JsonOutputMode;
 }
 
 export type AiProviderConfig = FreeAiProviderConfig | CustomAiProviderConfig;
+
+export function classifyAiDecision(pending: PendingDecision): AiProfileKind {
+  if (pending.schemaKey === 'speech'
+    || pending.schemaKey === 'wolf-council'
+    || pending.schemaKey === 'liquid-control'
+    || pending.schemaKey === 'levitation'
+    || pending.schemaKey === 'voice-mimic'
+    || pending.kind === 'wolf-decision'
+    || pending.kind === 'witch-action'
+    || pending.kind === 'vote'
+    || pending.kind === 'runoff'
+    || pending.kind === 'tie-break') {
+    return 'deep';
+  }
+  if (pending.kind === 'seer-action'
+    || pending.kind === 'healing'
+    || pending.schemaKey === 'ignition'
+    || pending.schemaKey === 'optional-target') {
+    return 'fast';
+  }
+  return 'default';
+}
+
+export function resolveAiProfile(config: CustomAiProviderConfig, pending: PendingDecision): ResolvedAiProfile {
+  const kind = classifyAiDecision(pending);
+  if (kind === 'default') return { kind, ...config.profiles.default };
+  const override = config.profiles[kind];
+  return {
+    kind,
+    model: override.model.trim() || config.profiles.default.model,
+    reasoningEffort: override.reasoningEffort ?? config.profiles.default.reasoningEffort,
+  };
+}
 
 export const FREE_PROVIDER_ENDPOINT = import.meta.env.VITE_MAIN_BACKEND_ENDPOINT?.trim() || 'https://freeapi.majowolf.tkcloud.online/api/ai/chat/completions';
 
@@ -87,8 +140,11 @@ export const defaultCustomAiConfig: CustomAiProviderConfig = {
   provider: 'custom',
   endpoint: '',
   apiKey: '',
-  model: '',
-  reasoningEffort: 'low',
+  profiles: {
+    default: { model: '', reasoningEffort: 'low' },
+    fast: { model: '', reasoningEffort: 'none' },
+    deep: { model: '', reasoningEffort: 'high' },
+  },
   retryCount: 2,
   jsonOutputMode: 'auto',
 };

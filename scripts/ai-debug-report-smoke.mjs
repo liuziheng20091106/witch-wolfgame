@@ -92,8 +92,11 @@ const config = {
   provider: 'custom',
   endpoint,
   apiKey: secret,
-  model: 'debug-model',
-  reasoningEffort: 'high',
+  profiles: {
+    default: { model: 'debug-default-model', reasoningEffort: 'low' },
+    fast: { model: 'debug-fast-model', reasoningEffort: 'none' },
+    deep: { model: 'debug-deep-model', reasoningEffort: 'high' },
+  },
   retryCount: 2,
   jsonOutputMode: 'force',
 };
@@ -114,6 +117,7 @@ const report = buildAiDebugReport({
   attempt: 3,
   maxAttempts: 3,
   jsonOutputRequested: true,
+  profile: { kind: 'deep', model: config.profiles.deep.model, reasoningEffort: config.profiles.deep.reasoningEffort },
   generatedAt: new Date('2026-08-22T12:00:00.000Z'),
 });
 const text = formatAiDebugReport(report);
@@ -128,8 +132,9 @@ assert.deepEqual(report.request.promptMessages, messages);
 assert.equal(report.response.rawOutput, error.rawOutput);
 assert.deepEqual(report.error.remoteError, error.remoteError);
 assert.equal(report.error.retryable, true);
-assert.equal(report.request.provider.model, config.model);
-assert.equal(report.request.provider.reasoningEffort, config.reasoningEffort);
+assert.equal(report.request.provider.model, config.profiles.deep.model);
+assert.equal(report.request.provider.reasoningEffort, config.profiles.deep.reasoningEffort);
+assert.equal(report.request.provider.profile, 'deep');
 assert.equal(report.request.jsonOutputRequested, true);
 assert.equal(report.error.attempt, 3);
 assert.equal(report.error.maxAttempts, 3);
@@ -422,13 +427,49 @@ async function captureError(run) {
 }
 
 const freeConfig = { provider: 'free', retryCount: 2 };
+
+let calls = installFetch([chatResponse('{"targetPlayerId":1}')]);
+const fastPending = { ...pendingDecision, kind: 'seer-action', id: 'fast-profile' };
+const fastRequest = {
+  observation: { ...observation, phase: 'seer-action', pendingDecision: fastPending },
+  pendingDecision: fastPending,
+  sessionId: 'fast-profile',
+};
+const fastDecision = await requestDecision(fastRequest, { ...config, retryCount: 0 }, new AbortController().signal);
+assert.equal(fastDecision.targetPlayerId, 1);
+assert.equal(calls[0].body.model, config.profiles.fast.model);
+assert.equal(calls[0].body.reasoning_effort, config.profiles.fast.reasoningEffort);
+
+calls = installFetch([chatResponse('{"speech":"我会结合公开信息梳理票型。"}')]);
+const speechRequest = {
+  ...request,
+  observation: { ...observation, phase: 'speeches', pendingDecision: { ...pendingDecision, kind: 'speech', schemaKey: 'speech', candidates: [] } },
+  pendingDecision: { ...pendingDecision, kind: 'speech', schemaKey: 'speech', candidates: [] },
+  sessionId: 'deep-profile',
+};
+const deepDecision = await requestDecision(speechRequest, { ...config, retryCount: 0 }, new AbortController().signal);
+assert.match(deepDecision.speech, /公开信息/);
+assert.equal(calls[0].body.model, config.profiles.deep.model);
+assert.equal(calls[0].body.reasoning_effort, config.profiles.deep.reasoningEffort);
+
+const inheritedConfig = {
+  ...config,
+  profiles: {
+    ...config.profiles,
+    fast: { model: '', reasoningEffort: null },
+  },
+};
+calls = installFetch([chatResponse('{"targetPlayerId":1}')]);
+await requestDecision({ ...fastRequest, sessionId: 'inherited-fast-profile' }, inheritedConfig, new AbortController().signal);
+assert.equal(calls[0].body.model, config.profiles.default.model);
+assert.equal(calls[0].body.reasoning_effort, config.profiles.default.reasoningEffort);
 const invalidRemoteBody = {
   error: 'invalid_game_request',
   message: 'REMOTE_MESSAGE_MUST_NOT_REACH_UI',
   reason: 'action_schema',
   path: 'action.schema',
 };
-let calls = installFetch([chatResponse('{"speech":"复盘完成"}')]);
+calls = installFetch([chatResponse('{"speech":"复盘完成"}')]);
 const cjkPostGameDecision = await requestDecision(cjkPostGameRequest, { provider: 'free', retryCount: 0 }, new AbortController().signal);
 assert.equal(cjkPostGameDecision.speech, '复盘完成');
 assert.equal(calls.length, 1);

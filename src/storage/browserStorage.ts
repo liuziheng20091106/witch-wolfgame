@@ -45,6 +45,15 @@ export type StorageResult<T> =
 const playerIdSchema = z.custom<PlayerId>((value) => typeof value === 'number' && GAME_ENTITY_IDS.includes(value as PlayerId));
 const roleIdSchema = z.enum(ROLE_IDS);
 const skillIdSchema = z.enum(WITCH_SKILL_IDS);
+const reasoningEffortSchema = z.enum(['none', 'low', 'high', 'max']);
+const modelProfileSchema = z.strictObject({
+  model: z.string(),
+  reasoningEffort: reasoningEffortSchema,
+});
+const modelProfileOverrideSchema = z.strictObject({
+  model: z.string().default(''),
+  reasoningEffort: reasoningEffortSchema.nullable().default(null),
+});
 
 const freeSettingsSchema = z.object({
   provider: z.literal('free'),
@@ -54,17 +63,29 @@ const customSettingsSchema = z.object({
   provider: z.literal('custom'),
   endpoint: z.string(),
   apiKey: z.string(),
-  model: z.string(),
-  reasoningEffort: z.enum(['none', 'low', 'high', 'max']),
+  profiles: z.strictObject({
+    default: modelProfileSchema,
+    fast: modelProfileOverrideSchema,
+    deep: modelProfileOverrideSchema,
+  }),
   retryCount: z.number().int().min(0).max(5).default(2),
   jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
 });
 const settingsSchema = z.discriminatedUnion('provider', [freeSettingsSchema, customSettingsSchema]);
+const singleProfileSettingsSchema = z.object({
+  provider: z.literal('custom'),
+  endpoint: z.string(),
+  apiKey: z.string(),
+  model: z.string(),
+  reasoningEffort: reasoningEffortSchema,
+  retryCount: z.number().int().min(0).max(5).default(2),
+  jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
+});
 const legacySettingsSchema = z.object({
   endpoint: z.string(),
   apiKey: z.string(),
   model: z.string(),
-  reasoningEffort: z.enum(['none', 'low', 'high', 'max']),
+  reasoningEffort: reasoningEffortSchema,
 }).passthrough();
 const setupSchema = z.strictObject({
   mode: z.enum(['spectator', 'player']),
@@ -155,6 +176,24 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
   }
   const current = settingsSchema.safeParse(value);
   if (current.success) return { ok: true, value: current.data };
+  const singleProfile = singleProfileSettingsSchema.safeParse(value);
+  if (singleProfile.success) {
+    return {
+      ok: true,
+      value: {
+        provider: 'custom',
+        endpoint: singleProfile.data.endpoint,
+        apiKey: singleProfile.data.apiKey,
+        profiles: {
+          default: { model: singleProfile.data.model, reasoningEffort: singleProfile.data.reasoningEffort },
+          fast: { model: '', reasoningEffort: 'none' },
+          deep: { model: '', reasoningEffort: 'high' },
+        },
+        retryCount: singleProfile.data.retryCount,
+        jsonOutputMode: singleProfile.data.jsonOutputMode,
+      },
+    };
+  }
   const legacy = legacySettingsSchema.safeParse(value);
   if (legacy.success) {
     if (!legacy.data.endpoint.trim() || !legacy.data.apiKey.trim() || !legacy.data.model.trim()) {
@@ -166,8 +205,11 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
         provider: 'custom',
         endpoint: legacy.data.endpoint,
         apiKey: legacy.data.apiKey,
-        model: legacy.data.model,
-        reasoningEffort: legacy.data.reasoningEffort,
+        profiles: {
+          default: { model: legacy.data.model, reasoningEffort: legacy.data.reasoningEffort },
+          fast: { model: '', reasoningEffort: 'none' },
+          deep: { model: '', reasoningEffort: 'high' },
+        },
         retryCount: 2,
         jsonOutputMode: 'auto',
       },

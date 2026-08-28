@@ -8,14 +8,17 @@ const server = await createServer({ root, server: { middlewareMode: true }, appT
 
 let APP_VERSION;
 let GAME_KEY;
+let SETTINGS_KEY;
 let createGame;
 let getSavedGameCompatibilityWarning;
+let loadSettings;
 let loadGame;
 let saveGame;
+let saveSettings;
 try {
   ({ APP_VERSION } = await server.ssrLoadModule('/src/config/version.ts'));
   ({ createGame } = await server.ssrLoadModule('/src/domain/engine/createGame.ts'));
-  ({ GAME_KEY, getSavedGameCompatibilityWarning, loadGame, saveGame } = await server.ssrLoadModule('/src/storage/browserStorage.ts'));
+  ({ GAME_KEY, SETTINGS_KEY, getSavedGameCompatibilityWarning, loadGame, loadSettings, saveGame, saveSettings } = await server.ssrLoadModule('/src/storage/browserStorage.ts'));
 } finally {
   await server.close();
 }
@@ -34,7 +37,40 @@ globalThis.localStorage = {
   },
 };
 
-const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58, playerCount: 6, selectedCharacterIds: [] });
+const currentProfiles = {
+  provider: 'custom',
+  endpoint: 'https://example.com/v1/chat/completions',
+  apiKey: 'test-key',
+  profiles: {
+    default: { model: 'default-model', reasoningEffort: 'low' },
+    fast: { model: 'fast-model', reasoningEffort: 'none' },
+    deep: { model: 'deep-model', reasoningEffort: 'max' },
+  },
+  retryCount: 3,
+  jsonOutputMode: 'auto',
+};
+saveSettings(currentProfiles);
+assert.deepEqual(loadSettings(), { ok: true, value: currentProfiles });
+
+localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+  provider: 'custom',
+  endpoint: 'https://legacy.example.com/v1/chat/completions',
+  apiKey: 'legacy-key',
+  model: 'legacy-model',
+  reasoningEffort: 'low',
+  retryCount: 4,
+  jsonOutputMode: 'force',
+}));
+const migratedSettings = loadSettings();
+assert.equal(migratedSettings.ok, true);
+assert.equal(migratedSettings.value.profiles.default.model, 'legacy-model');
+assert.equal(migratedSettings.value.profiles.default.reasoningEffort, 'low');
+assert.equal(migratedSettings.value.profiles.fast.reasoningEffort, 'none');
+assert.equal(migratedSettings.value.profiles.deep.reasoningEffort, 'high');
+assert.equal(migratedSettings.value.retryCount, 4);
+assert.equal(migratedSettings.value.jsonOutputMode, 'force');
+
+const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58 });
 const saved = saveGame(game, APP_VERSION);
 assert.equal(saved.appVersion, APP_VERSION);
 assert.equal(getSavedGameCompatibilityWarning(saved), null);

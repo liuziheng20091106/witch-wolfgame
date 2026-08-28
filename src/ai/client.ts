@@ -12,8 +12,10 @@ import {
   type AiDecisionRequest,
   type AiProviderKind,
   type AiProviderConfig,
-  type AiRemoteError,
+  resolveAiProfile,
   type CustomAiProviderConfig,
+  type AiRemoteError,
+  type ResolvedAiProfile,
 } from './types';
 
 const responseSchema = z.object({
@@ -39,14 +41,15 @@ export function validateAiEndpoint(endpoint: string): void {
 
 function validateCustomConfig(config: CustomAiProviderConfig): void {
   validateAiEndpoint(config.endpoint);
-  if (!config.apiKey.trim() || !config.model.trim()) throw new AiCommandError('config', 'API Key 和模型不能为空');
+  if (!config.apiKey.trim() || !config.profiles.default.model.trim()) throw new AiCommandError('config', 'API Key 和默认模型不能为空');
 }
 
-function buildPayload(config: AiProviderConfig, messages: PromptMessage[], jsonOutput: boolean): Record<string, unknown> {
+function buildPayload(config: AiProviderConfig, messages: PromptMessage[], jsonOutput: boolean, profile: ResolvedAiProfile | null): Record<string, unknown> {
   if (config.provider === 'free') return buildFreeClientPayload(APP_VERSION, messages);
-  const payload: Record<string, unknown> = { model: config.model, messages };
+  if (profile === null) throw new AiCommandError('config', '缺少自定义模型档位');
+  const payload: Record<string, unknown> = { model: profile.model, messages };
   if (jsonOutput) payload.response_format = { type: 'json_object' };
-  payload.reasoning_effort = config.reasoningEffort;
+  payload.reasoning_effort = profile.reasoningEffort;
   return payload;
 }
 
@@ -71,6 +74,7 @@ async function requestContent(
   sessionId: string,
   signal: AbortSignal,
   jsonOutput: boolean,
+  profile: ResolvedAiProfile | null,
 ): Promise<string> {
   if (signal.aborted) throw new AiCommandError('cancelled', 'AI 请求已取消');
   if (config.provider === 'custom') validateCustomConfig(config);
@@ -90,7 +94,7 @@ async function requestContent(
     const response = await fetch(endpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify(buildPayload(config, messages, jsonOutput)),
+      body: JSON.stringify(buildPayload(config, messages, jsonOutput, profile)),
       signal: timeoutController.signal,
     });
     const responseText = await response.text();
@@ -174,12 +178,13 @@ function withDebugReport(
   attempt: number,
   maxAttempts: number,
   jsonOutputRequested: boolean,
+  profile: ResolvedAiProfile | null,
 ): AiCommandError {
   return new AiCommandError(error.kind, error.message, {
     status: error.status,
     rawOutput: error.rawOutput,
     remoteError: error.remoteError,
-    debugReport: buildAiDebugReport({ request, config, messages, error, attempt, maxAttempts, jsonOutputRequested }),
+    debugReport: buildAiDebugReport({ request, config, messages, error, attempt, maxAttempts, jsonOutputRequested, profile }),
   });
 }
 
@@ -188,6 +193,7 @@ export async function requestDecision<T extends SubmittedDecision>(
   config: AiProviderConfig,
   signal: AbortSignal,
 ): Promise<T> {
+  const profile = config.provider === 'custom' ? resolveAiProfile(config, request.pendingDecision) : null;
   const maxAttempts = retryLimit(config) + 1;
   let jsonOutput = config.provider === 'custom' && config.jsonOutputMode !== 'disabled';
   if (config.provider === 'custom' && config.jsonOutputMode === 'auto' && sessionJsonFallback.has(request.sessionId)) jsonOutput = false;
@@ -198,13 +204,13 @@ export async function requestDecision<T extends SubmittedDecision>(
     messages = buildDecisionPrompt(request, config.provider);
   } catch (error) {
     const commandError = new AiCommandError('config', error instanceof Error ? error.message : 'AI 提示词构建失败');
-    throw withDebugReport(commandError, request, config, [], 0, maxAttempts, jsonOutput);
+    throw withDebugReport(commandError, request, config, [], 0, maxAttempts, jsonOutput, profile);
   }
 
   let lastError: AiCommandError | null = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const content = await requestContent(messages, config, request.sessionId, signal, jsonOutput);
+      const content = await requestContent(messages, config, request.sessionId, signal, jsonOutput, profile);
       let value: unknown;
       try {
         value = JSON.parse(content);
@@ -235,10 +241,10 @@ export async function requestDecision<T extends SubmittedDecision>(
         continue;
       }
       if (!hasNextAttempt || !isRetryableAiError(commandError)) {
-        throw withDebugReport(commandError, request, config, messages, attempt + 1, maxAttempts, jsonOutput);
+        throw withDebugReport(commandError, request, config, messages, attempt + 1, maxAttempts, jsonOutput, profile);
       }
     }
   }
   const fallbackError = lastError ?? new AiCommandError('network', 'AI 请求失败');
-  throw withDebugReport(fallbackError, request, config, messages, maxAttempts, maxAttempts, jsonOutput);
+  throw withDebugReport(fallbackError, request, config, messages, maxAttempts, maxAttempts, jsonOutput, profile);
 }

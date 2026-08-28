@@ -28,7 +28,7 @@ interface SetupViewProps {
 
 function hasUsableSettings(settings: AiProviderConfig): boolean {
   if (settings.provider === 'free') return true;
-  if (!settings.endpoint.trim() || !settings.apiKey.trim() || !settings.model.trim()) return false;
+  if (!settings.endpoint.trim() || !settings.apiKey.trim() || !settings.profiles.default.model.trim()) return false;
   try {
     const url = new URL(settings.endpoint);
     return url.pathname.endsWith('/chat/completions')
@@ -152,7 +152,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
         <div className={styles.aiStatus}>
           <div className={styles.aiSummary}>
             <span className={styles.aiIcon}><Bot /></span>
-            <div className={styles.aiCopy}><strong>{settings.provider === 'free' ? '免费服务' : '自定义服务'}</strong><span>{settings.provider === 'free' ? '公益服务，不保证稳定可用' : settings.model || '请填写模型'}</span></div>
+            <div className={styles.aiCopy}><strong>{settings.provider === 'free' ? '免费服务' : '自定义服务'}</strong><span>{settings.provider === 'free' ? '公益服务，不保证稳定可用' : settings.profiles.default.model || '请填写默认模型'}</span></div>
           </div>
           <button type="button" onClick={onOpenSettings}>{settings.provider === 'free' ? '服务详情' : '打开设置'}<ChevronRight /></button>
         </div>
