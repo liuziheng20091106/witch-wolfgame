@@ -94,7 +94,7 @@ try {
 
   console.log('=== 狼人内部频道回归 ===');
 
-  let spectator = prepareCouncil(createGame({ mode: 'spectator', humanCharacterId: null, seed: 72 }));
+  let spectator = prepareCouncil(createGame({ mode: 'spectator', humanCharacterId: null, seed: 72, playerCount: 6, selectedCharacterIds: [] }));
   const spectatorRealWolves = livingWolves(spectator).filter((playerId) => playerId !== 99);
   assert.equal(spectatorRealWolves.length, 2);
   const firstPendingState = advance(spectator);
@@ -200,7 +200,7 @@ try {
   let exchangedOwnerId = null;
   let exchangedTargetId = null;
   for (let seed = 1; seed < 800; seed += 1) {
-    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed });
+    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed, playerCount: 6, selectedCharacterIds: [] });
     const exchangeSkill = candidate.skillInstances.find((skill) => skill.definitionId === 'soul-exchange');
     if (exchangeSkill === undefined || getRoleAssignment(candidate, exchangeSkill.ownerPlayerId).roleId === 'wolf') {
       continue;
@@ -240,7 +240,7 @@ try {
   console.log('=== 人类狼人固定拍板 ===');
   let humanGame = null;
   for (let seed = 1; seed < 500; seed += 1) {
-    const candidate = createGame({ mode: 'player', humanCharacterId: 'soul-0', seed });
+    const candidate = createGame({ mode: 'player', humanCharacterId: 'soul-0', seed, playerCount: 6, selectedCharacterIds: [] });
     if (candidate.humanPlayerId !== null && getRoleAssignment(candidate, candidate.humanPlayerId).roleId === 'wolf') {
       humanGame = candidate;
       break;
@@ -256,7 +256,7 @@ try {
   assert.ok(humanCouncil.actors.includes(humanGame.humanPlayerId), '人类决策狼也必须先完成狼议发言');
 
   console.log('=== 单狼与造物边界 ===');
-  let singleWolf = prepareCouncil(createGame({ mode: 'spectator', humanCharacterId: null, seed: 91 }));
+  let singleWolf = prepareCouncil(createGame({ mode: 'spectator', humanCharacterId: null, seed: 91, playerCount: 6, selectedCharacterIds: [] }));
   const singleWolfIds = livingWolves(singleWolf);
   assert.equal(singleWolfIds.length, 2);
   const removedWolf = singleWolf.players.find((player) => player.id === singleWolfIds[1]);
@@ -270,7 +270,7 @@ try {
   assert.deepEqual(singleWolf.pendingDecision.options.wolfCouncilMessages, []);
   assert.deepEqual(validateGamePrompt(promptForActor(singleWolf)), { ok: true }, '单狼显式空记录必须通过后端契约');
 
-  let creatureGame = prepareCouncil(createGame({ mode: 'spectator', humanCharacterId: null, seed: 113 }));
+  let creatureGame = prepareCouncil(createGame({ mode: 'spectator', humanCharacterId: null, seed: 113, playerCount: 6, selectedCharacterIds: [] }));
   const creatureOwnerId = livingWolves(creatureGame)[0];
   const creatureOwner = creatureGame.players.find((player) => player.id === creatureOwnerId);
   assert.notEqual(creatureOwner, undefined);

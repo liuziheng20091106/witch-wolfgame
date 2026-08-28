@@ -265,6 +265,8 @@ export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks'
 export interface GameSetup {
   mode: GameMode;
   humanCharacterId: CharacterId | null;
+  playerCount: number;
+  selectedCharacterIds: CharacterId[];
   seed: number;
 }
 

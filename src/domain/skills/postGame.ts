@@ -16,10 +16,9 @@ function nameOf(state: GameState, playerId: PlayerId): string {
 }
 
 /**
- * 赛后复盘（post-game）：对局结束（ended）后，全员按座位编号 0→5 依次发表赛后发言。
+ * 赛后复盘（post-game）：对局结束后，全员按当前座位顺序依次发表赛后发言。
  * - 造物（id 99）不参与赛后发言
- * - 每个发言者可见：① 全量对局发言（含遗言）② 全部私密行动 ③ 前面玩家的赛后发言
- * - 决策复用 kind:'speech' + schemaKey:'speech'，options.postGame = true 标记区分
+ * - 每个发言者可见：全量发言、全部私密行动与此前赛后发言
  */
 
 /** 构造赛后发言决策（无候选、可留空）。 */
@@ -50,25 +49,8 @@ export function getNextPostGameDecision(state: GameState): PendingDecision | nul
       .filter((value): value is PlayerId => value != null),
   );
 
-  // 遍历当前玩家列表（按座位或玩家数组顺序），避免硬编码玩家数量
-  if (Array.isArray((state as any).players) && (state as any).players.length > 0) {
-    for (const p of (state as any).players) {
-      const id = p.id as PlayerId;
-      if (id === 99 || said.has(id)) {
-        continue;
-      }
-      return makePostGameDecision(state, id);
-    }
-    return null;
-  }
-
-  // 回退兼容：若没有 players 列表，保留原先 0..5 的循环（向后兼容）
-  for (let playerId = 0; playerId < 6; playerId += 1) {
-    const id = playerId as PlayerId;
-    if (id === 99 || said.has(id)) {
-      continue;
-    }
-    return makePostGameDecision(state, id);
+  for (const player of state.players) {
+    if (!said.has(player.id)) return makePostGameDecision(state, player.id);
   }
   return null;
 }
@@ -100,10 +82,7 @@ export function applyPostGameSpeech(state: GameState, pending: PendingDecision, 
   // 空发言使用不含作者名的固定占位文本，避免时间线重复显示作者、或被 AI 复盘误认为本人发言。
   const text = speech.length > 0 ? speech : '（没有留下赛后感想）';
 
-  // 目标设为全体玩家以明确“全员可见”语义；若 state.players 不存在则保留空数组
-  const allPlayerIds: PlayerId[] = Array.isArray((state as any).players)
-    ? (state as any).players.map((p: any) => p.id as PlayerId)
-    : [];
+  const allPlayerIds = state.players.map((player) => player.id);
 
   addPublicEvent(state, 'post-game-speech', text, {
     actorPlayerId: pending.actorId,
@@ -125,7 +104,7 @@ export function buildPostGameContext(observation: GameObservation): string {
     if (playerId === null) return '系统';
     const player = observation.players.find((entry) => entry.id === playerId);
     if (player) return player.name;
-    return `${playerId >= 0 && playerId < 6 ? playerId + 1 : playerId}号`;
+    return `${playerId === 99 ? '造物' : playerId + 1}号`;
   };
   const namesOfIds = (playerIds: readonly PlayerId[]): string => playerIds.length > 0
     ? playerIds.map(nameOfId).join('、')

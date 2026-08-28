@@ -48,7 +48,7 @@ function check(label, condition, detail = '') {
 }
 
 function prepareVotingGame(seed, keepIgnitionReady) {
-  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
   game.phase = 'voting';
   game.pendingDecision = null;
   game.currentVotes = [];

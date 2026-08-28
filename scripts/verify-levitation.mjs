@@ -58,7 +58,7 @@ function findLevitationOwner(game) {
 
 function createGameWithLevitation(seedStart) {
   for (let seed = seedStart; seed < seedStart + 300; seed += 1) {
-    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     if (findLevitationOwner(game) >= 0) {
       return game;
     }
@@ -69,7 +69,7 @@ function createGameWithLevitation(seedStart) {
 // 找一个"漂浮持有者非指定角色"的局（确保免疫对象与漂浮者是不同人）
 function createGameWithLevitationAndRole(seedStart, roleId) {
   for (let seed = seedStart; seed < seedStart + 500; seed += 1) {
-    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const owner = findLevitationOwner(game);
     if (owner >= 0) {
       const roleOwner = game.players.find((p) => roleOf(game, p.id) === roleId);
@@ -203,7 +203,7 @@ console.log('=== 4. 灵魂交换免疫 ===');
 {
   let game = null;
   for (let seed = 3; seed < 503; seed += 1) {
-    const g = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const g = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const hasLev = g.skillInstances.some((s) => s.definitionId === 'levitation');
     const hasExchange = g.skillInstances.some((s) => s.definitionId === 'soul-exchange');
     if (hasLev && hasExchange) {
@@ -239,7 +239,7 @@ console.log('=== 5. 魔女杀手不抵挡 ===');
 {
   let game = null;
   for (let seed = 5; seed < 505; seed += 1) {
-    const g = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const g = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const hasLev = g.skillInstances.some((s) => s.definitionId === 'levitation');
     const hasKiller = g.skillInstances.some((s) => s.definitionId === 'witch-killer');
     if (hasLev && hasKiller) {

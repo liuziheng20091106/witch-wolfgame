@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BOARD_DESCRIPTION, CHARACTER_IDS, GAME_ENTITY_IDS, GAME_PHASES, ROLE_IDS, WITCH_SKILL_IDS } from '../../shared/gamePromptContract.js';
+import { BOARD_DESCRIPTION, CHARACTER_IDS, GAME_ENTITY_IDS, GAME_PHASES, MAX_PLAYERS, MIN_PLAYERS, ROLE_IDS, WITCH_SKILL_IDS } from '../../shared/gamePromptContract.js';
 import { APP_VERSION } from '../config/version';
 import type { CharacterId, GameMode, GameState, PlayerId, RewindSnapshot } from '../domain/model';
 import type { AiProviderConfig } from '../ai/types';
@@ -25,6 +25,8 @@ export const defaultThemeSettings: ThemeSettings = {
 export interface SetupPreferences {
   mode: GameMode;
   humanCharacterId: CharacterId | null;
+  playerCount: number;
+  selectedCharacterIds: CharacterId[];
   seed: number;
   randomSeed: boolean;
 }
@@ -67,6 +69,8 @@ const legacySettingsSchema = z.object({
 const setupSchema = z.strictObject({
   mode: z.enum(['spectator', 'player']),
   humanCharacterId: z.enum(CHARACTER_IDS).nullable(),
+  playerCount: z.number().int().min(MIN_PLAYERS).max(MAX_PLAYERS).default(MIN_PLAYERS),
+  selectedCharacterIds: z.array(z.enum(CHARACTER_IDS)).max(MAX_PLAYERS).default([]),
   seed: z.number().int().min(0).max(0xffff_ffff),
   randomSeed: z.boolean().default(true),
 });
@@ -88,15 +92,15 @@ const stateSchema = z.object({
     roleAssignmentId: z.string(),
     skillInstanceId: z.string().nullable(),
     alive: z.boolean(),
-  })).length(6),
+  })).min(MIN_PLAYERS).max(MAX_PLAYERS),
   roleAssignments: z.array(z.object({
     id: z.string(), ownerPlayerId: playerIdSchema, roleId: roleIdSchema,
     resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
-  })).min(6),
+  })).min(MIN_PLAYERS).max(MAX_PLAYERS),
   skillInstances: z.array(z.object({
     id: z.string(), definitionId: skillIdSchema, ownerPlayerId: playerIdSchema,
     status: z.enum(['ready', 'active', 'exhausted']), remainingUses: z.number().nullable(), data: z.record(z.string(), z.unknown()),
-  })).min(6),
+  })).min(MIN_PLAYERS).max(MAX_PLAYERS),
   knowledgeByPlayer: z.record(z.string(), z.array(z.unknown())),
   creatures: z.array(z.object({
     id: playerIdSchema,
@@ -106,7 +110,7 @@ const stateSchema = z.object({
     alive: z.boolean(),
     resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
   })).default([]),
-  speechOrder: z.array(playerIdSchema).length(6),
+  speechOrder: z.array(playerIdSchema).min(MIN_PLAYERS).max(MAX_PLAYERS),
   publicEvents: z.array(z.unknown()),
   privateEvents: z.array(z.unknown()),
   archivedTimelines: z.array(z.unknown()),

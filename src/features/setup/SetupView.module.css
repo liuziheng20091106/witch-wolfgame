@@ -62,8 +62,8 @@
   position: relative;
   width: min(1180px, calc(100% - 36px));
   display: grid;
-  grid-template-columns: minmax(260px, .95fr) minmax(360px, 1.2fr) minmax(180px, .55fr);
-  gap: 28px;
+  grid-template-columns: minmax(200px, .75fr) minmax(320px, 1.25fr) minmax(150px, .45fr) minmax(150px, .5fr);
+  gap: 26px;
   align-items: end;
   margin: 42px auto 0;
   padding: 28px 32px 32px;
@@ -102,9 +102,58 @@
   width: 20px;
 }
 
-.seedField { display: grid; gap: 7px; color: var(--muted); font-family: var(--sans); font-size: 11px; font-weight: 900; letter-spacing: .05em; }
-.seedField input { width: 100%; min-height: 50px; padding: 8px 12px; border: 1px solid var(--line-strong); background: var(--paper); color: var(--ink); box-sizing: border-box; }
-.seedField input::placeholder { color: var(--muted); opacity: .75; }
+.countField {
+  display: grid;
+  gap: 7px;
+  color: var(--paper-dim);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.countField div {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  border: 1px solid rgb(255 255 255 / 35%);
+}
+
+.countField button {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: white;
+}
+
+.countField button:disabled { opacity: .35; }
+.countField svg { width: 17px; }
+.countField strong { text-align: center; color: white; font-size: 20px; }
+
+.seedField {
+  display: grid;
+  gap: 7px;
+  color: var(--paper-dim);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.seedField input {
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid rgb(255 255 255 / 35%);
+  background: transparent;
+  color: white;
+}
+
+.seedField input::placeholder {
+  color: var(--paper-dim);
+  opacity: 0.8;
+}
 
 .seedControls {
   display: grid;
@@ -154,8 +203,15 @@
 .sectionHeading p { max-width: 520px; margin: 0; color: var(--muted); font-family: var(--sans); font-size: 13px; line-height: 1.55; text-align: right; }
 .characterGrid { display: grid; grid-template-columns: repeat(7, minmax(110px, 1fr)); gap: 12px; }
 
-.character,
-.selectedCharacter {
+.characterCard {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  border: 1px solid var(--line);
+  background: var(--paper-bright);
+}
+
+.characterToggle {
   position: relative;
   min-width: 0;
   min-height: 230px;
@@ -225,6 +281,22 @@
 
 .check svg {
   width: 17px;
+}
+
+.humanSeat {
+  min-height: 36px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: var(--intel-soft);
+  color: var(--intel-dark);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.rosterError {
+  margin: 14px 0 0;
+  color: var(--verdict-dark);
+  font-weight: 800;
 }
 
 .launchBand {

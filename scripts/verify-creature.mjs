@@ -61,7 +61,7 @@ function findLiquidOwner(game) {
 
 function createGameWithLiquid(seedStart) {
   for (let seed = seedStart; seed < seedStart + 400; seed += 1) {
-    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     if (findLiquidOwner(game) >= 0) {
       return game;
     }
@@ -72,7 +72,7 @@ function createGameWithLiquid(seedStart) {
 // 找一个诺亚职业为指定角色的局
 function createGameWithLiquidRole(seedStart, roleId) {
   for (let seed = seedStart; seed < seedStart + 600; seed += 1) {
-    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const owner = findLiquidOwner(game);
     if (owner >= 0 && getRoleAssignment(game, owner).roleId === roleId) {
       return game;
@@ -111,7 +111,7 @@ function driveCreature(game, pending, decision) {
 
 function createCreatureWithRole(seedStart, roleId) {
   for (let seed = seedStart; seed < seedStart + 800; seed += 1) {
-    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const ownerId = findLiquidOwner(game);
     if (ownerId < 0 || getRoleAssignment(game, ownerId).roleId !== roleId) continue;
     const advanced = advanceToLiquid(game);
@@ -258,7 +258,7 @@ console.log('=== 6. 存档往返（含造物）===');
 // ===== 7. 旧回溯检查点迁移 =====
 console.log('=== 7. 旧回溯检查点迁移 ===');
 {
-  const legacyGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 1001 >>> 0 });
+  const legacyGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 1001 >>> 0, playerCount: 6, selectedCharacterIds: [] });
   delete legacyGame.creatures;
   delete legacyGame.knowledgeByPlayer[99];
   delete legacyGame.morningCheckpoint.creatures;

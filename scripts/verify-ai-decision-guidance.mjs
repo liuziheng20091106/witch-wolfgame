@@ -32,7 +32,7 @@ try {
 
 function gameWithSkill(definitionId) {
   for (let seed = 1; seed <= 500; seed += 1) {
-    const state = createGame({ mode: 'spectator', humanCharacterId: null, seed });
+    const state = createGame({ mode: 'spectator', humanCharacterId: null, seed, playerCount: 6, selectedCharacterIds: [] });
     if (state.skillInstances.some((skill) => skill.definitionId === definitionId)) {
       return state;
     }
@@ -49,7 +49,7 @@ function promptForPending(state, pending) {
 
 console.log('=== 白天发言防复读 ===');
 {
-  const state = createGame({ mode: 'spectator', humanCharacterId: null, seed: 17 });
+  const state = createGame({ mode: 'spectator', humanCharacterId: null, seed: 17, playerCount: 6, selectedCharacterIds: [] });
   state.day = 1;
   state.phase = 'speeches';
   state.pendingDecision = null;
@@ -129,7 +129,7 @@ console.log('=== 狼人治愈本队狼刀 ===');
 
 console.log('=== 用药同阵营伤害提示 ===');
 {
-  const state = createGame({ mode: 'spectator', humanCharacterId: null, seed: 29 });
+  const state = createGame({ mode: 'spectator', humanCharacterId: null, seed: 29, playerCount: 6, selectedCharacterIds: [] });
   state.day = 1;
   state.phase = 'witch-action';
   state.pendingDecision = null;

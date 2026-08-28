@@ -18,6 +18,7 @@
     "test:roleplay": "node scripts/roleplay-resource-smoke.mjs",
     "test:wolf-council": "node scripts/verify-wolf-council.mjs",
     "test:ai-guidance": "node scripts/verify-ai-decision-guidance.mjs",
+    "test:roster": "node scripts/configurable-roster-smoke.mjs",
     "test:voting": "node scripts/verify-voting.mjs",
     "sim": "node scripts/monte-carlo.mjs"
   },

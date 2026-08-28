@@ -13,9 +13,10 @@ interface PlayerRosterProps {
 
 export function PlayerRoster({ observation, currentActorId, onSelect }: PlayerRosterProps) {
   const hasCreature = observation.players.some((player) => isCreatureId(player.id));
+  const seatCount = observation.players.filter((player) => !isCreatureId(player.id)).length;
   return <section className={styles.roster} aria-labelledby="roster-title">
-    <header><span>{hasCreature ? 'CAST / 06 + 01' : 'CAST / 06'}</span><h2 id="roster-title">{hasCreature ? '出庭席位 / 造物' : '出庭席位'}</h2></header>
-    <div className={`${styles.list} ${hasCreature ? styles.listWithCreature : ''}`}>
+    <header><span>CAST / {String(seatCount).padStart(2, '0')}{hasCreature ? ' + 01' : ''}</span><h2 id="roster-title">{hasCreature ? '出庭席位 / 造物' : '出庭席位'}</h2></header>
+    <div className={`${styles.list} ${seatCount > 8 ? styles.largeList : ''}`}>
       {observation.players.map((player) => <button key={player.id} type="button" className={`${styles.player} ${!player.alive ? styles.dead : ''} ${currentActorId === player.id ? styles.current : ''}`} onClick={() => onSelect(player.id)}>
         <span className={styles.number}>{isCreatureId(player.id) ? '造物' : player.id + 1}</span>
         <img src={player.avatarUrl} alt="" />

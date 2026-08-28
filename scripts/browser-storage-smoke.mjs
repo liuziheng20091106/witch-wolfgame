@@ -34,7 +34,7 @@ globalThis.localStorage = {
   },
 };
 
-const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58 });
+const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58, playerCount: 6, selectedCharacterIds: [] });
 const saved = saveGame(game, APP_VERSION);
 assert.equal(saved.appVersion, APP_VERSION);
 assert.equal(getSavedGameCompatibilityWarning(saved), null);
@@ -67,7 +67,7 @@ const legacyResaved = saveGame(legacyResult.value.state, legacyResult.value.appV
 assert.equal(legacyResaved.appVersion, null);
 assert.match(getSavedGameCompatibilityWarning(legacyResaved), /未记录创建版本/);
 
-const restartedGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58 });
+const restartedGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58, playerCount: 6, selectedCharacterIds: [] });
 assert.equal(restartedGame.gameId, game.gameId);
 const restartedSaved = saveGame(restartedGame, APP_VERSION);
 assert.equal(restartedSaved.appVersion, APP_VERSION);

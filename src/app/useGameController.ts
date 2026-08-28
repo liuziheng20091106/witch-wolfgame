@@ -84,7 +84,7 @@ function readInitialBrowserState(): InitialBrowserState {
   return {
     settings: settingsResult.ok && settingsResult.value ? settingsResult.value : defaultAiConfig,
     theme: themeResult.ok && themeResult.value ? themeResult.value : defaultThemeSettings,
-    setup: setupResult.ok && setupResult.value ? setupResult.value : { mode: 'spectator', humanCharacterId: null, seed: 1, randomSeed: true },
+    setup: setupResult.ok && setupResult.value ? setupResult.value : { mode: 'spectator', humanCharacterId: null, playerCount: 6, selectedCharacterIds: [], seed: 1, randomSeed: true },
     savedGame: gameResult.ok ? gameResult.value : null,
     history: historyResult.ok && historyResult.value ? historyResult.value : [],
     historyError: historyResult.ok ? null : historyResult.error,
