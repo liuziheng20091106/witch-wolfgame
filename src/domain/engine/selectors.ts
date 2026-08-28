@@ -156,6 +156,7 @@ export function selectObservation(
 
   return {
     gameId: state.gameId,
+    roundNumber: state.roundNumber,
     mode: state.mode,
     automationMode: state.automationMode,
     board: state.board,

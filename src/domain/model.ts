@@ -236,6 +236,8 @@ export interface GameResult {
 export interface GameState {
   schemaVersion: 1;
   gameId: string;
+  seriesId: string;
+  roundNumber: number;
   board: string;
   mode: GameMode;
   automationMode: AutomationMode;
@@ -300,6 +302,7 @@ export interface GameObservation {
   automationMode: AutomationMode;
   board: string;
   seed: number;
+  roundNumber: number;
   usedFreeProvider: boolean;
   day: number;
   phase: GamePhase;

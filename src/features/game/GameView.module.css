@@ -159,7 +159,7 @@
   bottom: 22px;
   width: min(680px, calc(100% - 32px));
   display: grid;
-  grid-template-columns: 54px 1fr auto;
+  grid-template-columns: 54px 1fr minmax(190px, auto);
   gap: 16px;
   align-items: center;
   padding: 17px 20px;
@@ -213,6 +213,22 @@
 .result p {
   margin: 0;
   color: var(--paper-dim);
+}
+
+.resultActions {
+  display: grid;
+  gap: 8px;
+}
+
+.resultActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.resultActions svg {
+  width: 17px;
 }
 
 .result button {
@@ -602,8 +618,12 @@
     font-size: 19px;
   }
 
-  .result button {
+  .resultActions {
     grid-column: 1 / -1;
+  }
+
+  .resultActions button {
+    width: 100%;
   }
 
   .resultWithSupport {

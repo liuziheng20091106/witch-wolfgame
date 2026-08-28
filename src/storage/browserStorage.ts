@@ -77,6 +77,8 @@ const setupSchema = z.strictObject({
 const stateSchema = z.object({
   schemaVersion: z.literal(1),
   gameId: z.string().min(1),
+  seriesId: z.string().min(1).optional(),
+  roundNumber: z.number().int().min(1).default(1),
   board: z.string().default(BOARD_DESCRIPTION),
   mode: z.enum(['spectator', 'player']),
   automationMode: z.enum(['remote', 'local']),
@@ -217,7 +219,12 @@ export function loadGame(): StorageResult<SavedGameEnvelope> {
   if (!result.ok || result.value === null) return result as StorageResult<SavedGameEnvelope>;
   const envelope = result.value as unknown as SavedGameEnvelope;
   migrateCreatureFields(envelope.state);
+  envelope.state.seriesId ??= envelope.state.gameId;
   if (envelope.state.morningCheckpoint) migrateCreatureFields(envelope.state.morningCheckpoint);
+  if (envelope.state.morningCheckpoint) {
+    envelope.state.morningCheckpoint.seriesId ??= envelope.state.seriesId;
+    envelope.state.morningCheckpoint.roundNumber ??= envelope.state.roundNumber;
+  }
   return { ok: true, value: envelope };
 }
 

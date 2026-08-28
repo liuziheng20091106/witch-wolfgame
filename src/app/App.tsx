@@ -72,6 +72,7 @@ export function App() {
       onSettings={() => controller.setSettingsOpen(true)}
       onPaused={controller.setPaused}
       onRestart={controller.startNewGame}
+      onContinueRound={controller.continueWithNewRoles}
       onExit={controller.returnToSetup}
     /></Suspense>}
     {controller.settingsOpen && <Suspense fallback={null}><LazyAiSettingsDrawer

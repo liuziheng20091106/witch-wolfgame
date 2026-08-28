@@ -3,7 +3,7 @@ import { fallbackDecision } from '../ai/fallback';
 import { requestDecision } from '../ai/client';
 import { AiCommandError, defaultAiConfig, type AiProviderConfig } from '../ai/types';
 import { APP_VERSION } from '../config/version';
-import { createGame } from '../domain/engine/createGame';
+import { continueGameWithNewRoles, createGame } from '../domain/engine/createGame';
 import { reduceGame } from '../domain/engine/reducer';
 import { selectObservation } from '../domain/engine/selectors';
 import { postGameDone } from '../domain/skills/postGame';
@@ -52,6 +52,7 @@ export interface GameController {
   updateSetup(next: SetupPreferences): void;
   saveAiSettings(next: AiProviderConfig, nextTheme: ThemeSettings): void;
   startNewGame(): void;
+  continueWithNewRoles(): void;
   continueSavedGame(): void;
   returnToSetup(): void;
   discardSavedGame(): void;
@@ -291,6 +292,22 @@ export function useGameController(): GameController {
     beginGame(setup.randomSeed ? rollSeed() : setup.seed);
   }, [beginGame, setup]);
 
+  const continueWithNewRoles = useCallback(() => {
+    const current = gameRef.current;
+    if (!current) return;
+    try {
+      const next = continueGameWithNewRoles(current);
+      savedGameVersionRef.current = APP_VERSION;
+      commit(next);
+      setAiError(null);
+      setDecisionError(null);
+      setAwaitingRetry(false);
+      setPaused(false);
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : '无法继续下一轮审判');
+    }
+  }, [commit]);
+
   const continueSavedGame = useCallback(() => {
     if (!savedGame) return;
     const restored = structuredClone(savedGame.state);
@@ -357,7 +374,7 @@ export function useGameController(): GameController {
   return {
     view, game, observation, savedGame, history, historyError, settings, theme, setup, storageError, aiError, decisionError,
     awaitingRetry, thinking, paused, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
-    startNewGame, continueSavedGame, returnToSetup, discardSavedGame, clearHistory, submitHumanDecision,
+    startNewGame, continueWithNewRoles, continueSavedGame, returnToSetup, discardSavedGame, clearHistory, submitHumanDecision,
     retryAi, useLocalFallback, setPaused,
   };
 }
