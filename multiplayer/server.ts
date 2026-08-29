@@ -288,6 +288,10 @@ function scheduleDisconnectTakeover(room: Room, participant: Participant): void 
     const driver = room.drivers[participant.playerId];
     if (driver?.kind !== 'human' || driver.participantId !== participant.participantId) return;
     room.drivers[participant.playerId] = { kind: 'ai' };
+    if (room.hostParticipantId === participant.participantId) {
+      const nextHost = room.participants.find((candidate) => candidate.connected && candidate.participantId !== participant.participantId);
+      if (nextHost) room.hostParticipantId = nextHost.participantId;
+    }
     room.updatedAt = Date.now();
     broadcast(room);
     void persistRooms();

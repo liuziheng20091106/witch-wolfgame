@@ -103,6 +103,25 @@ try {
   const duplicateError = await duplicate.next((message) => message.type === 'error', '重复角色拒绝');
   assert.match(duplicateError.message, /角色已被选择/);
   duplicate.socket.close();
+  const transferHost = client();
+  await transferHost.open();
+  transferHost.send({ type: 'create-room', playerName: '临时房主', characterId: 'soul-2', seed: 20260830 });
+  const transferHostWelcome = await transferHost.next((message) => message.type === 'welcome', '转移测试房主创建');
+  const transferGuest = client();
+  await transferGuest.open();
+  transferGuest.send({ type: 'join-room', roomCode: transferHostWelcome.room.roomCode, playerName: '继任房主', characterId: 'soul-3' });
+  const transferGuestWelcome = await transferGuest.next((message) => message.type === 'welcome', '继任房主加入');
+  transferHost.send({ type: 'set-ready', ready: true });
+  await transferGuest.next((message) => message.type === 'room-state' && message.room.participants.find((participant) => participant.playerId === 0)?.ready === true, '临时房主准备同步');
+  transferHost.socket.close();
+  const transferred = await transferGuest.next((message) => message.type === 'room-state' && message.room.hostParticipantId === transferGuestWelcome.room.selfParticipantId, '大厅断线房主转移');
+  assert.equal(transferred.room.drivers[0].kind, 'ai');
+  transferGuest.send({ type: 'set-ready', ready: true });
+  await transferGuest.next((message) => message.type === 'room-state' && message.room.participants.every((participant) => participant.ready), '继任房主准备');
+  transferGuest.send({ type: 'start-game' });
+  await transferGuest.next((message) => message.type === 'room-state' && message.room.status === 'playing', '继任房主开始游戏');
+  transferGuest.send({ type: 'leave-room' });
+  transferGuest.socket.close();
 
   host.send({ type: 'set-ready', ready: true });
   guest.send({ type: 'set-ready', ready: true });
@@ -130,8 +149,14 @@ try {
   assert.equal(resumedWelcome.room.selfPlayerId, 1);
   guest.socket.close();
   resumedGuest.socket.close();
-  const takeover = await host.next((message) => message.type === 'room-state' && message.room.drivers[1].kind === 'ai', '断线超时转 AI');
-  assert.equal(takeover.room.participants.some((participant) => participant.playerId === 1 && participant.connected), false);
+  const takeover = await host.next((message) => {
+    if (message.type !== 'room-state' || message.room.drivers[1].kind !== 'ai') return false;
+    const participant = message.room.participants.find((entry) => entry.playerId === 1);
+    return participant !== undefined && participant.connected === false;
+  }, '断线超时转 AI');
+  const disconnectedGuest = takeover.room.participants.find((participant) => participant.playerId === 1);
+  assert.notEqual(disconnectedGuest, undefined, '超时 AI 接管不得删除参与者');
+  assert.equal(disconnectedGuest.connected, false);
   const returnedGuest = client();
   await returnedGuest.open();
   returnedGuest.send({ type: 'resume-room', roomCode: hostWelcome.room.roomCode, resumeToken });
