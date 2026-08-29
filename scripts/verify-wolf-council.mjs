@@ -168,6 +168,13 @@ try {
     '最终狼刀必须携带完整的真实狼人发言记录',
   );
 
+  const legacySuggestionPrompt = structuredClone(finalPrompt);
+  const legacySuggestionPayload = JSON.parse(legacySuggestionPrompt[1].content);
+  legacySuggestionPayload.action.kind = 'wolf-suggestion';
+  delete legacySuggestionPayload.options.wolfCouncilMessages;
+  legacySuggestionPrompt[1].content = JSON.stringify(legacySuggestionPayload);
+  assert.deepEqual(validateGamePrompt(legacySuggestionPrompt), { ok: true }, '升级前 target 狼建议存档必须保持可恢复');
+
   const missingCouncilPrompt = structuredClone(finalPrompt);
   const missingCouncilPayload = JSON.parse(missingCouncilPrompt[1].content);
   delete missingCouncilPayload.options.wolfCouncilMessages;
@@ -176,6 +183,16 @@ try {
     validateGamePrompt(missingCouncilPrompt),
     { ok: false, reason: 'wolf_council_options', path: 'options.wolfCouncilMessages' },
     '最终狼刀不得通过省略狼议字段绕过校验',
+  );
+
+  const malformedCouncilPrompt = structuredClone(finalPrompt);
+  const malformedCouncilPayload = JSON.parse(malformedCouncilPrompt[1].content);
+  malformedCouncilPayload.options.wolfCouncilMessages = 'invalid';
+  malformedCouncilPrompt[1].content = JSON.stringify(malformedCouncilPayload);
+  assert.deepEqual(
+    validateGamePrompt(malformedCouncilPrompt),
+    { ok: false, reason: 'wolf_council_options', path: 'options.wolfCouncilMessages' },
+    '新 target 狼刀提供狼议字段时仍须完整校验',
   );
 
   const wolfViewerId = spectatorRealWolves[0];

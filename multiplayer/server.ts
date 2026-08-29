@@ -3,11 +3,13 @@ import { createServer } from 'node:http';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
+import { z } from 'zod';
 import { CHARACTER_IDS, PLAYER_IDS } from '../shared/gamePromptContract.js';
 import { fallbackDecision } from '../src/ai/fallback.js';
 import { createGame } from '../src/domain/engine/createGame.js';
 import { reduceGame } from '../src/domain/engine/reducer.js';
 import { selectObservation } from '../src/domain/engine/selectors.js';
+import { gameStateSchema, playerIdSchema } from '../src/storage/gameStateSchema.js';
 import type { CharacterId, GameState, PlayerId } from '../src/domain/model.js';
 import {
   encodeMultiplayerMessage,
@@ -56,6 +58,41 @@ interface Room {
 interface PersistedRoom extends Omit<Room, 'participants'> {
   participants: Participant[];
 }
+const participantSchema = z.strictObject({
+  participantId: z.string().min(1),
+  resumeToken: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
+  playerId: playerIdSchema.refine((value) => ROOM_PLAYER_IDS.some((playerId) => playerId === value), '多人席位超出范围'),
+  playerName: z.string().trim().min(1).max(24),
+  characterId: z.enum(CHARACTER_IDS),
+  ready: z.boolean(),
+  connected: z.boolean(),
+});
+const driverSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('ai') }),
+  z.strictObject({ kind: z.literal('human'), participantId: z.string().min(1) }),
+]);
+const persistedRoomSchema = z.strictObject({
+  roomCode: z.string().regex(/^[A-Z2-9]{6}$/),
+  status: z.enum(['lobby', 'playing', 'ended']),
+  hostParticipantId: z.string().min(1),
+  seed: z.number().int().min(0).max(0xffff_ffff),
+  participants: z.array(participantSchema).min(1).max(MULTIPLAYER_PLAYER_COUNT),
+  drivers: z.array(driverSchema).length(MULTIPLAYER_PLAYER_COUNT),
+  game: gameStateSchema.nullable(),
+  updatedAt: z.number().int().nonnegative(),
+}).superRefine((room, context) => {
+  const participantIds = new Set(room.participants.map((participant) => participant.participantId));
+  const playerIds = new Set(room.participants.map((participant) => participant.playerId));
+  const characterIds = new Set(room.participants.map((participant) => participant.characterId));
+  if (!participantIds.has(room.hostParticipantId)) context.addIssue({ code: 'custom', message: '房主不在参与者中' });
+  if (participantIds.size !== room.participants.length || playerIds.size !== room.participants.length || characterIds.size !== room.participants.length) context.addIssue({ code: 'custom', message: '参与者身份、席位或角色重复' });
+  room.drivers.forEach((driver, index) => {
+    if (driver.kind !== 'human') return;
+    const participant = room.participants.find((entry) => entry.participantId === driver.participantId);
+    if (!participant || participant.playerId !== index) context.addIssue({ code: 'custom', message: '真人驱动与参与者席位不一致' });
+  });
+  if ((room.status === 'lobby') !== (room.game === null)) context.addIssue({ code: 'custom', message: '房间状态与游戏状态不一致' });
+});
 
 const rooms = new Map<string, Room>();
 const socketsByParticipant = new Map<string, WebSocket>();
@@ -137,17 +174,30 @@ function persistRooms(): Promise<void> {
 }
 
 async function loadRooms(): Promise<void> {
+  let raw: unknown;
   try {
-    const persisted = JSON.parse(await readFile(STATE_FILE, 'utf8')) as PersistedRoom[];
-    const now = Date.now();
-    for (const room of persisted) {
-      if (now - room.updatedAt > ROOM_IDLE_MS) continue;
-      room.participants.forEach((participant) => { participant.connected = false; });
-      rooms.set(room.roomCode, room);
-    }
+    raw = JSON.parse(await readFile(STATE_FILE, 'utf8'));
   } catch (error) {
     const code = error instanceof Error && 'code' in error ? String(error.code) : '';
-    if (code !== 'ENOENT') throw error;
+    if (code !== 'ENOENT') console.error(JSON.stringify({ event: 'multiplayer_state_load_error', message: error instanceof Error ? error.message : String(error) }));
+    return;
+  }
+  if (!Array.isArray(raw)) {
+    console.error(JSON.stringify({ event: 'multiplayer_state_load_error', message: '持久化状态必须是房间数组' }));
+    return;
+  }
+  const now = Date.now();
+  for (const candidate of raw) {
+    const parsed = persistedRoomSchema.safeParse(candidate);
+    if (!parsed.success) {
+      const roomCode = typeof candidate === 'object' && candidate !== null && 'roomCode' in candidate ? String(candidate.roomCode) : null;
+      console.error(JSON.stringify({ event: 'multiplayer_room_discarded', roomCode, message: parsed.error.issues[0]?.message ?? '未知结构错误' }));
+      continue;
+    }
+    const room = parsed.data as Room;
+    if (now - room.updatedAt > ROOM_IDLE_MS) continue;
+    room.participants.forEach((participant) => { participant.connected = false; });
+    rooms.set(room.roomCode, room);
   }
 }
 
@@ -403,11 +453,13 @@ webSocketServer.on('connection', (socket) => {
     connectionCount -= 1;
     if (activeRoom && activeParticipant) {
       const currentSocket = socketsByParticipant.get(activeParticipant.participantId);
-      if (currentSocket === socket) socketsByParticipant.delete(activeParticipant.participantId);
-      activeParticipant.connected = false;
-      activeRoom.updatedAt = Date.now();
-      broadcast(activeRoom);
-      void persistRooms();
+      if (currentSocket === socket) {
+        socketsByParticipant.delete(activeParticipant.participantId);
+        activeParticipant.connected = false;
+        activeRoom.updatedAt = Date.now();
+        broadcast(activeRoom);
+        void persistRooms();
+      }
     }
   });
 });

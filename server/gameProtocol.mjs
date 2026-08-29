@@ -111,6 +111,10 @@ function validateWolfCouncilOptions(prompt) {
   if (actionKind !== 'wolf-suggestion' && actionKind !== 'wolf-decision') {
     return validResult();
   }
+  const legacyTargetDecision = actionKind === 'wolf-suggestion'
+    && prompt.action.schema === 'target'
+    && !Object.hasOwn(prompt.options, 'wolfCouncilMessages');
+  if (legacyTargetDecision) return validResult();
   const messages = prompt.options.wolfCouncilMessages;
   if (!Array.isArray(messages) || messages.length > PROMPT_LIMITS.wolfCouncilMessagesMaxItems) {
     return invalidResult('wolf_council_options', 'options.wolfCouncilMessages');

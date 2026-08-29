@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -10,17 +10,20 @@ const temp = await mkdtemp(join(tmpdir(), 'majo-multiplayer-'));
 const port = 34124;
 const stateFile = join(temp, 'rooms.json');
 const projectRoot = new URL('..', import.meta.url);
-const child = spawn(process.execPath, [join('node_modules', 'tsx', 'dist', 'cli.mjs'), 'multiplayer/server.ts'], {
-  cwd: projectRoot,
-  env: { ...process.env, MAJO_MULTIPLAYER_PORT: String(port), MAJO_MULTIPLAYER_HOST: '127.0.0.1', MAJO_MULTIPLAYER_STATE: stateFile },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
+function startServer(testPort = port, testStateFile = stateFile) {
+  return spawn(process.execPath, [join('node_modules', 'tsx', 'dist', 'cli.mjs'), 'multiplayer/server.ts'], {
+    cwd: projectRoot,
+    env: { ...process.env, MAJO_MULTIPLAYER_PORT: String(testPort), MAJO_MULTIPLAYER_HOST: '127.0.0.1', MAJO_MULTIPLAYER_STATE: testStateFile },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+const child = startServer();
 
-async function waitReady() {
+async function waitReady(process = child) {
   let output = '';
-  for await (const chunk of child.stdout) {
+  for await (const chunk of process.stdout) {
     output += chunk.toString();
-    if (output.includes('Multiplayer server listening')) return;
+    if (output.includes('Multiplayer server listening')) return output;
   }
   throw new Error(`多人服务器启动失败：${output}`);
 }
@@ -121,14 +124,15 @@ try {
   assert.equal(staleError.code, 'room_error');
 
   const resumeToken = guestWelcome.resumeToken;
-  guest.socket.close();
-  await host.next((message) => message.type === 'room-state' && message.room.participants.some((participant) => participant.playerId === 1 && !participant.connected), '断线状态广播');
   const resumedGuest = client();
   await resumedGuest.open();
   resumedGuest.send({ type: 'resume-room', roomCode: hostWelcome.room.roomCode, resumeToken });
-  const resumedWelcome = await resumedGuest.next((message) => message.type === 'welcome', '恢复房间');
+  const resumedWelcome = await resumedGuest.next((message) => message.type === 'welcome', '重复连接恢复房间');
   assert.equal(resumedWelcome.room.selfPlayerId, 1);
-  assert.equal(resumedWelcome.room.participants.find((participant) => participant.playerId === 1).connected, true);
+  guest.socket.close();
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  const afterOldSocketClose = [...host.messages].reverse().find((message) => message.type === 'room-state');
+  assert.equal(afterOldSocketClose.room.participants.find((participant) => participant.playerId === 1).connected, true, '旧连接关闭不得覆盖新连接状态');
 
   for (let step = 0; step < 120; step += 1) {
     hostState = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation) ?? hostState;
@@ -149,12 +153,41 @@ try {
   assert.equal(converted.room.participants.some((participant) => participant.playerId === 1), false);
   host.socket.close();
   resumedGuest.socket.close();
-
   child.kill('SIGTERM');
   await new Promise((resolve) => child.once('exit', resolve));
   const persisted = JSON.parse(await readFile(stateFile, 'utf8'));
   assert.equal(Array.isArray(persisted), true);
-  console.log('PASS 多人房间、隐私、重连与混合驱动验证全部通过');
+
+  const validRoom = persisted[0];
+  assert.notEqual(validRoom, undefined);
+  await writeFile(stateFile, JSON.stringify([validRoom, { roomCode: 'BAD234' }]), 'utf8');
+  const reloadPort = port + 1;
+  const reloaded = startServer(reloadPort);
+  let reloadErrors = '';
+  reloaded.stderr.on('data', (chunk) => { reloadErrors += chunk.toString(); });
+  await waitReady(reloaded);
+  const reconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`);
+  await new Promise((resolve, reject) => { reconnect.once('open', resolve); reconnect.once('error', reject); });
+  reconnect.send(JSON.stringify({ type: 'resume-room', roomCode: validRoom.roomCode, resumeToken: validRoom.participants[0].resumeToken }));
+  const restored = await new Promise((resolve, reject) => {
+    reconnect.once('message', (data) => resolve(JSON.parse(data.toString())));
+    setTimeout(() => reject(new Error('合法房间重载超时')), 5000).unref();
+  });
+  assert.equal(restored.type, 'welcome');
+  assert.match(reloadErrors, /multiplayer_room_discarded/);
+  reconnect.close();
+  reloaded.kill('SIGTERM');
+  await new Promise((resolve) => reloaded.once('exit', resolve));
+
+  await writeFile(stateFile, '{ damaged', 'utf8');
+  const damaged = startServer(port + 2);
+  let damagedErrors = '';
+  damaged.stderr.on('data', (chunk) => { damagedErrors += chunk.toString(); });
+  await waitReady(damaged);
+  assert.match(damagedErrors, /multiplayer_state_load_error/);
+  damaged.kill('SIGTERM');
+  await new Promise((resolve) => damaged.once('exit', resolve));
+  console.log('PASS 多人房间、隐私、重连、持久化校验与混合驱动验证全部通过');
 } finally {
   if (!child.killed) child.kill('SIGKILL');
 }

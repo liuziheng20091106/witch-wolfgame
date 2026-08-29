@@ -97,7 +97,7 @@ export const DECISION_EXAMPLES = freeze(/** @type {const} */({
 export const DECISION_SCHEMA_KEYS = freeze(/** @type {Array<keyof typeof DECISION_EXAMPLES>} */(Object.keys(DECISION_EXAMPLES)));
 export const DECISION_KIND_SCHEMAS = freeze(/** @type {const} */({
  skill: freeze(/** @type {const} */(['target', 'optional-target', 'liquid-control', 'levitation', 'voice-mimic', 'ignition'])),
- 'wolf-suggestion': freeze(/** @type {const} */(['wolf-council'])),
+ 'wolf-suggestion': freeze(/** @type {const} */(['target', 'wolf-council'])),
  'wolf-decision': freeze(/** @type {const} */(['target'])),
  'witch-action': freeze(/** @type {const} */(['witch'])),
  'seer-action': freeze(/** @type {const} */(['target'])),
