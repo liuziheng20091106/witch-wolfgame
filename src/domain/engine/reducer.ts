@@ -903,5 +903,6 @@ export function reduceGame(state: GameState, event: GameEvent): GameState {
     return next;
   }
   next.aiFailureOccurred = true;
+  if (event.failure) next.lastAiFailure = { ...event.failure, day: next.day, phase: next.phase };
   return next;
 }

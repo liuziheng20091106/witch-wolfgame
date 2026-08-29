@@ -9,6 +9,7 @@ let APP_VERSION;
 let GAME_KEY;
 let SETTINGS_KEY;
 let createGame;
+let reduceGame;
 let getSavedGameCompatibilityWarning;
 let loadSettings;
 let loadGame;
@@ -17,6 +18,7 @@ let saveSettings;
 try {
   ({ APP_VERSION } = await server.ssrLoadModule('/src/config/version.ts'));
   ({ createGame } = await server.ssrLoadModule('/src/domain/engine/createGame.ts'));
+  ({ reduceGame } = await server.ssrLoadModule('/src/domain/engine/reducer.ts'));
   ({ GAME_KEY, SETTINGS_KEY, getSavedGameCompatibilityWarning, loadGame, loadSettings, saveGame, saveSettings } = await server.ssrLoadModule('/src/storage/browserStorage.ts'));
 } finally {
   await server.close();
@@ -78,6 +80,7 @@ assert.equal(currentResult.ok, true);
 assert.notEqual(currentResult.value, null);
 assert.equal(currentResult.value.appVersion, APP_VERSION);
 assert.equal(currentResult.value.state.aiFailureOccurred, false);
+assert.equal(currentResult.value.state.lastAiFailure, null);
 assert.equal(getSavedGameCompatibilityWarning(currentResult.value), null);
 
 const mismatched = { ...saved, appVersion: '0.0.0' };
@@ -125,17 +128,24 @@ assert.match(getSavedGameCompatibilityWarning(legacyResaved), /未记录创建�
 
 const legacyFailureState = structuredClone(saved);
 delete legacyFailureState.state.aiFailureOccurred;
+delete legacyFailureState.state.lastAiFailure;
 localStorage.setItem(GAME_KEY, JSON.stringify(legacyFailureState));
 const migratedFailureResult = loadGame();
 assert.equal(migratedFailureResult.ok, true);
 assert.equal(migratedFailureResult.value.state.aiFailureOccurred, false);
+assert.equal(migratedFailureResult.value.state.lastAiFailure, null);
 
-const failedGame = structuredClone(game);
-failedGame.aiFailureOccurred = true;
-saveGame(failedGame, APP_VERSION);
+let failedGame = structuredClone(game);
+while (failedGame.pendingDecision === null && failedGame.phase !== 'ended') failedGame = reduceGame(failedGame, { type: 'advance' });
+const pending = failedGame.pendingDecision;
+assert.notEqual(pending, null);
+const failure = { kind: 'network', message: 'Failed to fetch', pendingDecisionId: pending.id, actorId: pending.actorId };
+const failedState = reduceGame(failedGame, { type: 'mark-ai-failure', failure });
+saveGame(failedState, APP_VERSION);
 const failedGameResult = loadGame();
 assert.equal(failedGameResult.ok, true);
 assert.equal(failedGameResult.value.state.aiFailureOccurred, true);
+assert.deepEqual(failedGameResult.value.state.lastAiFailure, { ...failure, day: failedGame.day, phase: failedGame.phase });
 
 const restartedGame = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: 6, selectedCharacterIds: [], seed: 58 });
 assert.equal(restartedGame.gameId, game.gameId);

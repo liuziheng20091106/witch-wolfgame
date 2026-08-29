@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CHARACTER_IDS, PLAYER_IDS } from '../../shared/gamePromptContract.js';
+import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS, PLAYER_IDS } from '../../shared/gamePromptContract.js';
 import type { CharacterId, GameObservation, PlayerId, SubmittedDecision } from '../domain/model';
 
 export const ROOM_CODE_PATTERN = /^[A-Z2-9]{6}$/;
@@ -13,12 +13,12 @@ const characterIdSchema = z.enum(CHARACTER_IDS);
 const decisionSchema = z.record(z.string(), z.unknown());
 
 export const multiplayerClientMessageSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('create-room'), playerName: playerNameSchema, characterId: characterIdSchema, seed: z.number().int().min(0).max(0xffff_ffff).optional() }),
+  z.strictObject({ type: z.literal('create-room'), playerName: playerNameSchema, characterId: characterIdSchema, playerCount: z.number().int().min(MIN_PLAYERS).max(MAX_PLAYERS), seed: z.number().int().min(0).max(0xffff_ffff).optional() }),
   z.strictObject({ type: z.literal('join-room'), roomCode: roomCodeSchema, playerName: playerNameSchema, characterId: characterIdSchema }),
   z.strictObject({ type: z.literal('resume-room'), roomCode: roomCodeSchema, resumeToken: resumeTokenSchema }),
   z.strictObject({ type: z.literal('set-ready'), ready: z.boolean() }),
   z.strictObject({ type: z.literal('start-game') }),
-  z.strictObject({ type: z.literal('submit-decision'), pendingDecisionId: z.string().min(1).max(160), decision: decisionSchema }),
+  z.strictObject({ type: z.literal('submit-decision'), pendingDecisionId: z.string().min(1).max(512), decision: decisionSchema }),
   z.strictObject({ type: z.literal('leave-room') }),
 ]);
 
@@ -38,6 +38,7 @@ export interface MultiplayerParticipantView {
 export interface MultiplayerRoomView {
   roomCode: string;
   status: 'lobby' | 'playing' | 'ended' | 'failed';
+  playerCount: number;
   selfParticipantId: string;
   selfPlayerId: PlayerId;
   hostParticipantId: string;

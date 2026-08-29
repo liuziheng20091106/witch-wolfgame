@@ -251,7 +251,7 @@ export function useGameController(): GameController {
       .catch((error: unknown) => {
         if (disposed || controller.signal.aborted) return;
         const commandError = error instanceof AiCommandError ? error : new AiCommandError('network', error instanceof Error ? error.message : '未知 AI 错误');
-        dispatch({ type: 'mark-ai-failure' }, pending.id);
+        dispatch({ type: 'mark-ai-failure', failure: { kind: commandError.kind, message: commandError.message, pendingDecisionId: pending.id, actorId: pending.actorId } }, pending.id);
         setAiError(commandError);
       })
       .finally(() => {

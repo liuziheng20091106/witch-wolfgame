@@ -4,7 +4,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
-import { CHARACTER_IDS, PLAYER_IDS } from '../shared/gamePromptContract.js';
+import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS, PLAYER_IDS } from '../shared/gamePromptContract.js';
 import { fallbackDecision } from '../src/ai/fallback.js';
 import { createGame } from '../src/domain/engine/createGame.js';
 import { reduceGame } from '../src/domain/engine/reducer.js';
@@ -37,8 +37,6 @@ const DISCONNECT_GRACE_MS = Number(process.env.MAJO_MULTIPLAYER_DISCONNECT_GRACE
 const ROOM_IDLE_MS = 24 * 60 * 60 * 1000;
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TICK_DELAY_MS = 80;
-const MULTIPLAYER_PLAYER_COUNT = 6;
-const ROOM_PLAYER_IDS = PLAYER_IDS.slice(0, MULTIPLAYER_PLAYER_COUNT);
 interface RateWindow { startedAt: number; count: number }
 
 interface Participant {
@@ -56,6 +54,7 @@ interface Room {
   status: 'lobby' | 'playing' | 'ended' | 'failed';
   hostParticipantId: string;
   seed: number;
+  playerCount: number;
   participants: Participant[];
   drivers: PlayerDriver[];
   game: GameState | null;
@@ -69,7 +68,7 @@ interface PersistedRoom extends Omit<Room, 'participants'> {
 const participantSchema = z.strictObject({
   participantId: z.string().min(1),
   resumeToken: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
-  playerId: playerIdSchema.refine((value) => ROOM_PLAYER_IDS.some((playerId) => playerId === value), '多人席位超出范围'),
+  playerId: playerIdSchema.refine((value) => PLAYER_IDS.some((playerId) => playerId === value), '多人席位超出范围'),
   playerName: z.string().trim().min(1).max(24),
   characterId: z.enum(CHARACTER_IDS),
   ready: z.boolean(),
@@ -84,14 +83,17 @@ const persistedRoomSchema = z.strictObject({
   status: z.enum(['lobby', 'playing', 'ended', 'failed']),
   hostParticipantId: z.string().min(1),
   seed: z.number().int().min(0).max(0xffff_ffff),
-  participants: z.array(participantSchema).min(1).max(MULTIPLAYER_PLAYER_COUNT),
-  drivers: z.array(driverSchema).length(MULTIPLAYER_PLAYER_COUNT),
+  playerCount: z.number().int().min(MIN_PLAYERS).max(MAX_PLAYERS).default(MIN_PLAYERS),
+  participants: z.array(participantSchema).min(1).max(MAX_PLAYERS),
+  drivers: z.array(driverSchema).min(MIN_PLAYERS).max(MAX_PLAYERS),
   game: gameStateSchema.nullable(),
   failureMessage: z.string().max(500).nullable().default(null),
   updatedAt: z.number().int().nonnegative(),
 }).superRefine((room, context) => {
   const participantIds = new Set(room.participants.map((participant) => participant.participantId));
   const playerIds = new Set(room.participants.map((participant) => participant.playerId));
+  if (room.drivers.length !== room.playerCount) context.addIssue({ code: 'custom', message: '驱动数量必须等于房间人数' });
+  if (room.participants.some((participant) => participant.playerId >= room.playerCount)) context.addIssue({ code: 'custom', message: '参与者席位超出房间人数' });
   const characterIds = new Set(room.participants.map((participant) => participant.characterId));
   if (!participantIds.has(room.hostParticipantId)) context.addIssue({ code: 'custom', message: '房主不在参与者中' });
   if (participantIds.size !== room.participants.length || playerIds.size !== room.participants.length || characterIds.size !== room.participants.length) context.addIssue({ code: 'custom', message: '参与者身份、席位或角色重复' });
@@ -156,6 +158,7 @@ function roomView(room: Room, participant: Participant): MultiplayerRoomView {
     selfParticipantId: participant.participantId,
     selfPlayerId: participant.playerId,
     hostParticipantId: room.hostParticipantId,
+    playerCount: room.playerCount,
     participants,
     drivers: room.drivers.map((driver) => ({ ...driver })),
     observation,
@@ -241,7 +244,7 @@ function emergencyDecision(pending: PendingDecision): SubmittedDecision {
 }
 
 function failRoom(room: Room, error: unknown): void {
-  if (room.game !== null) room.game = reduceGame(room.game, { type: 'mark-ai-failure' });
+  if (room.game?.pendingDecision) room.game = reduceGame(room.game, { type: 'mark-ai-failure', failure: { kind: 'multiplayer-fatal', message: error instanceof Error ? error.message : String(error), pendingDecisionId: room.game.pendingDecision.id, actorId: room.game.pendingDecision.actorId } });
   room.status = 'failed';
   room.failureMessage = 'AI 驱动发生不可恢复错误';
   room.updatedAt = Date.now();
@@ -255,7 +258,7 @@ function recoverAiDecision(room: Room, error: unknown): boolean {
   const pending = game?.pendingDecision;
   if (!game || !pending || room.drivers[pending.actorId]?.kind === 'human') return false;
   try {
-    let recovered = reduceGame(game, { type: 'mark-ai-failure' });
+    let recovered = reduceGame(game, { type: 'mark-ai-failure', failure: { kind: 'multiplayer-recovered', message: error instanceof Error ? error.message : String(error), pendingDecisionId: pending.id, actorId: pending.actorId } });
     recovered = reduceGame(recovered, {
       type: 'submit-decision',
       pendingDecisionId: pending.id,
@@ -472,8 +475,9 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
           status: 'lobby',
           hostParticipantId: participantId,
           seed: message.seed ?? randomBytes(4).readUInt32LE(0),
+          playerCount: message.playerCount,
           participants: [participant],
-          drivers: ROOM_PLAYER_IDS.map((playerId) => playerId === 0 ? { kind: 'human', participantId } : { kind: 'ai' }),
+          drivers: PLAYER_IDS.slice(0, message.playerCount).map((playerId) => playerId === 0 ? { kind: 'human', participantId } : { kind: 'ai' }),
           game: null,
           failureMessage: null,
           updatedAt: Date.now(),
@@ -488,11 +492,11 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
         if (activeRoom !== null) throw new Error('当前连接已经加入房间');
         const room = rooms.get(message.roomCode);
         if (!room || room.status !== 'lobby') throw new Error('房间不存在或已经开始');
-        if (room.participants.length >= ROOM_PLAYER_IDS.length) throw new Error('房间已满');
+        if (room.participants.length >= room.playerCount) throw new Error('房间已满');
         if (room.participants.some((participant) => participant.characterId === message.characterId)) throw new Error('该角色已被选择');
         const participantId = token(16);
         const usedSeats = new Set(room.participants.map((participant) => participant.playerId));
-        const playerId = ROOM_PLAYER_IDS.find((candidate) => !usedSeats.has(candidate));
+        const playerId = PLAYER_IDS.slice(0, room.playerCount).find((candidate) => !usedSeats.has(candidate));
         if (playerId === undefined) throw new Error('没有可用席位');
         const participant: Participant = { participantId, resumeToken: token(32), playerId, playerName: message.playerName, characterId: message.characterId, ready: false, connected: true };
         room.participants.push(participant);
@@ -534,7 +538,8 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
         const selected = new Set(activeRoom.participants.map((participant) => participant.characterId));
         const remainingCharacters = CHARACTER_IDS.filter((characterId) => !selected.has(characterId));
         let aiCharacterIndex = 0;
-        const seatCharacterIds: CharacterId[] = ROOM_PLAYER_IDS.map((playerId) => {
+        const seatPlayerIds = PLAYER_IDS.slice(0, activeRoom.playerCount);
+        const seatCharacterIds: CharacterId[] = seatPlayerIds.map((playerId) => {
           const participant = activeRoom?.participants.find((entry) => entry.playerId === playerId);
           if (participant) return participant.characterId;
           const characterId = remainingCharacters[aiCharacterIndex];
@@ -542,8 +547,8 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
           if (!characterId) throw new Error('无法为 AI 席位分配角色');
           return characterId;
         });
-        if (new Set(seatCharacterIds).size !== ROOM_PLAYER_IDS.length) throw new Error('无法分配唯一角色');
-        activeRoom.game = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: MULTIPLAYER_PLAYER_COUNT, selectedCharacterIds: [], seatCharacterIds, seed: activeRoom.seed });
+        if (new Set(seatCharacterIds).size !== activeRoom.playerCount) throw new Error('无法分配唯一角色');
+        activeRoom.game = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: activeRoom.playerCount, selectedCharacterIds: [], seatCharacterIds, seed: activeRoom.seed });
         activeRoom.status = 'playing';
         activeRoom.updatedAt = Date.now();
         broadcast(activeRoom);

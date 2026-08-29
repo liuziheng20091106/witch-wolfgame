@@ -242,6 +242,7 @@ export interface GameState {
   automationMode: AutomationMode;
   usedFreeProvider: boolean;
   aiFailureOccurred: boolean;
+  lastAiFailure: { kind: string; message: string; pendingDecisionId: string; actorId: PlayerId; day: number; phase: GamePhase } | null;
   humanPlayerId: PlayerId | null;
   seed: number;
   rngState: number;
@@ -262,7 +263,7 @@ export interface GameState {
   causalLocks: string[];
   result: GameResult | null;
 }
-export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks' | 'archivedTimelines' | 'usedFreeProvider' | 'aiFailureOccurred'>;
+export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks' | 'archivedTimelines' | 'usedFreeProvider' | 'aiFailureOccurred' | 'lastAiFailure'>;
 
 export interface GameSetup {
   mode: GameMode;
@@ -279,7 +280,7 @@ export type GameEvent =
   | { type: 'set-automation'; automationMode: AutomationMode }
   | { type: 'set-rng-state'; rngState: number }
   | { type: 'mark-free-provider-used' }
-  | { type: 'mark-ai-failure' };
+  | { type: 'mark-ai-failure'; failure?: { kind: string; message: string; pendingDecisionId: string; actorId: PlayerId } };
 
 export interface GameCommand {
   type: 'decision';
@@ -306,6 +307,7 @@ export interface GameObservation {
   roundNumber: number;
   usedFreeProvider: boolean;
   aiFailureOccurred: boolean;
+  lastAiFailure: GameState['lastAiFailure'];
   day: number;
   phase: GamePhase;
   viewerPlayerId: PlayerId | null;

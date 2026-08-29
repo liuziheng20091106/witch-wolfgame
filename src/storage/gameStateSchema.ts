@@ -27,6 +27,7 @@ export const gameStateSchema = z.object({
   automationMode: z.enum(['remote', 'local']),
   usedFreeProvider: z.boolean().default(false),
   aiFailureOccurred: z.boolean().default(false),
+  lastAiFailure: z.object({ kind: z.string(), message: z.string(), pendingDecisionId: z.string(), actorId: playerIdSchema, day: z.number().int().min(0), phase: z.enum(GAME_PHASES) }).nullable().default(null),
   humanPlayerId: playerIdSchema.nullable(),
   seed: z.number().int().min(0).max(0xffff_ffff),
   rngState: z.number().int().min(0).max(0xffff_ffff),

@@ -14,7 +14,7 @@ import { addKnowledge, addPublicEvent } from './events';
 import { chooseWithState, nextRandom, shuffleWithState } from './random';
 
 export function createRewindSnapshot(state: GameState): RewindSnapshot {
-  const { morningCheckpoint: _checkpoint, causalLocks: _locks, archivedTimelines: _archives, usedFreeProvider: _freeProvider, aiFailureOccurred: _aiFailure, ...snapshot } = state;
+  const { morningCheckpoint: _checkpoint, causalLocks: _locks, archivedTimelines: _archives, usedFreeProvider: _freeProvider, aiFailureOccurred: _aiFailure, lastAiFailure: _lastAiFailure, ...snapshot } = state;
   return structuredClone(snapshot);
 }
 
@@ -85,6 +85,7 @@ function createRound(input: RoundInput): GameState {
     automationMode: input.automationMode,
     usedFreeProvider: false,
     aiFailureOccurred: false,
+    lastAiFailure: null,
     humanPlayerId: input.humanPlayerId,
     seed: input.seed,
     rngState,

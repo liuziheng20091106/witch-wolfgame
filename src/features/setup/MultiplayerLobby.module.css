@@ -36,7 +36,7 @@
 .lobby h2 { margin: 0; font-size: 24px; }
 .join header p { max-width: 620px; margin: 3px 0 0; color: var(--muted); font-family: var(--sans); font-size: 12px; line-height: 1.5; }
 
-.fields { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(180px, .7fr) minmax(240px, 1fr) 150px; gap: 16px; align-items: end; margin-top: 20px; }
+.fields { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(160px, .75fr) minmax(220px, 1fr) 130px 150px; gap: 14px; align-items: end; margin-top: 20px; }
 .fields label { min-width: 0; display: grid; grid-template-rows: auto 48px; gap: 7px; color: var(--ink); font-family: var(--sans); font-size: 11px; font-weight: 900; }
 .fields input,
 .fields select { width: 100%; height: 48px; min-width: 0; box-sizing: border-box; padding: 8px 11px; border: 1px solid var(--line-strong); background: var(--paper); color: var(--ink); }

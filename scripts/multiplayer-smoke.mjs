@@ -84,9 +84,11 @@ try {
   await waitReady();
   const host = client();
   await host.open();
-  host.send({ type: 'create-room', playerName: '房主', characterId: 'soul-0', seed: 20260829 });
+  host.send({ type: 'create-room', playerName: '房主', characterId: 'soul-0', playerCount: 14, seed: 20260829 });
   const hostWelcome = await host.next((message) => message.type === 'welcome', '房主创建');
   assert.match(hostWelcome.room.roomCode, /^[A-Z2-9]{6}$/);
+  assert.equal(hostWelcome.room.playerCount, 14);
+  assert.equal(hostWelcome.room.drivers.length, 14);
   assert.equal(hostWelcome.room.drivers[0].kind, 'human');
   assert.equal(hostWelcome.room.drivers.slice(1).every((driver) => driver.kind === 'ai'), true);
 
@@ -105,7 +107,7 @@ try {
   duplicate.socket.close();
   const transferHost = client();
   await transferHost.open();
-  transferHost.send({ type: 'create-room', playerName: '临时房主', characterId: 'soul-2', seed: 20260830 });
+  transferHost.send({ type: 'create-room', playerName: '临时房主', characterId: 'soul-2', playerCount: 6, seed: 20260830 });
   const transferHostWelcome = await transferHost.next((message) => message.type === 'welcome', '转移测试房主创建');
   const transferGuest = client();
   await transferGuest.open();
@@ -166,19 +168,27 @@ try {
   const afterOldSocketClose = [...host.messages].reverse().find((message) => message.type === 'room-state');
   assert.equal(afterOldSocketClose.room.participants.find((participant) => participant.playerId === 1).connected, true, '旧连接关闭不得覆盖新连接状态');
 
-  for (let step = 0; step < 120; step += 1) {
+  let lastSubmittedHost = '';
+  let lastSubmittedGuest = '';
+  for (let step = 0; step < 300; step += 1) {
     hostState = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation) ?? hostState;
     guestState = [...returnedGuest.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation) ?? returnedWelcome;
     const pendingHost = hostState.room.observation?.pendingDecision;
     const pendingGuest = guestState.room.observation?.pendingDecision;
-    if (pendingHost) host.send({ type: 'submit-decision', pendingDecisionId: pendingHost.id, decision: decisionFor(pendingHost, '继续依据公开事实判断。') });
-    if (pendingGuest) returnedGuest.send({ type: 'submit-decision', pendingDecisionId: pendingGuest.id, decision: decisionFor(pendingGuest, '我会检查公开票型。') });
+    if (pendingHost && pendingHost.id !== lastSubmittedHost) {
+      host.send({ type: 'submit-decision', pendingDecisionId: pendingHost.id, decision: decisionFor(pendingHost, '继续依据公开事实判断。') });
+      lastSubmittedHost = pendingHost.id;
+    }
+    if (pendingGuest && pendingGuest.id !== lastSubmittedGuest) {
+      returnedGuest.send({ type: 'submit-decision', pendingDecisionId: pendingGuest.id, decision: decisionFor(pendingGuest, '我会检查公开票型。') });
+      lastSubmittedGuest = pendingGuest.id;
+    }
     await new Promise((resolve) => setTimeout(resolve, 80));
     const progressed = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation?.day > 0);
     if (progressed) break;
   }
   const progressed = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation?.day > 0);
-  assert.notEqual(progressed, undefined, '混合真人与 AI 驱动必须推进到白天');
+  assert.notEqual(progressed, undefined, `混合真人与 AI 驱动必须推进到白天：${JSON.stringify({ host: hostState.room.observation?.pendingDecision, guest: guestState.room.observation?.pendingDecision, errors: host.messages.filter((message) => message.type === 'error').slice(-5) })}`);
 
   returnedGuest.send({ type: 'leave-room' });
   const converted = await host.next((message) => message.type === 'room-state' && message.room.drivers[1].kind === 'ai', '离开后转 AI');
@@ -193,9 +203,9 @@ try {
   const validRoom = persisted[0];
   assert.notEqual(validRoom, undefined);
   assert.notEqual(validRoom.game, null, '终局恢复样本必须包含合法游戏状态');
-  const restartPlayerId = validRoom.game.pendingDecision?.actorId;
-  assert.equal(Number.isInteger(restartPlayerId) && restartPlayerId >= 0 && restartPlayerId < validRoom.drivers.length, true, '重启样本必须停在普通席位待处理决策');
-  assert.equal(validRoom.participants.some((participant) => participant.playerId === restartPlayerId), true, '重启样本行动者必须有真人参与者');
+  const restartPlayerId = validRoom.participants[1]?.playerId;
+  assert.notEqual(restartPlayerId, undefined, '重启样本必须包含第二个真人席位');
+  validRoom.game.pendingDecision = { id: 'restart-human-pending', kind: 'speech', schemaKey: 'speech', actorId: restartPlayerId, title: '重启真人发言', description: '', candidates: [], allowAbstain: true, skillInstanceId: null, options: {} };
   assert.equal(validRoom.drivers[restartPlayerId].kind, 'human', '重启样本必须保留真人驱动');
   const restartDecisionId = validRoom.game.pendingDecision.id;
   const endedRoom = structuredClone(validRoom);
@@ -211,7 +221,8 @@ try {
   const reloadMessages = [];
   reconnect.on('message', (data) => { reloadMessages.push(JSON.parse(data.toString())); });
   await new Promise((resolve, reject) => { reconnect.once('open', resolve); reconnect.once('error', reject); });
-  reconnect.send(JSON.stringify({ type: 'resume-room', roomCode: validRoom.roomCode, resumeToken: validRoom.participants[0].resumeToken }));
+  const reconnectParticipant = validRoom.participants.find((participant) => participant.playerId !== restartPlayerId) ?? validRoom.participants[0];
+  reconnect.send(JSON.stringify({ type: 'resume-room', roomCode: validRoom.roomCode, resumeToken: reconnectParticipant.resumeToken }));
   const restored = await new Promise((resolve, reject) => {
     const check = () => {
       const welcome = reloadMessages.find((message) => message.type === 'welcome');
@@ -252,6 +263,10 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 350));
   assert.equal(recoverable.exitCode, null, '可恢复 AI 驱动异常不得终止多人服务');
   assert.match(recoverableErrors, /multiplayer_ai_drive_recovered/);
+  const recoveredState = JSON.parse(await readFile(recoverableStateFile, 'utf8'))[0];
+  assert.equal(recoveredState.game.aiFailureOccurred, true);
+  assert.equal(recoveredState.game.lastAiFailure.kind, 'multiplayer-recovered');
+  assert.equal(recoveredState.game.lastAiFailure.pendingDecisionId, 'recoverable-ai-decision');
   recoverable.kill('SIGTERM');
   await new Promise((resolve) => recoverable.once('exit', resolve));
 
@@ -272,6 +287,8 @@ try {
   const failedState = JSON.parse(await readFile(brokenStateFile, 'utf8'))[0];
   assert.equal(failedState.status, 'failed');
   assert.equal(failedState.failureMessage, 'AI 驱动发生不可恢复错误');
+  assert.equal(failedState.game.lastAiFailure.kind, 'multiplayer-fatal');
+  assert.equal(failedState.game.lastAiFailure.pendingDecisionId, 'fatal-ai-decision');
   broken.kill('SIGTERM');
   await new Promise((resolve) => broken.once('exit', resolve));
   assert.equal(restoredEnded.type, 'welcome');

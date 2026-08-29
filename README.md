@@ -28,6 +28,7 @@ npm run dev
 开发服务器默认使用 `http://127.0.0.1:5173/`。开发时可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
 
 多人服务默认监听 `127.0.0.1:34024`，开发时 Vite 会代理 `/multiplayer`：
+多人联机支持房主配置 **6–14 席**；房间人数会贯穿协议校验、持久化状态、真人/AI 驱动数组和 `createGame`。未被真人占用的席位由确定性 AI 驱动。
 
 ```bash
 npm run server:multiplayer
