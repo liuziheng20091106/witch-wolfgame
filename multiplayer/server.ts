@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createServer } from 'node:http';
+import { type IncomingMessage, createServer } from 'node:http';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -28,11 +28,17 @@ const STATE_FILE = resolve(process.env.MAJO_MULTIPLAYER_STATE ?? '.runtime/multi
 const MAX_ROOMS = 200;
 const MAX_CONNECTIONS = 500;
 const MAX_MESSAGE_BYTES = 32 * 1024;
+const MAX_CONNECTIONS_PER_ADDRESS = 20;
+const MESSAGE_RATE_WINDOW_MS = 10_000;
+const MAX_MESSAGES_PER_WINDOW = 60;
+const CREATE_RATE_WINDOW_MS = 60_000;
+const MAX_CREATES_PER_WINDOW = 10;
 const ROOM_IDLE_MS = 24 * 60 * 60 * 1000;
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TICK_DELAY_MS = 80;
 const MULTIPLAYER_PLAYER_COUNT = 6;
 const ROOM_PLAYER_IDS = PLAYER_IDS.slice(0, MULTIPLAYER_PLAYER_COUNT);
+interface RateWindow { startedAt: number; count: number }
 
 interface Participant {
   participantId: string;
@@ -98,6 +104,8 @@ const rooms = new Map<string, Room>();
 const socketsByParticipant = new Map<string, WebSocket>();
 let connectionCount = 0;
 let persistChain = Promise.resolve();
+const connectionsByAddress = new Map<string, number>();
+const createRatesByAddress = new Map<string, RateWindow>();
 
 function token(bytes: number): string {
   return randomBytes(bytes).toString('base64url');
@@ -287,6 +295,17 @@ function leaveRoom(room: Room, participant: Participant): void {
   scheduleGame(room);
 }
 
+function consumeRateLimit(rates: Map<string, RateWindow>, key: string, limit: number, windowMs: number): boolean {
+  const now = Date.now();
+  const current = rates.get(key);
+  if (!current || now - current.startedAt >= windowMs) {
+    rates.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  current.count += 1;
+  return current.count <= limit;
+}
+
 await loadRooms();
 const httpServer = createServer((request, response) => {
   if (request.url === '/healthz') {
@@ -299,20 +318,31 @@ const httpServer = createServer((request, response) => {
 });
 const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
 httpServer.on('upgrade', (request, socket, head) => {
-  if (request.url !== '/multiplayer' || connectionCount >= MAX_CONNECTIONS) {
+  const address = request.socket.remoteAddress ?? 'unknown';
+  const addressConnections = connectionsByAddress.get(address) ?? 0;
+  if (request.url !== '/multiplayer' || connectionCount >= MAX_CONNECTIONS || addressConnections >= MAX_CONNECTIONS_PER_ADDRESS) {
     socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
     socket.destroy();
     return;
   }
-  webSocketServer.handleUpgrade(request, socket, head, (webSocket) => webSocketServer.emit('connection', webSocket));
+  webSocketServer.handleUpgrade(request, socket, head, (webSocket) => webSocketServer.emit('connection', webSocket, request, address));
 });
 
-webSocketServer.on('connection', (socket) => {
+webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, address: string) => {
   connectionCount += 1;
+  connectionsByAddress.set(address, (connectionsByAddress.get(address) ?? 0) + 1);
+  let messageRate: RateWindow = { startedAt: Date.now(), count: 0 };
   let activeRoom: Room | null = null;
   let activeParticipant: Participant | null = null;
 
   socket.on('message', (data, isBinary) => {
+    const now = Date.now();
+    if (now - messageRate.startedAt >= MESSAGE_RATE_WINDOW_MS) messageRate = { startedAt: now, count: 0 };
+    messageRate.count += 1;
+    if (messageRate.count > MAX_MESSAGES_PER_WINDOW) {
+      socket.close(1008, 'message rate exceeded');
+      return;
+    }
     if (isBinary || data.toString('utf8').length > MAX_MESSAGE_BYTES) {
       send(socket, errorMessage('invalid_message', '只接受受限大小的 JSON 文本消息'));
       return;
@@ -332,6 +362,7 @@ webSocketServer.on('connection', (socket) => {
     const message = parsed.data;
     try {
       if (message.type === 'create-room') {
+        if (!consumeRateLimit(createRatesByAddress, address, MAX_CREATES_PER_WINDOW, CREATE_RATE_WINDOW_MS)) throw new Error('创建房间过于频繁，请稍后重试');
         if (activeRoom !== null || rooms.size >= MAX_ROOMS) throw new Error('无法创建更多房间');
         const code = roomCode();
         const participantId = token(16);
@@ -452,6 +483,9 @@ webSocketServer.on('connection', (socket) => {
 
   socket.on('close', () => {
     connectionCount -= 1;
+    const remainingConnections = (connectionsByAddress.get(address) ?? 1) - 1;
+    if (remainingConnections > 0) connectionsByAddress.set(address, remainingConnections);
+    else connectionsByAddress.delete(address);
     if (activeRoom && activeParticipant) {
       const currentSocket = socketsByParticipant.get(activeParticipant.participantId);
       if (currentSocket === socket) {

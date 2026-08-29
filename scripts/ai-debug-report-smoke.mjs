@@ -438,7 +438,7 @@ const fastRequest = {
 const fastDecision = await requestDecision(fastRequest, { ...config, retryCount: 0 }, new AbortController().signal);
 assert.equal(fastDecision.targetPlayerId, 1);
 assert.equal(calls[0].body.model, config.profiles.fast.model);
-assert.equal(calls[0].body.reasoning_effort, config.profiles.fast.reasoningEffort);
+assert.equal(calls[0].body.reasoning_effort, undefined);
 
 calls = installFetch([chatResponse('{"speech":"我会结合公开信息梳理票型。"}')]);
 const speechRequest = {

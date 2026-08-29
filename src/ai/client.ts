@@ -49,7 +49,7 @@ function buildPayload(config: AiProviderConfig, messages: PromptMessage[], jsonO
   if (profile === null) throw new AiCommandError('config', '缺少自定义模型档位');
   const payload: Record<string, unknown> = { model: profile.model, messages };
   if (jsonOutput) payload.response_format = { type: 'json_object' };
-  payload.reasoning_effort = profile.reasoningEffort;
+  if (profile.reasoningEffort !== 'none') payload.reasoning_effort = profile.reasoningEffort;
   return payload;
 }
 
