@@ -108,6 +108,7 @@ const persistedRoomSchema = z.strictObject({
 
 const rooms = new Map<string, Room>();
 const socketsByParticipant = new Map<string, WebSocket>();
+const connectionGenerationByParticipant = new Map<string, number>();
 let connectionCount = 0;
 let persistChain = Promise.resolve();
 const connectionsByAddress = new Map<string, number>();
@@ -338,12 +339,14 @@ function driveGame(room: Room): void {
   scheduleGame(room);
 }
 
-function attachParticipant(socket: WebSocket, room: Room, participant: Participant, welcome: boolean): void {
+function attachParticipant(socket: WebSocket, room: Room, participant: Participant, welcome: boolean): number {
+  const generation = (connectionGenerationByParticipant.get(participant.participantId) ?? 0) + 1;
+  connectionGenerationByParticipant.set(participant.participantId, generation);
   const previousSocket = socketsByParticipant.get(participant.participantId);
-  if (previousSocket && previousSocket !== socket) previousSocket.close(4001, 'session replaced');
+  socketsByParticipant.set(participant.participantId, socket);
   participant.connected = true;
   room.drivers[participant.playerId] = { kind: 'human', participantId: participant.participantId };
-  socketsByParticipant.set(participant.participantId, socket);
+  if (previousSocket && previousSocket !== socket) previousSocket.close(4001, 'session replaced');
   room.updatedAt = Date.now();
   const message: MultiplayerServerMessage = welcome
     ? { type: 'welcome', room: roomView(room, participant), resumeToken: participant.resumeToken }
@@ -351,10 +354,12 @@ function attachParticipant(socket: WebSocket, room: Room, participant: Participa
   send(socket, message);
   broadcast(room);
   void persistRooms();
+  return generation;
 }
-function scheduleDisconnectTakeover(room: Room, participant: Participant): void {
+function scheduleDisconnectTakeover(room: Room, participant: Participant, generation?: number): void {
+  const expectedGeneration = generation ?? connectionGenerationByParticipant.get(participant.participantId) ?? 0;
   windowlessSetTimeout(() => {
-    if (participant.connected || participantById(room, participant.participantId) === null) return;
+    if ((connectionGenerationByParticipant.get(participant.participantId) ?? 0) !== expectedGeneration || socketsByParticipant.has(participant.participantId) || participant.connected || participantById(room, participant.participantId) === null) return;
     const driver = room.drivers[participant.playerId];
     if (driver?.kind !== 'human' || driver.participantId !== participant.participantId) return;
     room.drivers[participant.playerId] = { kind: 'ai' };
@@ -430,6 +435,7 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
   let activeRoom: Room | null = null;
   let activeParticipant: Participant | null = null;
 
+  let activeGeneration: number | null = null;
   socket.on('message', (data, isBinary) => {
     const now = Date.now();
     if (now - messageRate.startedAt >= MESSAGE_RATE_WINDOW_MS) messageRate = { startedAt: now, count: 0 };
@@ -485,7 +491,7 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
         rooms.set(code, room);
         activeRoom = room;
         activeParticipant = participant;
-        attachParticipant(socket, room, participant, true);
+        activeGeneration = attachParticipant(socket, room, participant, true);
         return;
       }
       if (message.type === 'join-room') {
@@ -500,27 +506,29 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
         if (playerId === undefined) throw new Error('没有可用席位');
         const participant: Participant = { participantId, resumeToken: token(32), playerId, playerName: message.playerName, characterId: message.characterId, ready: false, connected: true };
         room.participants.push(participant);
-        room.drivers[playerId] = { kind: 'human', participantId };
         activeRoom = room;
         activeParticipant = participant;
-        attachParticipant(socket, room, participant, true);
+        activeGeneration = attachParticipant(socket, room, participant, true);
         return;
       }
       if (message.type === 'resume-room') {
         if (activeRoom !== null) throw new Error('当前连接已经加入房间');
         const room = rooms.get(message.roomCode);
         const participant = room?.participants.find((entry) => entry.resumeToken === message.resumeToken);
-        if (!room || !participant) throw new Error('恢复令牌无效');
+        if (!room || !participant) throw new Error('恢复凭据无效或房间已失效');
         activeRoom = room;
         activeParticipant = participant;
-        attachParticipant(socket, room, participant, true);
+        activeGeneration = attachParticipant(socket, room, participant, true);
         return;
       }
       if (!activeRoom || !activeParticipant) throw new Error('请先创建、加入或恢复房间');
       if (message.type === 'leave-room') {
         leaveRoom(activeRoom, activeParticipant);
+        connectionGenerationByParticipant.set(activeParticipant.participantId, (activeGeneration ?? 0) + 1);
+        socketsByParticipant.delete(activeParticipant.participantId);
         activeRoom = null;
         activeParticipant = null;
+        activeGeneration = null;
         return;
       }
       if (message.type === 'set-ready') {
@@ -584,15 +592,16 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
     const remainingConnections = (connectionsByAddress.get(address) ?? 1) - 1;
     if (remainingConnections > 0) connectionsByAddress.set(address, remainingConnections);
     else connectionsByAddress.delete(address);
-    if (activeRoom && activeParticipant) {
+    if (activeRoom && activeParticipant && activeGeneration !== null) {
       const currentSocket = socketsByParticipant.get(activeParticipant.participantId);
-      if (currentSocket === socket) {
+      const currentGeneration = connectionGenerationByParticipant.get(activeParticipant.participantId);
+      if (currentSocket === socket && currentGeneration === activeGeneration) {
         socketsByParticipant.delete(activeParticipant.participantId);
         activeParticipant.connected = false;
         activeRoom.updatedAt = Date.now();
         broadcast(activeRoom);
         void persistRooms();
-        scheduleDisconnectTakeover(activeRoom, activeParticipant);
+        scheduleDisconnectTakeover(activeRoom, activeParticipant, activeGeneration);
       }
     }
   });

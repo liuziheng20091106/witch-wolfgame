@@ -130,7 +130,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
       </section>
 
       <section className={styles.characterSection} aria-labelledby="character-title">
-        <div className={styles.sectionHeading}><div><span>CAST SELECTION</span><h2 id="character-title">配置出庭阵容</h2></div><p>{setup.selectedCharacterIds.length === 0 ? `当前使用种子随机选择 ${setup.playerCount} 人` : `已选择 ${setup.selectedCharacterIds.length} / ${setup.playerCount} 人`}{setup.mode === 'player' ? '；再次点击已入选角色的「设为我的角色」即可锁定席位。' : '。'}</p></div>
+        <div className={styles.sectionHeading}><div><span>CAST SELECTION</span><h2 id="character-title">配置出庭阵容</h2></div><p>{setup.selectedCharacterIds.length === 0 ? `当前使用种子随机选择 ${setup.playerCount} 人` : `已选择 ${setup.selectedCharacterIds.length} / ${setup.playerCount} 人`}{setup.mode === 'player' ? '；先将角色加入阵容，再点击角色卡下方独立的「设为我的角色」按钮认领席位。' : '。'}</p></div>
         <div className={styles.characterGrid}>
           {characters.map((character) => {
             const included = setup.selectedCharacterIds.includes(character.id);

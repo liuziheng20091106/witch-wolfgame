@@ -12,7 +12,10 @@
 - 14 项完整魔女技：魔女杀手、死亡回溯、洗脑、操控液体、怪力、漂浮、治愈、千里眼、视线诱导、灵魂交换、幻视、点火、声音模仿、魔女因子回收
 - 深度机制：诺亚的液态造物（独立意志/可毒主人）、漂浮隐匿（免疫追溯）、千里眼直播（观看者暴露职业）
 - 默认使用经主后端校验与限流的公益免费服务，无需 API Key；服务不保证稳定可用，可随时切换到自定义服务
-- 也可切换到自定义 Chat Completions 服务，填写完整 `/chat/completions` 端点、模型、API Key 与思考强度；`none` 不发送 `reasoning_effort`，默认 `low`
+- 也可切换到自定义 Chat Completions 服务，填写完整 `/chat/completions` 端点、API Key 和三档模型配置：`default` 为必填兜底档；`fast`、`deep` 的模型留空时继承 `default.model`，思考强度选择“继承”时继承 `default.reasoningEffort`；最终强度为 `none` 时不发送 `reasoning_effort`
+  - `fast`：预言家查验、治疗、点火和其他简单可选目标动作
+  - `deep`：发言、狼议、最终狼刀、女巫行动、投票/平票、操控液体、漂浮和声音模仿
+  - `default`：其余决策，以及 `fast`/`deep` 未填写的模型或思考强度
 - 设置、准备区选择和可恢复游戏进度保存在浏览器 `localStorage`
 - 桌面三栏、大阵容双列名册、平板自适应网格、手机横向角色带与底部行动面板
 
@@ -119,7 +122,7 @@ npm run test:update
 
 ## 浏览器存储
 
-- `majo-wolf.settings.v1`：免费服务选择，或自定义 Chat Completions 端点、模型、API Key 与思考强度
+- `majo-wolf.settings.v1`：免费服务选择，或自定义 Chat Completions 端点、API Key、`default`/`fast`/`deep` 三档模型与思考强度继承配置
 - `majo-wolf.setup.v1`：模式、玩家角色和随机种子
 - `majo-wolf.game.v1`：版本化完整游戏状态
 

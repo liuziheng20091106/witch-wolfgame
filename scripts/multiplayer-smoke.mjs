@@ -150,6 +150,11 @@ try {
   const resumedWelcome = await resumedGuest.next((message) => message.type === 'welcome', '重复连接恢复房间');
   assert.equal(resumedWelcome.room.selfPlayerId, 1);
   guest.socket.close();
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  const afterStaleClose = [...host.messages].reverse().find((message) => message.type === 'room-state');
+  assert.equal(afterStaleClose.room.participants.find((participant) => participant.playerId === 1)?.connected, true, '旧连接关闭及其超时回调不得覆盖新连接状态');
+  assert.equal(afterStaleClose.room.drivers[1].kind, 'human', '旧连接超时不得把已恢复真人转为 AI');
+
   resumedGuest.socket.close();
   const takeover = await host.next((message) => {
     if (message.type !== 'room-state' || message.room.drivers[1].kind !== 'ai') return false;
@@ -164,9 +169,6 @@ try {
   returnedGuest.send({ type: 'resume-room', roomCode: hostWelcome.room.roomCode, resumeToken });
   const returnedWelcome = await returnedGuest.next((message) => message.type === 'welcome' && message.room.drivers[1].kind === 'human', '重连恢复真人驱动');
   assert.equal(returnedWelcome.room.participants.find((participant) => participant.playerId === 1).connected, true);
-  await new Promise((resolve) => setTimeout(resolve, 120));
-  const afterOldSocketClose = [...host.messages].reverse().find((message) => message.type === 'room-state');
-  assert.equal(afterOldSocketClose.room.participants.find((participant) => participant.playerId === 1).connected, true, '旧连接关闭不得覆盖新连接状态');
 
   let lastSubmittedHost = '';
   let lastSubmittedGuest = '';
