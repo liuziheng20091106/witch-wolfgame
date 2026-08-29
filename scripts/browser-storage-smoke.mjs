@@ -103,15 +103,23 @@ const legacyResaved = saveGame(legacyResult.value.state, legacyResult.value.appV
 assert.equal(legacyResaved.appVersion, null);
 
 const largeGame = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: 14, selectedCharacterIds: [], seed: 1414 });
-largeGame.players.push({ id: 99, characterId: largeGame.players[0].characterId, roleAssignmentId: 'role-creature-99', skillInstanceId: 'skill-creature-99', alive: true });
+largeGame.creatures.push({ id: 99, ownerPlayerId: 0, characterId: largeGame.players[0].characterId, roleAssignmentId: 'role-creature-99', alive: true, resources: {} });
 largeGame.roleAssignments.push({ id: 'role-creature-99', ownerPlayerId: 99, roleId: 'villager', resources: {} });
-largeGame.skillInstances.push({ id: 'skill-creature-99', definitionId: largeGame.skillInstances[0].definitionId, ownerPlayerId: 99, status: 'ready', remainingUses: 1, data: {} });
 saveGame(largeGame, APP_VERSION);
 const largeResult = loadGame();
-assert.equal(largeResult.ok, true, '14 人局加造物的 15 个实体必须能保存和恢复');
-assert.equal(largeResult.value.state.players.length, 15);
+assert.equal(largeResult.ok, true, '14 人局加造物的 15 个职业实体必须能保存和恢复');
+assert.equal(largeResult.value.state.players.length, 14);
+assert.equal(largeResult.value.state.creatures.length, 1);
 assert.equal(largeResult.value.state.roleAssignments.length, 15);
-assert.equal(largeResult.value.state.skillInstances.length, 15);
+assert.equal(largeResult.value.state.skillInstances.length, 14);
+const duplicateSeat = structuredClone(saved);
+duplicateSeat.state.players[1].id = duplicateSeat.state.players[0].id;
+localStorage.setItem(GAME_KEY, JSON.stringify(duplicateSeat));
+assert.equal(loadGame().ok, false, '重复或非连续席位存档必须拒绝');
+const missingAssignment = structuredClone(saved);
+missingAssignment.state.roleAssignments.pop();
+localStorage.setItem(GAME_KEY, JSON.stringify(missingAssignment));
+assert.equal(loadGame().ok, false, '缺失职业分配的存档必须拒绝');
 saveGame(game, APP_VERSION);
 assert.match(getSavedGameCompatibilityWarning(legacyResaved), /未记录创建版本/);
 

@@ -33,6 +33,7 @@ const MESSAGE_RATE_WINDOW_MS = 10_000;
 const MAX_MESSAGES_PER_WINDOW = 60;
 const CREATE_RATE_WINDOW_MS = 60_000;
 const MAX_CREATES_PER_WINDOW = 10;
+const DISCONNECT_GRACE_MS = Number(process.env.MAJO_MULTIPLAYER_DISCONNECT_GRACE_MS ?? 15_000);
 const ROOM_IDLE_MS = 24 * 60 * 60 * 1000;
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TICK_DELAY_MS = 80;
@@ -265,6 +266,7 @@ function attachParticipant(socket: WebSocket, room: Room, participant: Participa
   const previousSocket = socketsByParticipant.get(participant.participantId);
   if (previousSocket && previousSocket !== socket) previousSocket.close(4001, 'session replaced');
   participant.connected = true;
+  room.drivers[participant.playerId] = { kind: 'human', participantId: participant.participantId };
   socketsByParticipant.set(participant.participantId, socket);
   room.updatedAt = Date.now();
   const message: MultiplayerServerMessage = welcome
@@ -274,6 +276,19 @@ function attachParticipant(socket: WebSocket, room: Room, participant: Participa
   broadcast(room);
   void persistRooms();
 }
+function scheduleDisconnectTakeover(room: Room, participant: Participant): void {
+  windowlessSetTimeout(() => {
+    if (participant.connected || participantById(room, participant.participantId) === null) return;
+    const driver = room.drivers[participant.playerId];
+    if (driver?.kind !== 'human' || driver.participantId !== participant.participantId) return;
+    room.drivers[participant.playerId] = { kind: 'ai' };
+    room.updatedAt = Date.now();
+    broadcast(room);
+    void persistRooms();
+    scheduleGame(room);
+  }, DISCONNECT_GRACE_MS);
+}
+
 
 function leaveRoom(room: Room, participant: Participant): void {
   room.participants = room.participants.filter((entry) => entry.participantId !== participant.participantId);
@@ -494,6 +509,7 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
         activeRoom.updatedAt = Date.now();
         broadcast(activeRoom);
         void persistRooms();
+        scheduleDisconnectTakeover(activeRoom, activeParticipant);
       }
     }
   });

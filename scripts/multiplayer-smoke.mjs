@@ -12,8 +12,7 @@ const stateFile = join(temp, 'rooms.json');
 const projectRoot = new URL('..', import.meta.url);
 function startServer(testPort = port, testStateFile = stateFile) {
   return spawn(process.execPath, [join('node_modules', 'tsx', 'dist', 'cli.mjs'), 'multiplayer/server.ts'], {
-    cwd: projectRoot,
-    env: { ...process.env, MAJO_MULTIPLAYER_PORT: String(testPort), MAJO_MULTIPLAYER_HOST: '127.0.0.1', MAJO_MULTIPLAYER_STATE: testStateFile },
+    env: { ...process.env, MAJO_MULTIPLAYER_PORT: String(testPort), MAJO_MULTIPLAYER_HOST: '127.0.0.1', MAJO_MULTIPLAYER_STATE: testStateFile, MAJO_MULTIPLAYER_DISCONNECT_GRACE_MS: '150' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -130,17 +129,25 @@ try {
   const resumedWelcome = await resumedGuest.next((message) => message.type === 'welcome', '重复连接恢复房间');
   assert.equal(resumedWelcome.room.selfPlayerId, 1);
   guest.socket.close();
+  resumedGuest.socket.close();
+  const takeover = await host.next((message) => message.type === 'room-state' && message.room.drivers[1].kind === 'ai', '断线超时转 AI');
+  assert.equal(takeover.room.participants.some((participant) => participant.playerId === 1 && participant.connected), false);
+  const returnedGuest = client();
+  await returnedGuest.open();
+  returnedGuest.send({ type: 'resume-room', roomCode: hostWelcome.room.roomCode, resumeToken });
+  const returnedWelcome = await returnedGuest.next((message) => message.type === 'welcome' && message.room.drivers[1].kind === 'human', '重连恢复真人驱动');
+  assert.equal(returnedWelcome.room.participants.find((participant) => participant.playerId === 1).connected, true);
   await new Promise((resolve) => setTimeout(resolve, 120));
   const afterOldSocketClose = [...host.messages].reverse().find((message) => message.type === 'room-state');
   assert.equal(afterOldSocketClose.room.participants.find((participant) => participant.playerId === 1).connected, true, '旧连接关闭不得覆盖新连接状态');
 
   for (let step = 0; step < 120; step += 1) {
     hostState = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation) ?? hostState;
-    guestState = [...resumedGuest.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation) ?? resumedWelcome;
+    guestState = [...returnedGuest.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation) ?? returnedWelcome;
     const pendingHost = hostState.room.observation?.pendingDecision;
     const pendingGuest = guestState.room.observation?.pendingDecision;
     if (pendingHost) host.send({ type: 'submit-decision', pendingDecisionId: pendingHost.id, decision: decisionFor(pendingHost, '继续依据公开事实判断。') });
-    if (pendingGuest) resumedGuest.send({ type: 'submit-decision', pendingDecisionId: pendingGuest.id, decision: decisionFor(pendingGuest, '我会检查公开票型。') });
+    if (pendingGuest) returnedGuest.send({ type: 'submit-decision', pendingDecisionId: pendingGuest.id, decision: decisionFor(pendingGuest, '我会检查公开票型。') });
     await new Promise((resolve) => setTimeout(resolve, 80));
     const progressed = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation?.day > 0);
     if (progressed) break;
@@ -148,11 +155,11 @@ try {
   const progressed = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation?.day > 0);
   assert.notEqual(progressed, undefined, '混合真人与 AI 驱动必须推进到白天');
 
-  resumedGuest.send({ type: 'leave-room' });
+  returnedGuest.send({ type: 'leave-room' });
   const converted = await host.next((message) => message.type === 'room-state' && message.room.drivers[1].kind === 'ai', '离开后转 AI');
   assert.equal(converted.room.participants.some((participant) => participant.playerId === 1), false);
   host.socket.close();
-  resumedGuest.socket.close();
+  returnedGuest.socket.close();
   child.kill('SIGTERM');
   await new Promise((resolve) => child.once('exit', resolve));
   const persisted = JSON.parse(await readFile(stateFile, 'utf8'));
