@@ -141,7 +141,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
               <button type="button" className={styles.characterToggle} onClick={() => toggleCharacter(character.id)} aria-pressed={included} disabled={inclusionDisabled}>
                 <span className={styles.seatNumber}>{selectedSeat === null ? '候选' : `${String(selectedSeat).padStart(2, '0')} 席`}</span>
                 <img src={character.avatarUrl} alt="" />
-                <span className={styles.characterMeta}><strong>{character.name}</strong><small>{character.speechStyle.slice(0, 20)}…</small></span>
+                <span className={styles.characterMeta}><strong>{character.name}</strong></span>
                 {included && <span className={styles.check}><Check /></span>}
               </button>
               {setup.mode === 'player' && (included || setup.selectedCharacterIds.length === 0) && <button type="button" className={styles.humanSeat} onClick={() => onUpdateSetup({ ...setup, humanCharacterId: character.id })}>{human ? '已认领此席' : '设为我的角色'}</button>}

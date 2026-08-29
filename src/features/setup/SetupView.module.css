@@ -71,6 +71,7 @@
   border-top: 5px solid var(--verdict);
   background: var(--paper-bright);
   box-shadow: 9px 9px 0 var(--paper-shadow);
+  box-sizing: border-box;
 }
 .commandBand::before { content: '01'; position: absolute; top: -33px; left: 20px; color: var(--verdict); font-family: var(--sans); font-size: 22px; font-weight: 900; }
 .intro h2 { margin: 5px 0 0; font-size: clamp(25px, 2.5vw, 34px); line-height: 1.15; }
@@ -105,10 +106,10 @@
 .countField {
   display: grid;
   gap: 7px;
-  color: var(--paper-dim);
+  color: var(--muted);
   font-family: var(--sans);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .countField div {
@@ -116,7 +117,8 @@
   display: grid;
   grid-template-columns: 44px 1fr 44px;
   align-items: center;
-  border: 1px solid rgb(255 255 255 / 35%);
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
 }
 
 .countField button {
@@ -125,34 +127,35 @@
   place-items: center;
   border: 0;
   background: transparent;
-  color: white;
+  color: var(--ink);
 }
 
-.countField button:disabled { opacity: .35; }
+.countField button:disabled { color: var(--muted); opacity: .55; }
 .countField svg { width: 17px; }
-.countField strong { text-align: center; color: white; font-size: 20px; }
+.countField strong { text-align: center; color: var(--ink); font-size: 20px; }
 
 .seedField {
   display: grid;
   gap: 7px;
-  color: var(--paper-dim);
+  color: var(--muted);
   font-family: var(--sans);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .seedField input {
   width: 100%;
   min-height: 48px;
+  box-sizing: border-box;
   padding: 8px 12px;
-  border: 1px solid rgb(255 255 255 / 35%);
-  background: transparent;
-  color: white;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .seedField input::placeholder {
-  color: var(--paper-dim);
-  opacity: 0.8;
+  color: var(--muted);
+  opacity: 1;
 }
 
 .seedControls {
@@ -169,9 +172,9 @@
   justify-content: center;
   gap: 6px;
   padding: 0 14px;
-  border: 1px solid rgb(255 255 255 / 35%);
-  background: transparent;
-  color: var(--paper-bright);
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--sans);
   font-weight: 800;
 }
@@ -278,12 +281,10 @@
 }
 
 .characterMeta {
-  min-width: 0;
+  min-height: 46px;
   display: grid;
-  gap: 3px;
-  min-height: 62px;
   align-content: center;
-  padding: 9px 10px 10px;
+  padding: 8px 10px;
   border-top: 1px solid var(--line);
 }
 
@@ -294,14 +295,6 @@
   white-space: nowrap;
 }
 
-.characterMeta small {
-  overflow: hidden;
-  color: var(--muted);
-  font-family: var(--sans);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .check {
   position: absolute;

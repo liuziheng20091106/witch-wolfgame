@@ -6,8 +6,8 @@
   overflow: hidden;
   border: 1px solid var(--intel-dark);
   border-left: 7px solid var(--intel);
-  background: color-mix(in srgb, var(--intel-soft) 72%, var(--paper-bright));
-  box-shadow: 6px 6px 0 var(--paper-shadow);
+  background: var(--paper-bright);
+  box-shadow: 5px 5px 0 var(--paper-shadow);
 }
 
 .join::after,
@@ -16,7 +16,7 @@
   position: absolute;
   top: 13px;
   right: 18px;
-  color: color-mix(in srgb, var(--intel-dark) 18%, transparent);
+  color: color-mix(in srgb, var(--intel-dark) 11%, transparent);
   font-family: var(--sans);
   font-size: 34px;
   font-weight: 900;
@@ -36,16 +36,16 @@
 .lobby h2 { margin: 0; font-size: 24px; }
 .join header p { max-width: 620px; margin: 3px 0 0; color: var(--muted); font-family: var(--sans); font-size: 12px; line-height: 1.5; }
 
-.fields { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(180px, .7fr) minmax(240px, 1fr) 150px; gap: 12px; margin-top: 20px; }
-.fields label { display: grid; gap: 7px; color: var(--intel-dark); font-family: var(--sans); font-size: 11px; font-weight: 900; }
+.fields { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(180px, .7fr) minmax(240px, 1fr) 150px; gap: 16px; align-items: end; margin-top: 20px; }
+.fields label { min-width: 0; display: grid; grid-template-rows: auto 48px; gap: 7px; color: var(--ink); font-family: var(--sans); font-size: 11px; font-weight: 900; }
 .fields input,
-.fields select { width: 100%; min-height: 46px; box-sizing: border-box; padding: 8px 11px; border: 1px solid var(--line-strong); background: var(--paper-bright); color: var(--ink); }
+.fields select { width: 100%; height: 48px; min-width: 0; box-sizing: border-box; padding: 8px 11px; border: 1px solid var(--line-strong); background: var(--paper); color: var(--ink); }
 
 .actions { position: relative; z-index: 1; display: flex; gap: 10px; margin-top: 15px; }
 .actions button,
 .copy { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 15px; border: 1px solid var(--intel-dark); background: var(--paper-bright); color: var(--intel-dark); font-family: var(--sans); font-weight: 900; }
 .actions button:first-child { background: var(--intel-dark); color: var(--paper-bright); }
-.actions button:disabled { opacity: .42; }
+.actions button:disabled { border-color: var(--line-strong); background: var(--paper); color: var(--muted); opacity: 1; }
 .actions svg,
 .copy svg { width: 17px; }
 .actions .start,

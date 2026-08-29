@@ -2,12 +2,12 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  margin: 10px;
-  padding: 18px;
+  margin: 8px;
+  padding: 16px;
   border: 1px solid var(--verdict-dark);
-  border-top: 7px solid var(--verdict);
+  border-top: 5px solid var(--verdict);
   background: var(--paper-bright);
-  box-shadow: 5px 5px 0 var(--paper-shadow);
+  box-shadow: 3px 3px 0 var(--paper-shadow);
 }
 
 .panel header>span,
@@ -21,7 +21,7 @@
 
 .panel h2 {
   margin: 3px 0 0;
-  font-size: 22px;
+  font-size: 21px;
 }
 
 .panel p {
@@ -247,18 +247,19 @@
 
 .debugActions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px;
-  margin-top: 6px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .debugActions button {
-  min-height: 42px;
+  min-width: 0;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 0 9px;
+  padding: 6px 9px;
   border: 1px solid var(--intel-dark);
   background: var(--intel-soft);
   color: var(--intel-dark);
