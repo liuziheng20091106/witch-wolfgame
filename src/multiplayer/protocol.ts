@@ -37,13 +37,14 @@ export interface MultiplayerParticipantView {
 
 export interface MultiplayerRoomView {
   roomCode: string;
-  status: 'lobby' | 'playing' | 'ended';
+  status: 'lobby' | 'playing' | 'ended' | 'failed';
   selfParticipantId: string;
   selfPlayerId: PlayerId;
   hostParticipantId: string;
   participants: MultiplayerParticipantView[];
   drivers: PlayerDriver[];
   observation: GameObservation | null;
+  failureMessage: string | null;
 }
 
 export type MultiplayerServerMessage =

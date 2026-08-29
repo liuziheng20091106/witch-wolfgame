@@ -10,7 +10,7 @@ import { createGame } from '../src/domain/engine/createGame.js';
 import { reduceGame } from '../src/domain/engine/reducer.js';
 import { selectObservation } from '../src/domain/engine/selectors.js';
 import { gameStateSchema, playerIdSchema } from '../src/storage/gameStateSchema.js';
-import type { CharacterId, GameState, PlayerId } from '../src/domain/model.js';
+import type { CharacterId, GameState, PendingDecision, PlayerId, SubmittedDecision } from '../src/domain/model.js';
 import {
   encodeMultiplayerMessage,
   multiplayerClientMessageSchema,
@@ -53,12 +53,13 @@ interface Participant {
 
 interface Room {
   roomCode: string;
-  status: 'lobby' | 'playing' | 'ended';
+  status: 'lobby' | 'playing' | 'ended' | 'failed';
   hostParticipantId: string;
   seed: number;
   participants: Participant[];
   drivers: PlayerDriver[];
   game: GameState | null;
+  failureMessage: string | null;
   updatedAt: number;
 }
 
@@ -80,12 +81,13 @@ const driverSchema = z.discriminatedUnion('kind', [
 ]);
 const persistedRoomSchema = z.strictObject({
   roomCode: z.string().regex(/^[A-Z2-9]{6}$/),
-  status: z.enum(['lobby', 'playing', 'ended']),
+  status: z.enum(['lobby', 'playing', 'ended', 'failed']),
   hostParticipantId: z.string().min(1),
   seed: z.number().int().min(0).max(0xffff_ffff),
   participants: z.array(participantSchema).min(1).max(MULTIPLAYER_PLAYER_COUNT),
   drivers: z.array(driverSchema).length(MULTIPLAYER_PLAYER_COUNT),
   game: gameStateSchema.nullable(),
+  failureMessage: z.string().max(500).nullable().default(null),
   updatedAt: z.number().int().nonnegative(),
 }).superRefine((room, context) => {
   const participantIds = new Set(room.participants.map((participant) => participant.participantId));
@@ -99,6 +101,7 @@ const persistedRoomSchema = z.strictObject({
     if (!participant || participant.playerId !== index) context.addIssue({ code: 'custom', message: '真人驱动与参与者席位不一致' });
   });
   if ((room.status === 'lobby' && room.game !== null) || (room.status !== 'lobby' && room.game === null)) context.addIssue({ code: 'custom', message: '房间状态与游戏状态不一致' });
+  if ((room.status === 'failed') !== (room.failureMessage !== null)) context.addIssue({ code: 'custom', message: '房间失败状态与错误信息不一致' });
 });
 
 const rooms = new Map<string, Room>();
@@ -156,6 +159,7 @@ function roomView(room: Room, participant: Participant): MultiplayerRoomView {
     participants,
     drivers: room.drivers.map((driver) => ({ ...driver })),
     observation,
+    failureMessage: room.failureMessage,
   };
 }
 
@@ -217,16 +221,66 @@ async function loadRooms(): Promise<void> {
   }
 }
 
+function emergencyDecision(pending: PendingDecision): SubmittedDecision {
+  const targetPlayerId = pending.candidates[0] ?? null;
+  if (pending.schemaKey === 'speech') return { speech: '' };
+  if (pending.schemaKey === 'wolf-council') {
+    if (targetPlayerId === null) throw new Error('狼议没有合法候选目标');
+    return { message: '本地应急策略选择首个合法目标。', recommendedTargetPlayerId: targetPlayerId };
+  }
+  if (pending.schemaKey === 'target') {
+    if (targetPlayerId === null && !pending.allowAbstain) throw new Error('强制目标决策没有合法候选');
+    return { targetPlayerId };
+  }
+  if (pending.schemaKey === 'witch') return { save: false, poisonTargetPlayerId: null };
+  if (pending.schemaKey === 'optional-target') return { use: false, targetPlayerId: null };
+  if (pending.schemaKey === 'liquid-control') return { use: false, mode: null, targetPlayerId: null, factId: null };
+  if (pending.schemaKey === 'levitation') return { use: false, mode: null, targetPlayerId: null };
+  if (pending.schemaKey === 'voice-mimic') return { use: false, targetPlayerId: null, forgedSpeech: null };
+  return { use: false };
+}
+
+function failRoom(room: Room, error: unknown): void {
+  if (room.game !== null) room.game = reduceGame(room.game, { type: 'mark-ai-failure' });
+  room.status = 'failed';
+  room.failureMessage = 'AI 驱动发生不可恢复错误';
+  room.updatedAt = Date.now();
+  console.error(JSON.stringify({ event: 'multiplayer_ai_drive_fatal', roomCode: room.roomCode, pendingDecisionId: room.game?.pendingDecision?.id ?? null, message: error instanceof Error ? error.message : String(error) }));
+  broadcast(room);
+  void persistRooms();
+}
+
+function recoverAiDecision(room: Room, error: unknown): boolean {
+  const game = room.game;
+  const pending = game?.pendingDecision;
+  if (!game || !pending || room.drivers[pending.actorId]?.kind === 'human') return false;
+  try {
+    let recovered = reduceGame(game, { type: 'mark-ai-failure' });
+    recovered = reduceGame(recovered, {
+      type: 'submit-decision',
+      pendingDecisionId: pending.id,
+      actorId: pending.actorId,
+      decision: emergencyDecision(pending),
+    });
+    room.game = recovered;
+    room.updatedAt = Date.now();
+    console.error(JSON.stringify({ event: 'multiplayer_ai_drive_recovered', roomCode: room.roomCode, pendingDecisionId: pending.id, message: error instanceof Error ? error.message : String(error) }));
+    broadcast(room);
+    void persistRooms();
+    scheduleGame(room);
+    return true;
+  } catch (recoveryError) {
+    console.error(JSON.stringify({ event: 'multiplayer_ai_recovery_error', roomCode: room.roomCode, pendingDecisionId: pending.id, message: recoveryError instanceof Error ? recoveryError.message : String(recoveryError) }));
+    return false;
+  }
+}
+
 function scheduleGame(room: Room): void {
   windowlessSetTimeout(() => {
     try {
       driveGame(room);
     } catch (error) {
-      if (room.game !== null) room.game = reduceGame(room.game, { type: 'mark-ai-failure' });
-      room.updatedAt = Date.now();
-      console.error(JSON.stringify({ event: 'multiplayer_ai_drive_error', roomCode: room.roomCode, pendingDecisionId: room.game?.pendingDecision?.id ?? null, message: error instanceof Error ? error.message : String(error) }));
-      broadcast(room);
-      void persistRooms();
+      if (!recoverAiDecision(room, error)) failRoom(room, error);
     }
   }, TICK_DELAY_MS);
 }
@@ -252,6 +306,7 @@ function driveGame(room: Room): void {
     const pending = game.pendingDecision;
     if (pending === null) {
       game = reduceGame(game, { type: 'advance' });
+      room.game = game;
       continue;
     }
     const driver = room.drivers[pending.actorId];
@@ -262,8 +317,10 @@ function driveGame(room: Room): void {
       void persistRooms();
       return;
     }
+    room.game = game;
     const fallback = fallbackDecision(game, pending);
     game = reduceGame(game, { type: 'set-rng-state', rngState: fallback.rngState });
+    room.game = game;
     game = reduceGame(game, {
       type: 'submit-decision',
       pendingDecisionId: pending.id,
@@ -418,6 +475,7 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
           participants: [participant],
           drivers: ROOM_PLAYER_IDS.map((playerId) => playerId === 0 ? { kind: 'human', participantId } : { kind: 'ai' }),
           game: null,
+          failureMessage: null,
           updatedAt: Date.now(),
         };
         rooms.set(code, room);

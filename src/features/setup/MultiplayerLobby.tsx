@@ -24,7 +24,7 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
   if (room !== null) {
     return <section className={styles.lobby} aria-labelledby="multiplayer-lobby-title">
       <header><Radio /><div><span>ONLINE ROOM</span><h2 id="multiplayer-lobby-title">房间 {room.roomCode}</h2></div><button type="button" className={styles.copy} onClick={() => { void copyTextToClipboard(room.roomCode).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }); }}><Copy />{copied ? '已复制' : '复制房间号'}</button></header>
-      <div className={styles.status}><span>{multiplayer.connected ? <Wifi /> : <WifiOff />}{multiplayer.connected ? '已连接' : '连接中断'}</span><strong>{room.status === 'lobby' ? '等待准备' : room.status === 'playing' ? '审判进行中' : '审判已结束'}</strong></div>
+      <div className={styles.status}><span>{multiplayer.connected ? <Wifi /> : <WifiOff />}{multiplayer.connected ? '已连接' : '连接中断'}</span><strong>{room.status === 'lobby' ? '等待准备' : room.status === 'playing' ? '审判进行中' : room.status === 'failed' ? '审判异常终止' : '审判已结束'}</strong></div>
       <div className={styles.participants}>
         {room.participants.map((participant) => <article key={participant.participantId} className={participant.participantId === room.selfParticipantId ? styles.self : ''}>
           <img src={characters.find((character) => character.id === participant.characterId)?.avatarUrl} alt="" />
@@ -33,6 +33,8 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
         </article>)}
         {room.drivers.map((driver, index) => driver.kind === 'ai' && <article key={`ai-${index}`} className={styles.aiSeat}><UserRound /><div><strong>AI 驱动</strong><span>{index + 1}号席</span></div><small>自动</small></article>)}
       </div>
+      {room.failureMessage && <p className={styles.error} role="alert">{room.failureMessage}。房间已停止推进，请离开房间重新创建。</p>}
+      {room.status === 'failed' && <div className={styles.actions}><button type="button" onClick={multiplayer.leaveRoom}>离开房间</button></div>}
       {room.status === 'lobby' && <div className={styles.actions}>
         <button type="button" className={self?.ready ? styles.ready : ''} onClick={() => multiplayer.setReady(!self?.ready)}>{self?.ready ? '取消准备' : '准备'}</button>
         {host && <button type="button" className={styles.start} disabled={!canStart} onClick={multiplayer.startGame}><Play />开始游戏</button>}
