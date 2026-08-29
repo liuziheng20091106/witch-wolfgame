@@ -218,7 +218,17 @@ async function loadRooms(): Promise<void> {
 }
 
 function scheduleGame(room: Room): void {
-  windowlessSetTimeout(() => driveGame(room), TICK_DELAY_MS);
+  windowlessSetTimeout(() => {
+    try {
+      driveGame(room);
+    } catch (error) {
+      if (room.game !== null) room.game = reduceGame(room.game, { type: 'mark-ai-failure' });
+      room.updatedAt = Date.now();
+      console.error(JSON.stringify({ event: 'multiplayer_ai_drive_error', roomCode: room.roomCode, pendingDecisionId: room.game?.pendingDecision?.id ?? null, message: error instanceof Error ? error.message : String(error) }));
+      broadcast(room);
+      void persistRooms();
+    }
+  }, TICK_DELAY_MS);
 }
 
 function windowlessSetTimeout(callback: () => void, delay: number): void {
