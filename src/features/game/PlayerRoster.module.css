@@ -3,7 +3,7 @@
 .roster header span { color: var(--verdict); font-family: var(--sans); font-size: 9px; font-weight: 900; letter-spacing: .16em; }
 .roster h2 { margin: 3px 0 0; font-size: 23px; }
 .list { min-height: 0; display: grid; grid-template-rows: repeat(6, minmax(84px, 1fr)); padding: 6px; gap: 5px; overflow-y: auto; }
-.listWithCreature { grid-template-rows: repeat(7, minmax(72px, 1fr)); }
+.largeList { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(7, minmax(72px, 1fr)); }
 .player { position: relative; min-width: 0; display: grid; grid-template-columns: 54px 1fr 28px; grid-template-rows: 1fr auto; gap: 0 11px; align-items: center; padding: 8px 12px 8px 8px; border: 1px solid var(--line); border-left: 4px solid var(--line-strong); background: var(--paper-bright); color: var(--ink); text-align: left; box-shadow: 2px 2px 0 var(--paper-shadow); }
 .player:hover { border-left-color: var(--magic); background: var(--magic-soft); }
 .player.current { border-color: var(--verdict); border-left-width: 7px; background: var(--verdict-soft); box-shadow: 3px 3px 0 var(--paper-shadow); }
@@ -16,5 +16,5 @@
 .stateIcon { display: grid; place-items: center; color: var(--intel-dark); }
 .stateIcon svg { width: 18px; }
 .skill { grid-column: 2 / 4; align-self: start; color: var(--magic-dark); font-family: var(--sans); font-size: 9px; font-weight: 900; letter-spacing: .04em; }
-@media (max-width: 1099px) { .roster { border-right: 0; } .list { grid-template-rows: repeat(3, minmax(92px, 1fr)); grid-template-columns: 1fr 1fr; } .listWithCreature { grid-template-rows: repeat(4, minmax(92px, 1fr)); } }
+@media (max-width: 1099px) { .roster { border-right: 0; } .list { grid-template-rows: repeat(3, minmax(92px, 1fr)); grid-template-columns: 1fr 1fr; } .largeList { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(7, minmax(84px, 1fr)); } }
 @media (max-width: 719px) { .roster { height: auto; border: 0; background: transparent; } .roster header { display: none; } .list { display: flex; grid-template: none; gap: 8px; overflow-x: auto; padding: 10px 14px; } .player { flex: 0 0 154px; min-height: 86px; border: 1px solid var(--line); background: var(--paper-bright); } }

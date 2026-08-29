@@ -160,7 +160,11 @@ try {
 
   const validRoom = persisted[0];
   assert.notEqual(validRoom, undefined);
-  await writeFile(stateFile, JSON.stringify([validRoom, { roomCode: 'BAD234' }]), 'utf8');
+  assert.notEqual(validRoom.game, null, '终局恢复样本必须包含合法游戏状态');
+  const endedRoom = structuredClone(validRoom);
+  endedRoom.roomCode = 'END234';
+  endedRoom.status = 'ended';
+  await writeFile(stateFile, JSON.stringify([validRoom, endedRoom, { roomCode: 'BAD234' }]), 'utf8');
   const reloadPort = port + 1;
   const reloaded = startServer(reloadPort);
   let reloadErrors = '';
@@ -174,8 +178,18 @@ try {
     setTimeout(() => reject(new Error('合法房间重载超时')), 5000).unref();
   });
   assert.equal(restored.type, 'welcome');
+  const endedReconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`);
+  await new Promise((resolve, reject) => { endedReconnect.once('open', resolve); endedReconnect.once('error', reject); });
+  endedReconnect.send(JSON.stringify({ type: 'resume-room', roomCode: endedRoom.roomCode, resumeToken: endedRoom.participants[0].resumeToken }));
+  const restoredEnded = await new Promise((resolve, reject) => {
+    endedReconnect.once('message', (data) => resolve(JSON.parse(data.toString())));
+    setTimeout(() => reject(new Error('终局房间重载超时')), 5000).unref();
+  });
+  assert.equal(restoredEnded.type, 'welcome');
+  assert.equal(restoredEnded.room.status, 'ended');
   assert.match(reloadErrors, /multiplayer_room_discarded/);
   reconnect.close();
+  endedReconnect.close();
   reloaded.kill('SIGTERM');
   await new Promise((resolve) => reloaded.once('exit', resolve));
 

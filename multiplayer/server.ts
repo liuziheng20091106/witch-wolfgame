@@ -91,7 +91,7 @@ const persistedRoomSchema = z.strictObject({
     const participant = room.participants.find((entry) => entry.participantId === driver.participantId);
     if (!participant || participant.playerId !== index) context.addIssue({ code: 'custom', message: '真人驱动与参与者席位不一致' });
   });
-  if ((room.status === 'lobby') !== (room.game === null)) context.addIssue({ code: 'custom', message: '房间状态与游戏状态不一致' });
+  if ((room.status === 'lobby' && room.game !== null) || (room.status !== 'lobby' && room.game === null)) context.addIssue({ code: 'custom', message: '房间状态与游戏状态不一致' });
 });
 
 const rooms = new Map<string, Room>();

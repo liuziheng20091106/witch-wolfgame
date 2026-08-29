@@ -34,6 +34,7 @@ npm run server:multiplayer
 ```
 
 公网部署应在反向代理上把 `/multiplayer` 升级为 WebSocket，并用 `VITE_MULTIPLAYER_ENDPOINT=wss://example.com/multiplayer` 覆盖前端地址。房间状态原子写入 `.runtime/multiplayer-rooms.json`；恢复令牌只保存在参与者浏览器和服务端状态文件中。
+本地 OpenAI 兼容代理默认监听 `127.0.0.1:34025`，并允许 Vite 默认的 `http://127.0.0.1:5173` 与 `http://localhost:5173` 来源。自定义开发端口时，用逗号分隔的 `LOCAL_AI_ALLOWED_ORIGINS` 显式配置允许来源后运行 `npm run server:local-ai`。代理仅从 OMP 配置或环境变量读取上游凭据。
 
 
 ## 模型提供商验证工具
