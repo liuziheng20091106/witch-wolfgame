@@ -6,7 +6,13 @@ const HOST = process.env.LOCAL_AI_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.LOCAL_AI_PORT ?? 34025);
 const allowedOrigins = new Set((process.env.LOCAL_AI_ALLOWED_ORIGINS ?? 'http://127.0.0.1:5173,http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean));
 const configFile = process.env.OMP_AI_CONFIG_FILE ?? `${process.env.USERPROFILE ?? ''}/.omp/agent/models.yml`;
-const configText = readFileSync(configFile, 'utf8');
+let configText = '';
+try {
+  configText = readFileSync(configFile, 'utf8');
+} catch (error) {
+  const code = error instanceof Error && 'code' in error ? String(error.code) : '';
+  if (code !== 'ENOENT') throw error;
+}
 const providerName = process.env.OMP_AI_PROVIDER ?? 'NOFX';
 const providerHeader = `  ${providerName}:`;
 const configLines = configText.split(/\r?\n/);

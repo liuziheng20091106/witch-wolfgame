@@ -198,6 +198,7 @@ async function loadRooms(): Promise<void> {
     if (now - room.updatedAt > ROOM_IDLE_MS) continue;
     room.participants.forEach((participant) => { participant.connected = false; });
     rooms.set(room.roomCode, room);
+    if (room.status === 'playing') scheduleGame(room);
   }
 }
 

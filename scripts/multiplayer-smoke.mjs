@@ -161,6 +161,11 @@ try {
   const validRoom = persisted[0];
   assert.notEqual(validRoom, undefined);
   assert.notEqual(validRoom.game, null, '终局恢复样本必须包含合法游戏状态');
+  const restartPlayerId = validRoom.game.pendingDecision?.actorId;
+  assert.equal(Number.isInteger(restartPlayerId) && restartPlayerId >= 0 && restartPlayerId < validRoom.drivers.length, true, '重启样本必须停在普通席位待处理决策');
+  assert.equal(validRoom.participants.some((participant) => participant.playerId === restartPlayerId), true, '重启样本行动者必须有真人参与者');
+  validRoom.drivers[restartPlayerId] = { kind: 'ai' };
+  const restartDecisionId = validRoom.game.pendingDecision.id;
   const endedRoom = structuredClone(validRoom);
   endedRoom.roomCode = 'END234';
   endedRoom.status = 'ended';
@@ -171,13 +176,24 @@ try {
   reloaded.stderr.on('data', (chunk) => { reloadErrors += chunk.toString(); });
   await waitReady(reloaded);
   const reconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`);
+  const reloadMessages = [];
+  reconnect.on('message', (data) => { reloadMessages.push(JSON.parse(data.toString())); });
   await new Promise((resolve, reject) => { reconnect.once('open', resolve); reconnect.once('error', reject); });
   reconnect.send(JSON.stringify({ type: 'resume-room', roomCode: validRoom.roomCode, resumeToken: validRoom.participants[0].resumeToken }));
   const restored = await new Promise((resolve, reject) => {
-    reconnect.once('message', (data) => resolve(JSON.parse(data.toString())));
-    setTimeout(() => reject(new Error('合法房间重载超时')), 5000).unref();
+    const check = () => {
+      const welcome = reloadMessages.find((message) => message.type === 'welcome');
+      const progressed = welcome?.room.observation?.pendingDecision?.id !== restartDecisionId
+        ? welcome
+        : reloadMessages.find((message) => message.type === 'room-state' && message.room.observation?.pendingDecision?.id !== restartDecisionId);
+      if (welcome && progressed) resolve({ welcome, progressed });
+      else setTimeout(check, 20).unref();
+    };
+    check();
+    setTimeout(() => reject(new Error(`重启后 AI 房间未继续推进：${JSON.stringify(reloadMessages)}`)), 5000).unref();
   });
-  assert.equal(restored.type, 'welcome');
+  assert.equal(restored.welcome.type, 'welcome');
+  assert.match(restored.progressed.type, /^(welcome|room-state)$/);
   const endedReconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`);
   await new Promise((resolve, reject) => { endedReconnect.once('open', resolve); endedReconnect.once('error', reject); });
   endedReconnect.send(JSON.stringify({ type: 'resume-room', roomCode: endedRoom.roomCode, resumeToken: endedRoom.participants[0].resumeToken }));
