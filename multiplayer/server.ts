@@ -207,7 +207,13 @@ async function loadRooms(): Promise<void> {
     if (now - room.updatedAt > ROOM_IDLE_MS) continue;
     room.participants.forEach((participant) => { participant.connected = false; });
     rooms.set(room.roomCode, room);
-    if (room.status === 'playing') scheduleGame(room);
+    if (room.status === 'playing') {
+      for (const participant of room.participants) {
+        const driver = room.drivers[participant.playerId];
+        if (driver?.kind === 'human' && driver.participantId === participant.participantId) scheduleDisconnectTakeover(room, participant);
+      }
+      scheduleGame(room);
+    }
   }
 }
 
