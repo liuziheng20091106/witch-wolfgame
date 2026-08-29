@@ -53,6 +53,7 @@ export function useMultiplayerRoom(): MultiplayerController {
       return;
     }
     if (message.type === 'error') {
+      if (message.code === 'resume_invalid') localStorage.removeItem(RESUME_KEY);
       setError(message.message);
       return;
     }

@@ -102,7 +102,7 @@ const persistedRoomSchema = z.strictObject({
     const participant = room.participants.find((entry) => entry.participantId === driver.participantId);
     if (!participant || participant.playerId !== index) context.addIssue({ code: 'custom', message: '真人驱动与参与者席位不一致' });
   });
-  if ((room.status === 'lobby' && room.game !== null) || (room.status !== 'lobby' && room.game === null)) context.addIssue({ code: 'custom', message: '房间状态与游戏状态不一致' });
+  if ((room.status === 'lobby' && room.game !== null) || ((room.status === 'playing' || room.status === 'ended') && room.game === null)) context.addIssue({ code: 'custom', message: '房间状态与游戏状态不一致' });
   if ((room.status === 'failed') !== (room.failureMessage !== null)) context.addIssue({ code: 'custom', message: '房间失败状态与错误信息不一致' });
 });
 
@@ -111,6 +111,7 @@ const socketsByParticipant = new Map<string, WebSocket>();
 const connectionGenerationByParticipant = new Map<string, number>();
 let connectionCount = 0;
 let persistChain = Promise.resolve();
+let shuttingDown = false;
 const connectionsByAddress = new Map<string, number>();
 const createRatesByAddress = new Map<string, RateWindow>();
 
@@ -182,18 +183,19 @@ function broadcast(room: Room): void {
   }
 }
 
-function persistRooms(): Promise<void> {
-  const payload: PersistedRoom[] = [...rooms.values()].map((room) => ({
-    ...room,
-    participants: room.participants.map((participant) => ({ ...participant, connected: false })),
-  }));
-  persistChain = persistChain.then(async () => {
+function persistRooms(force = false): Promise<void> {
+  if (shuttingDown && !force) return persistChain;
+  persistChain = persistChain.catch((error) => {
+    console.error(JSON.stringify({ event: 'multiplayer_persist_error', message: error instanceof Error ? error.message : String(error) }));
+  }).then(async () => {
+    const payload: PersistedRoom[] = [...rooms.values()].map((room) => ({
+      ...room,
+      participants: room.participants.map((participant) => ({ ...participant, connected: false })),
+    }));
     await mkdir(dirname(STATE_FILE), { recursive: true });
     const tempFile = `${STATE_FILE}.${process.pid}.tmp`;
     await writeFile(tempFile, JSON.stringify(payload), 'utf8');
     await rename(tempFile, STATE_FILE);
-  }).catch((error) => {
-    console.error(JSON.stringify({ event: 'multiplayer_persist_error', message: error instanceof Error ? error.message : String(error) }));
   });
   return persistChain;
 }
@@ -253,11 +255,13 @@ function emergencyDecision(pending: PendingDecision): SubmittedDecision {
 }
 
 function failRoom(room: Room, error: unknown): void {
-  if (room.game?.pendingDecision) room.game = reduceGame(room.game, { type: 'mark-ai-failure', failure: { kind: 'multiplayer-fatal', message: error instanceof Error ? error.message : String(error), pendingDecisionId: room.game.pendingDecision.id, actorId: room.game.pendingDecision.actorId } });
+  const pendingDecisionId = room.game?.pendingDecision?.id ?? null;
+  const message = error instanceof Error ? error.message : String(error);
+  room.game = null;
   room.status = 'failed';
-  room.failureMessage = 'AI 驱动发生不可恢复错误';
+  room.failureMessage = `AI 驱动发生不可恢复错误：${message}`.slice(0, 500);
   room.updatedAt = Date.now();
-  console.error(JSON.stringify({ event: 'multiplayer_ai_drive_fatal', roomCode: room.roomCode, pendingDecisionId: room.game?.pendingDecision?.id ?? null, message: error instanceof Error ? error.message : String(error) }));
+  console.error(JSON.stringify({ event: 'multiplayer_ai_drive_fatal', roomCode: room.roomCode, pendingDecisionId, message }));
   broadcast(room);
   void persistRooms();
 }
@@ -523,8 +527,10 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
         if (activeRoom !== null) throw new Error('当前连接已经加入房间');
         const room = rooms.get(message.roomCode);
         const participant = room?.participants.find((entry) => entry.resumeToken === message.resumeToken);
-        if (!room || !participant) throw new Error('恢复凭据无效或房间已失效');
-        activeRoom = room;
+        if (!room || !participant) {
+          send(socket, errorMessage('resume_invalid', '恢复凭据无效或房间已失效'));
+          return;
+        }
         activeParticipant = participant;
         activeGeneration = attachParticipant(socket, room, participant, true);
         return;
@@ -620,7 +626,10 @@ httpServer.listen(PORT, HOST, () => {
 });
 
 function shutdown(): void {
-  void persistRooms().finally(() => httpServer.close(() => process.exit(0)));
+  if (shuttingDown) return;
+  shuttingDown = true;
+  webSocketServer.close();
+  void persistRooms(true).finally(() => httpServer.close(() => process.exit(0)));
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);

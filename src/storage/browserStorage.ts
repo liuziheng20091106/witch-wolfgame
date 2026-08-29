@@ -75,7 +75,7 @@ const singleProfileSettingsSchema = z.object({
   endpoint: z.string(),
   apiKey: z.string(),
   model: z.string(),
-  reasoningEffort: reasoningEffortSchema,
+  reasoningEffort: reasoningEffortSchema.default('low'),
   retryCount: z.number().int().min(0).max(5).default(2),
   jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
 });
@@ -83,7 +83,7 @@ const legacySettingsSchema = z.object({
   endpoint: z.string(),
   apiKey: z.string(),
   model: z.string(),
-  reasoningEffort: reasoningEffortSchema,
+  reasoningEffort: reasoningEffortSchema.default('low'),
 }).passthrough();
 const setupSchema = z.strictObject({
   mode: z.enum(['spectator', 'player']),

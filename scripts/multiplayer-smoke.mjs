@@ -105,6 +105,12 @@ try {
   const duplicateError = await duplicate.next((message) => message.type === 'error', '重复角色拒绝');
   assert.match(duplicateError.message, /角色已被选择/);
   duplicate.socket.close();
+  const invalidResume = client();
+  await invalidResume.open();
+  invalidResume.send({ type: 'resume-room', roomCode: 'BAD234', resumeToken: 'x'.repeat(32) });
+  const invalidResumeError = await invalidResume.next((message) => message.type === 'error', '无效恢复凭据拒绝');
+  assert.equal(invalidResumeError.code, 'resume_invalid');
+  invalidResume.socket.close();
   const transferHost = client();
   await transferHost.open();
   transferHost.send({ type: 'create-room', playerName: '临时房主', characterId: 'soul-2', playerCount: 6, seed: 20260830 });
@@ -156,19 +162,14 @@ try {
   assert.equal(afterStaleClose.room.drivers[1].kind, 'human', '旧连接超时不得把已恢复真人转为 AI');
 
   resumedGuest.socket.close();
-  const takeover = await host.next((message) => {
-    if (message.type !== 'room-state' || message.room.drivers[1].kind !== 'ai') return false;
-    const participant = message.room.participants.find((entry) => entry.playerId === 1);
-    return participant !== undefined && participant.connected === false;
-  }, '断线超时转 AI');
-  const disconnectedGuest = takeover.room.participants.find((participant) => participant.playerId === 1);
-  assert.notEqual(disconnectedGuest, undefined, '超时 AI 接管不得删除参与者');
-  assert.equal(disconnectedGuest.connected, false);
   const returnedGuest = client();
   await returnedGuest.open();
   returnedGuest.send({ type: 'resume-room', roomCode: hostWelcome.room.roomCode, resumeToken });
-  const returnedWelcome = await returnedGuest.next((message) => message.type === 'welcome' && message.room.drivers[1].kind === 'human', '重连恢复真人驱动');
-  assert.equal(returnedWelcome.room.participants.find((participant) => participant.playerId === 1).connected, true);
+  const returnedWelcome = await returnedGuest.next((message) => message.type === 'welcome' && message.room.drivers[1].kind === 'human', '再次重连恢复真人驱动');
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  const afterReconnectRace = [...host.messages].reverse().find((message) => message.type === 'room-state');
+  assert.equal(afterReconnectRace.room.participants.find((participant) => participant.playerId === 1)?.connected, true, '断线宽限期间重连必须保持在线');
+  assert.equal(afterReconnectRace.room.drivers[1].kind, 'human', '断线宽限期间重连不得被转为 AI');
 
   let lastSubmittedHost = '';
   let lastSubmittedGuest = '';
@@ -288,9 +289,8 @@ try {
   assert.match(brokenErrors, /multiplayer_ai_drive_fatal/);
   const failedState = JSON.parse(await readFile(brokenStateFile, 'utf8'))[0];
   assert.equal(failedState.status, 'failed');
-  assert.equal(failedState.failureMessage, 'AI 驱动发生不可恢复错误');
-  assert.equal(failedState.game.lastAiFailure.kind, 'multiplayer-fatal');
-  assert.equal(failedState.game.lastAiFailure.pendingDecisionId, 'fatal-ai-decision');
+  assert.match(failedState.failureMessage, /^AI 驱动发生不可恢复错误：/);
+  assert.equal(failedState.game, null);
   broken.kill('SIGTERM');
   await new Promise((resolve) => broken.once('exit', resolve));
   assert.equal(restoredEnded.type, 'welcome');

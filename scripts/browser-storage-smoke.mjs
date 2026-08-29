@@ -70,6 +70,25 @@ assert.equal(migratedSettings.value.profiles.fast.reasoningEffort, 'none');
 assert.equal(migratedSettings.value.profiles.deep.reasoningEffort, 'high');
 assert.equal(migratedSettings.value.retryCount, 4);
 assert.equal(migratedSettings.value.jsonOutputMode, 'force');
+localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+  endpoint: 'https://oldest.example.com/v1/chat/completions',
+  apiKey: 'oldest-key',
+  model: 'oldest-model',
+}));
+const oldestSettings = loadSettings();
+assert.equal(oldestSettings.ok, true);
+assert.equal(oldestSettings.value.profiles.default.model, 'oldest-model');
+assert.equal(oldestSettings.value.profiles.default.reasoningEffort, 'low');
+
+localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+  provider: 'custom',
+  endpoint: 'https://single.example.com/v1/chat/completions',
+  apiKey: 'single-key',
+  model: 'single-model',
+}));
+const singleSettings = loadSettings();
+assert.equal(singleSettings.ok, true);
+assert.equal(singleSettings.value.profiles.default.reasoningEffort, 'low');
 
 const game = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: 6, selectedCharacterIds: [], seed: 58 });
 const saved = saveGame(game, APP_VERSION);
