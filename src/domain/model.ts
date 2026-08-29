@@ -269,6 +269,7 @@ export interface GameSetup {
   humanCharacterId: CharacterId | null;
   playerCount: number;
   selectedCharacterIds: CharacterId[];
+  seatCharacterIds?: CharacterId[];
   seed: number;
 }
 

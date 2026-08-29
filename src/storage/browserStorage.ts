@@ -116,15 +116,15 @@ const stateSchema = z.object({
     roleAssignmentId: z.string(),
     skillInstanceId: z.string().nullable(),
     alive: z.boolean(),
-  })).min(MIN_PLAYERS).max(MAX_PLAYERS),
+  })).min(MIN_PLAYERS).max(MAX_PLAYERS + 1),
   roleAssignments: z.array(z.object({
     id: z.string(), ownerPlayerId: playerIdSchema, roleId: roleIdSchema,
     resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
-  })).min(MIN_PLAYERS).max(MAX_PLAYERS),
+  })).min(MIN_PLAYERS).max(MAX_PLAYERS + 1),
   skillInstances: z.array(z.object({
     id: z.string(), definitionId: skillIdSchema, ownerPlayerId: playerIdSchema,
     status: z.enum(['ready', 'active', 'exhausted']), remainingUses: z.number().nullable(), data: z.record(z.string(), z.unknown()),
-  })).min(MIN_PLAYERS).max(MAX_PLAYERS),
+  })).min(MIN_PLAYERS).max(MAX_PLAYERS + 1),
   knowledgeByPlayer: z.record(z.string(), z.array(z.unknown())),
   creatures: z.array(z.object({
     id: playerIdSchema,

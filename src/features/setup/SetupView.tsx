@@ -132,19 +132,19 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
       <section className={styles.characterSection} aria-labelledby="character-title">
         <div className={styles.sectionHeading}><div><span>CAST SELECTION</span><h2 id="character-title">配置出庭阵容</h2></div><p>{setup.selectedCharacterIds.length === 0 ? `当前使用种子随机选择 ${setup.playerCount} 人` : `已选择 ${setup.selectedCharacterIds.length} / ${setup.playerCount} 人`}{setup.mode === 'player' ? '；再次点击已入选角色的「设为我的角色」即可锁定席位。' : '。'}</p></div>
         <div className={styles.characterGrid}>
-          {characters.map((character, index) => {
+          {characters.map((character) => {
             const included = setup.selectedCharacterIds.includes(character.id);
+            const selectedSeat = included ? setup.selectedCharacterIds.indexOf(character.id) + 1 : null;
             const human = setup.humanCharacterId === character.id;
             const inclusionDisabled = !included && setup.selectedCharacterIds.length >= setup.playerCount;
             return <article key={character.id} className={`${styles.characterCard} ${included ? styles.selectedCharacter : ''} ${human ? styles.humanCharacter : ''}`}>
               <button type="button" className={styles.characterToggle} onClick={() => toggleCharacter(character.id)} aria-pressed={included} disabled={inclusionDisabled}>
-                <span className={styles.seatNumber}>{String(index + 1).padStart(2, '0')}</span>
+                <span className={styles.seatNumber}>{selectedSeat === null ? '候选' : `${String(selectedSeat).padStart(2, '0')} 席`}</span>
                 <img src={character.avatarUrl} alt="" />
-                <span className={styles.characterName}>{character.name}</span>
-                <span className={styles.trait}>{character.speechStyle.slice(0, 18)}…</span>
+                <span className={styles.characterMeta}><strong>{character.name}</strong><small>{character.speechStyle.slice(0, 20)}…</small></span>
                 {included && <span className={styles.check}><Check /></span>}
               </button>
-              {setup.mode === 'player' && (included || setup.selectedCharacterIds.length === 0) && <button type="button" className={styles.humanSeat} onClick={() => onUpdateSetup({ ...setup, humanCharacterId: character.id })}>{human ? '我的角色' : '设为我的角色'}</button>}
+              {setup.mode === 'player' && (included || setup.selectedCharacterIds.length === 0) && <button type="button" className={styles.humanSeat} onClick={() => onUpdateSetup({ ...setup, humanCharacterId: character.id })}>{human ? '已认领此席' : '设为我的角色'}</button>}
             </article>;
           })}
         </div>
@@ -170,6 +170,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
           <button className={styles.startButton} type="button" disabled={!ready} onClick={requestStart}><span>OPEN CASE</span><Play />开启审判</button>
         </div>
       </section>
+      <div className={styles.multiplayerWrap}><MultiplayerLobby multiplayer={multiplayer} defaultCharacterId={setup.humanCharacterId} /></div>
 
       {history.length > 0 && <section className={styles.historySection} aria-labelledby="seed-history-title">
         <div className={styles.sectionHeading}><div><span>FILE 03 · SEED ARCHIVE</span><h2 id="seed-history-title">封存案件</h2></div><p>种子是案件编号；复制后即可复现完全相同的入场阵容。</p></div>

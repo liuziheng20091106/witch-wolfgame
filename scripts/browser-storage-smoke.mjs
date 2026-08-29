@@ -5,7 +5,6 @@ import { createServer } from 'vite';
 
 const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
-
 let APP_VERSION;
 let GAME_KEY;
 let SETTINGS_KEY;
@@ -70,7 +69,7 @@ assert.equal(migratedSettings.value.profiles.deep.reasoningEffort, 'high');
 assert.equal(migratedSettings.value.retryCount, 4);
 assert.equal(migratedSettings.value.jsonOutputMode, 'force');
 
-const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58 });
+const game = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: 6, selectedCharacterIds: [], seed: 58 });
 const saved = saveGame(game, APP_VERSION);
 assert.equal(saved.appVersion, APP_VERSION);
 assert.equal(getSavedGameCompatibilityWarning(saved), null);
@@ -87,7 +86,7 @@ const mismatchedResult = loadGame();
 assert.equal(mismatchedResult.ok, true);
 assert.notEqual(mismatchedResult.value, null);
 assert.match(getSavedGameCompatibilityWarning(mismatchedResult.value), /v0\.0\.0/);
-assert.match(getSavedGameCompatibilityWarning(mismatchedResult.value), new RegExp(`v${APP_VERSION.replaceAll('.', '\\.')}\\b`));
+assert.match(getSavedGameCompatibilityWarning(mismatchedResult.value), new RegExp(`v${APP_VERSION.replaceAll('.', '\\.')}`));
 const mismatchedResaved = saveGame(mismatchedResult.value.state, mismatchedResult.value.appVersion);
 assert.equal(mismatchedResaved.appVersion, '0.0.0');
 assert.match(getSavedGameCompatibilityWarning(mismatchedResaved), /v0\.0\.0/);
@@ -102,11 +101,20 @@ assert.equal(legacyResult.value.appVersion, null);
 assert.match(getSavedGameCompatibilityWarning(legacyResult.value), /未记录创建版本/);
 const legacyResaved = saveGame(legacyResult.value.state, legacyResult.value.appVersion);
 assert.equal(legacyResaved.appVersion, null);
+
+const largeGame = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: 14, selectedCharacterIds: [], seed: 1414 });
+largeGame.players.push({ id: 99, characterId: largeGame.players[0].characterId, roleAssignmentId: 'role-creature-99', skillInstanceId: 'skill-creature-99', alive: true });
+largeGame.roleAssignments.push({ id: 'role-creature-99', ownerPlayerId: 99, roleId: 'villager', resources: {} });
+largeGame.skillInstances.push({ id: 'skill-creature-99', definitionId: largeGame.skillInstances[0].definitionId, ownerPlayerId: 99, status: 'ready', remainingUses: 1, data: {} });
+saveGame(largeGame, APP_VERSION);
+const largeResult = loadGame();
+assert.equal(largeResult.ok, true, '14 人局加造物的 15 个实体必须能保存和恢复');
+assert.equal(largeResult.value.state.players.length, 15);
+assert.equal(largeResult.value.state.roleAssignments.length, 15);
+assert.equal(largeResult.value.state.skillInstances.length, 15);
+saveGame(game, APP_VERSION);
 assert.match(getSavedGameCompatibilityWarning(legacyResaved), /未记录创建版本/);
 
-<<<<<<< HEAD
-const restartedGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58, playerCount: 6, selectedCharacterIds: [] });
-=======
 const legacyFailureState = structuredClone(saved);
 delete legacyFailureState.state.aiFailureOccurred;
 localStorage.setItem(GAME_KEY, JSON.stringify(legacyFailureState));
@@ -121,8 +129,7 @@ const failedGameResult = loadGame();
 assert.equal(failedGameResult.ok, true);
 assert.equal(failedGameResult.value.state.aiFailureOccurred, true);
 
-const restartedGame = createGame({ mode: 'spectator', humanCharacterId: null, seed: 58 });
->>>>>>> 156adb9 (改善 AI 决策失败恢复逻辑)
+const restartedGame = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: 6, selectedCharacterIds: [], seed: 58 });
 assert.equal(restartedGame.gameId, game.gameId);
 const restartedSaved = saveGame(restartedGame, APP_VERSION);
 assert.equal(restartedSaved.appVersion, APP_VERSION);

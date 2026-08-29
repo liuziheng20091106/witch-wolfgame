@@ -29,6 +29,8 @@ const MAX_MESSAGE_BYTES = 32 * 1024;
 const ROOM_IDLE_MS = 24 * 60 * 60 * 1000;
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TICK_DELAY_MS = 80;
+const MULTIPLAYER_PLAYER_COUNT = 6;
+const ROOM_PLAYER_IDS = PLAYER_IDS.slice(0, MULTIPLAYER_PLAYER_COUNT);
 
 interface Participant {
   participantId: string;
@@ -297,7 +299,7 @@ webSocketServer.on('connection', (socket) => {
           hostParticipantId: participantId,
           seed: message.seed ?? randomBytes(4).readUInt32LE(0),
           participants: [participant],
-          drivers: PLAYER_IDS.map((playerId) => playerId === 0 ? { kind: 'human', participantId } : { kind: 'ai' }),
+          drivers: ROOM_PLAYER_IDS.map((playerId) => playerId === 0 ? { kind: 'human', participantId } : { kind: 'ai' }),
           game: null,
           updatedAt: Date.now(),
         };
@@ -311,11 +313,11 @@ webSocketServer.on('connection', (socket) => {
         if (activeRoom !== null) throw new Error('当前连接已经加入房间');
         const room = rooms.get(message.roomCode);
         if (!room || room.status !== 'lobby') throw new Error('房间不存在或已经开始');
-        if (room.participants.length >= PLAYER_IDS.length) throw new Error('房间已满');
+        if (room.participants.length >= ROOM_PLAYER_IDS.length) throw new Error('房间已满');
         if (room.participants.some((participant) => participant.characterId === message.characterId)) throw new Error('该角色已被选择');
         const participantId = token(16);
         const usedSeats = new Set(room.participants.map((participant) => participant.playerId));
-        const playerId = PLAYER_IDS.find((candidate) => !usedSeats.has(candidate));
+        const playerId = ROOM_PLAYER_IDS.find((candidate) => !usedSeats.has(candidate));
         if (playerId === undefined) throw new Error('没有可用席位');
         const participant: Participant = { participantId, resumeToken: token(32), playerId, playerName: message.playerName, characterId: message.characterId, ready: false, connected: true };
         room.participants.push(participant);
@@ -356,14 +358,17 @@ webSocketServer.on('connection', (socket) => {
         if (!activeRoom.participants.every((participant) => participant.ready)) throw new Error('所有真人玩家必须先准备');
         const selected = new Set(activeRoom.participants.map((participant) => participant.characterId));
         const remainingCharacters = CHARACTER_IDS.filter((characterId) => !selected.has(characterId));
-        const seatCharacterIds: CharacterId[] = PLAYER_IDS.map((playerId, index) => {
+        let aiCharacterIndex = 0;
+        const seatCharacterIds: CharacterId[] = ROOM_PLAYER_IDS.map((playerId) => {
           const participant = activeRoom?.participants.find((entry) => entry.playerId === playerId);
-          const characterId = participant?.characterId ?? remainingCharacters[index];
+          if (participant) return participant.characterId;
+          const characterId = remainingCharacters[aiCharacterIndex];
+          aiCharacterIndex += 1;
           if (!characterId) throw new Error('无法为 AI 席位分配角色');
           return characterId;
         });
-        if (new Set(seatCharacterIds).size !== PLAYER_IDS.length) throw new Error('无法分配唯一角色');
-        activeRoom.game = createGame({ mode: 'spectator', humanCharacterId: null, seatCharacterIds, seed: activeRoom.seed });
+        if (new Set(seatCharacterIds).size !== ROOM_PLAYER_IDS.length) throw new Error('无法分配唯一角色');
+        activeRoom.game = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: MULTIPLAYER_PLAYER_COUNT, selectedCharacterIds: [], seatCharacterIds, seed: activeRoom.seed });
         activeRoom.status = 'playing';
         activeRoom.updatedAt = Date.now();
         broadcast(activeRoom);

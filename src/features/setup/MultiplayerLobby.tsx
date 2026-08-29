@@ -1,5 +1,5 @@
 import { Copy, LogIn, Play, Radio, UserRound, Users, Wifi, WifiOff } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { MultiplayerController } from '../../multiplayer/useMultiplayerRoom';
 import { characters } from '../../domain/catalog/characters';
 import type { CharacterId } from '../../domain/model';
@@ -18,7 +18,6 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
   const [copied, setCopied] = useState(false);
   const room = multiplayer.room;
   const self = room?.participants.find((participant) => participant.participantId === room.selfParticipantId) ?? null;
-  const selectedCharacters = useMemo(() => new Set(room?.participants.map((participant) => participant.characterId) ?? []), [room?.participants]);
   const host = room !== null && room.hostParticipantId === room.selfParticipantId;
   const canStart = host && room?.participants.every((participant) => participant.ready) === true;
 
@@ -47,7 +46,7 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
     <header><Users /><div><span>MULTIPLAYER</span><h2 id="multiplayer-title">多人联机</h2><p>真人占用的席位由浏览器驱动，其余席位继续由确定性 AI 驱动。</p></div></header>
     <div className={styles.fields}>
       <label>显示名<input maxLength={24} value={playerName} onChange={(event) => setPlayerName(event.target.value)} /></label>
-      <label>角色<select value={characterId} onChange={(event) => setCharacterId(event.target.value as CharacterId)}>{characters.map((character) => <option key={character.id} value={character.id} disabled={selectedCharacters.has(character.id)}>{character.name}</option>)}</select></label>
+      <label>角色<select value={characterId} onChange={(event) => setCharacterId(event.target.value as CharacterId)}>{characters.map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select></label>
       <label>房间号<input maxLength={6} value={roomCode} onChange={(event) => setRoomCode(event.target.value.toUpperCase())} placeholder="ABC234" /></label>
     </div>
     <div className={styles.actions}><button type="button" onClick={() => multiplayer.createRoom(playerName.trim(), characterId)} disabled={multiplayer.connecting || !playerName.trim()}><Radio />创建房间</button><button type="button" onClick={() => multiplayer.joinRoom(roomCode, playerName.trim(), characterId)} disabled={multiplayer.connecting || roomCode.length !== 6 || !playerName.trim()}><LogIn />加入房间</button></div>

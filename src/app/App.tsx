@@ -20,7 +20,8 @@ export function App() {
     : null;
   const [systemDark, setSystemDark] = useState(getSystemDark);
   const previousThemeRef = useRef<string | null>(null);
-  const judgmentPhase = multiplayerObservation?.phase ?? (controller.view === 'game' ? controller.observation?.phase : null);
+  const gameObservation = multiplayerObservation ?? controller.observation;
+  const judgmentPhase = gameObservation?.phase ?? null;
   const effectiveTheme = resolveTheme(controller.theme.preference, systemDark, controller.theme.judgmentMode, judgmentPhase);
 
   useEffect(() => {
@@ -51,7 +52,7 @@ export function App() {
   }, [effectiveTheme]);
 
   return <>
-    {multiplayerObservation === null && (controller.view === 'setup' || !controller.observation) ? <SetupView
+    {!multiplayerObservation && (controller.view === 'setup' || !controller.observation) ? <SetupView
       settings={controller.settings}
       setup={controller.setup}
       history={controller.history}
@@ -65,22 +66,22 @@ export function App() {
       onStart={controller.startNewGame}
       onClearHistory={controller.clearHistory}
       onDiscard={controller.discardSavedGame}
-    /> : <Suspense fallback={null}><LazyGameView
-      observation={controller.observation}
-      aiError={controller.aiError}
-      awaitingRetry={controller.awaitingRetry}
-      thinking={controller.thinking}
-      decisionError={controller.decisionError}
-      paused={controller.paused}
-      onSubmit={controller.submitHumanDecision}
-      onRetry={controller.retryAi}
-      onLocal={controller.useLocalFallback}
+    /> : gameObservation ? <Suspense fallback={null}><LazyGameView
+      observation={gameObservation}
+      aiError={multiplayerObservation ? null : controller.aiError}
+      awaitingRetry={multiplayerObservation ? false : controller.awaitingRetry}
+      thinking={multiplayerObservation ? false : controller.thinking}
+      decisionError={multiplayerObservation ? multiplayer.error : controller.decisionError}
+      paused={multiplayerObservation ? false : controller.paused}
+      onSubmit={multiplayerObservation ? multiplayer.submitDecision : controller.submitHumanDecision}
+      onRetry={multiplayerObservation ? multiplayer.clearError : controller.retryAi}
+      onLocal={multiplayerObservation ? multiplayer.leaveRoom : controller.useLocalFallback}
       onSettings={() => controller.setSettingsOpen(true)}
-      onPaused={controller.setPaused}
-      onRestart={controller.startNewGame}
-      onContinueRound={controller.continueWithNewRoles}
-      onExit={controller.returnToSetup}
-    /></Suspense>}
+      onPaused={multiplayerObservation ? () => undefined : controller.setPaused}
+      onRestart={multiplayerObservation ? multiplayer.leaveRoom : controller.startNewGame}
+      onContinueRound={multiplayerObservation ? multiplayer.leaveRoom : controller.continueWithNewRoles}
+      onExit={multiplayerObservation ? multiplayer.leaveRoom : controller.returnToSetup}
+    /></Suspense> : null}
     {controller.settingsOpen && <Suspense fallback={null}><LazyAiSettingsDrawer
       open={controller.settingsOpen}
       config={controller.settings}
