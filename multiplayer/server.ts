@@ -119,10 +119,18 @@ function token(bytes: number): string {
 }
 
 function roomCode(): string {
+  const alphabetLength = ROOM_ALPHABET.length;
+  const limit = Math.floor(256 / alphabetLength) * alphabetLength;
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const bytes = randomBytes(6);
     let code = '';
-    for (const byte of bytes) code += ROOM_ALPHABET[byte % ROOM_ALPHABET.length];
+    while (code.length < 6) {
+      const bytes = randomBytes(6 - code.length);
+      for (const byte of bytes) {
+        if (byte >= limit) continue;
+        code += ROOM_ALPHABET[byte % alphabetLength];
+        if (code.length === 6) break;
+      }
+    }
     if (!rooms.has(code)) return code;
   }
   throw new Error('房间号生成失败');
