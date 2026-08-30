@@ -306,6 +306,7 @@ try {
   });
   const forwardedMessage = new Promise((resolvePromise) => multiplayerClient.once('message', (data) => resolvePromise(data.toString())));
   multiplayerClient.send('forwarded-through-main');
+  assert.equal(await forwardedMessage, 'forwarded-through-main');
   hangingMultiplayer = net.createServer((socket) => {
     hangingSockets.add(socket);
     socket.on('close', () => hangingSockets.delete(socket));

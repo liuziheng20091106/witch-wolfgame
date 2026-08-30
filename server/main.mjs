@@ -193,14 +193,38 @@ function attachMultiplayerProxy(server, allowedOrigins) {
       logEvent('warn', 'multiplayer_proxy_upstream_error', { message: error.message });
       fail('多人服务不可用');
     });
+    const forwardToUpstream = (data, isBinary) => {
+      if (settled) return;
+      if (upstream.readyState !== WebSocket.OPEN) {
+        if (queued.length < 64) queued.push({ data, isBinary });
+        else fail('多人服务响应超时');
+        return;
+      }
+      try {
+        upstream.send(data, { binary: isBinary }, (error) => {
+          if (error) fail('多人服务发送失败');
+        });
+      } catch {
+        fail('多人服务发送失败');
+      }
+    };
+    client.on('message', forwardToUpstream);
+
     upstream.on('open', () => {
       if (settled) return;
       clearConnectionTimeout();
-      for (const message of queued) upstream.send(message.data, { binary: message.isBinary });
-      queued.length = 0;
+      const pending = queued.splice(0);
+      for (const message of pending) forwardToUpstream(message.data, message.isBinary);
     });
     upstream.on('message', (data, isBinary) => {
-      if (!settled && client.readyState === WebSocket.OPEN) client.send(data, { binary: isBinary });
+      if (settled || client.readyState !== WebSocket.OPEN) return;
+      try {
+        client.send(data, { binary: isBinary }, (error) => {
+          if (error) fail('多人客户端发送失败');
+        });
+      } catch {
+        fail('多人客户端发送失败');
+      }
     });
     upstream.on('close', (code, reason) => {
       clearConnectionTimeout();
