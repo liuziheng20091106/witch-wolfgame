@@ -163,32 +163,54 @@ function rejectUpgrade(socket, status, message) {
 
 function attachMultiplayerProxy(server, allowedOrigins) {
   const target = multiplayerTargetUrl();
+  const connectTimeoutMs = Number(process.env.MAJO_MULTIPLAYER_CONNECT_TIMEOUT_MS ?? 10_000);
+  if (!Number.isFinite(connectTimeoutMs) || connectTimeoutMs <= 0) throw new Error('多人上游连接超时必须是正数');
   const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 });
   webSocketServer.on('connection', (client, request) => {
     const origin = request.headers.origin;
     const upstream = new WebSocket(target, origin ? { headers: { origin } } : undefined);
     const queued = [];
-    client.on('error', (error) => logEvent('warn', 'multiplayer_proxy_client_error', { message: error.message }));
-    upstream.on('error', (error) => {
-      logEvent('warn', 'multiplayer_proxy_upstream_error', { message: error.message });
-      if (client.readyState === WebSocket.OPEN) client.close(1011, '多人服务不可用');
+    let settled = false;
+    let timeout;
+    const clearConnectionTimeout = () => clearTimeout(timeout);
+    const fail = (message) => {
+      if (settled) return;
+      settled = true;
+      clearConnectionTimeout();
+      queued.length = 0;
+      if (client.readyState !== WebSocket.CLOSED) client.terminate();
+      if (upstream.readyState === WebSocket.CONNECTING || upstream.readyState === WebSocket.OPEN) upstream.terminate();
+      logEvent('warn', 'multiplayer_proxy_closed', { message });
+    };
+    timeout = setTimeout(() => fail('多人服务连接超时'), connectTimeoutMs);
+    client.on('error', (error) => {
+      if (settled) return;
+      logEvent('warn', 'multiplayer_proxy_client_error', { message: error.message });
+      fail('多人客户端连接异常');
     });
-    client.on('message', (data, isBinary) => {
-      if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary });
-      else if (queued.length < 64) queued.push({ data, isBinary });
-      else client.close(1013, '多人服务响应超时');
+    upstream.on('error', (error) => {
+      if (settled) return;
+      logEvent('warn', 'multiplayer_proxy_upstream_error', { message: error.message });
+      fail('多人服务不可用');
     });
     upstream.on('open', () => {
+      if (settled) return;
+      clearConnectionTimeout();
       for (const message of queued) upstream.send(message.data, { binary: message.isBinary });
       queued.length = 0;
     });
     upstream.on('message', (data, isBinary) => {
-      if (client.readyState === WebSocket.OPEN) client.send(data, { binary: isBinary });
+      if (!settled && client.readyState === WebSocket.OPEN) client.send(data, { binary: isBinary });
     });
     upstream.on('close', (code, reason) => {
-      if (client.readyState === WebSocket.OPEN) client.close(code, reason);
+      clearConnectionTimeout();
+      queued.length = 0;
+      if (!settled && client.readyState === WebSocket.OPEN) client.close(code, reason);
+      settled = true;
     });
     client.on('close', () => {
+      settled = true;
+      clearConnectionTimeout();
       queued.length = 0;
       if (upstream.readyState === WebSocket.OPEN) upstream.close();
       else if (upstream.readyState === WebSocket.CONNECTING) upstream.terminate();

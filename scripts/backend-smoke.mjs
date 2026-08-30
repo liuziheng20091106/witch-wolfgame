@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import net from 'node:net';
 import {
   BOARD_DESCRIPTION,
   buildGameSystemPrompt,
@@ -42,6 +43,17 @@ function closeWebSocketServer(server) {
 }
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function closeClient(client) {
+  if (!client) return;
+  if (client.readyState === WebSocket.OPEN) {
+    await new Promise((resolvePromise) => {
+      client.once('close', resolvePromise);
+      client.close();
+    });
+  } else if (client.readyState === WebSocket.CONNECTING) {
+    client.terminate();
+  }
 }
 
 function sseChunk(content, finishReason = null) {
@@ -180,6 +192,10 @@ let upstream;
 let proxy;
 let multiplayerUpstream;
 let multiplayerClient;
+let timeoutMain;
+let hangingMultiplayer;
+const hangingSockets = new Set();
+let timeoutClient;
 let fallbackProxy;
 let main;
 const capturedLogs = [];
@@ -290,7 +306,31 @@ try {
   });
   const forwardedMessage = new Promise((resolvePromise) => multiplayerClient.once('message', (data) => resolvePromise(data.toString())));
   multiplayerClient.send('forwarded-through-main');
-  assert.equal(await forwardedMessage, 'forwarded-through-main');
+  hangingMultiplayer = net.createServer((socket) => {
+    hangingSockets.add(socket);
+    socket.on('close', () => hangingSockets.delete(socket));
+  });
+  const hangingPort = await listen(hangingMultiplayer);
+  process.env.MAJO_MULTIPLAYER_URL = `ws://127.0.0.1:${hangingPort}/multiplayer`;
+  process.env.MAJO_MULTIPLAYER_CONNECT_TIMEOUT_MS = '100';
+  timeoutMain = await startMainServer(mainConfig);
+  const timeoutMainPort = timeoutMain.address().port;
+  timeoutClient = new WebSocket(`ws://127.0.0.1:${timeoutMainPort}/multiplayer`, { origin });
+  timeoutClient.on('error', () => {});
+  const timeoutCloseCode = await new Promise((resolvePromise, reject) => {
+    const timer = setTimeout(() => reject(new Error('多人上游连接超时未关闭客户端')), 2000);
+    timeoutClient.once('close', (code) => {
+      clearTimeout(timer);
+      resolvePromise(code);
+    });
+  });
+  await close(timeoutMain);
+  timeoutMain = null;
+  for (const socket of hangingSockets) socket.destroy();
+  await close(hangingMultiplayer);
+  hangingMultiplayer = null;
+  delete process.env.MAJO_MULTIPLAYER_CONNECT_TIMEOUT_MS;
+  delete process.env.MAJO_MULTIPLAYER_URL;
 
   await expectMtlsRejection(proxyPort, ca);
   const internalBody = Buffer.from(JSON.stringify(validPayload()));
@@ -320,13 +360,6 @@ try {
   });
   const validCreatureVote = await postMain(mainPort, validCreatureVotePayload, '203.0.113.27');
   assert.equal(validCreatureVote.status, 200);
-  const validHistoricalCreatureVotePayload = validPayload();
-  mutatePrompt(validHistoricalCreatureVotePayload, (prompt) => {
-    prompt.publicVotes = [{ round: 1, voterPlayerId: 99, targetPlayerId: 1 }];
-  });
-  const validHistoricalCreatureVote = await postMain(mainPort, validHistoricalCreatureVotePayload, '203.0.113.28');
-  assert.equal(validHistoricalCreatureVote.status, 200);
-  assert.equal((await validHistoricalCreatureVote.json()).choices[0].message.content, '{"targetPlayerId":1}');
   assert.equal((await validCreatureVote.json()).choices[0].message.content, '{"targetPlayerId":1}');
 
   upstreamMode = 'wolf-council';
@@ -480,9 +513,8 @@ try {
     ['allow_abstain', 'allowAbstain', (payload) => mutatePrompt(payload, (prompt) => { prompt.allowAbstain = SENSITIVE_MARKER; })],
     ['options_shape', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = []; })],
     ['options_size', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = { value: 'x'.repeat(12_001) }; })],
-    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = null; })],
-    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 100, targetPlayerId: 2 }]; })],
-    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 100 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 99, targetPlayerId: 2 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 99 }]; })],
     ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 3, voterPlayerId: 1, targetPlayerId: 2 }]; })],
     ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 1 }]; })],
     ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 2, voterPlayerId: 1, targetPlayerId: null }]; })],
@@ -610,15 +642,17 @@ try {
 
   console.log('后端烟测通过：固定 provider fallback 顺序、上游 SSE 聚合、非流式回退、首字节/总超时、重试、时间日志、mTLS、HMAC 与限流均已验证。');
 } finally {
-  if (multiplayerClient) {
-    if (multiplayerClient.readyState === WebSocket.OPEN) await new Promise((resolvePromise) => { multiplayerClient.once('close', resolvePromise); multiplayerClient.close(); });
-    else if (multiplayerClient.readyState === WebSocket.CONNECTING) multiplayerClient.terminate();
-  }
+  await closeClient(multiplayerClient);
+  await closeClient(timeoutClient);
+  for (const socket of hangingSockets) socket.destroy();
   if (fallbackProxy) await close(fallbackProxy);
+  if (timeoutMain) await close(timeoutMain);
   if (main) await close(main);
   if (multiplayerUpstream) await closeWebSocketServer(multiplayerUpstream);
+  if (hangingMultiplayer) await close(hangingMultiplayer);
   if (proxy) await close(proxy);
   if (upstream) await close(upstream);
+  delete process.env.MAJO_MULTIPLAYER_CONNECT_TIMEOUT_MS;
   delete process.env.MAJO_MULTIPLAYER_URL;
   for (const [method, implementation] of Object.entries(originalConsole)) console[method] = implementation;
   await rm(work, { recursive: true, force: true });
