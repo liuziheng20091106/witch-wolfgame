@@ -111,6 +111,17 @@ try {
   const invalidResumeError = await invalidResume.next((message) => message.type === 'error', '无效恢复凭据拒绝');
   assert.equal(invalidResumeError.code, 'resume_invalid');
   invalidResume.socket.close();
+  const oversized = client();
+  oversized.socket.on('error', () => {});
+  await oversized.open();
+  const oversizedClosed = new Promise((resolve, reject) => {
+    oversized.socket.once('close', resolve);
+    setTimeout(() => reject(new Error('超大 WebSocket 消息未关闭连接')), 5000).unref();
+  });
+  oversized.send({ type: 'oversized', payload: 'x'.repeat(40 * 1024) });
+  const oversizedCloseCode = await oversizedClosed;
+  assert.equal(oversizedCloseCode, 1009, '超大 WebSocket 消息必须以消息过大关闭');
+  assert.equal(child.exitCode, null, '超大 WebSocket 消息不得终止多人服务');
   const transferHost = client();
   await transferHost.open();
   transferHost.send({ type: 'create-room', playerName: '临时房主', characterId: 'soul-2', playerCount: 6, seed: 20260830 });

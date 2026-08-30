@@ -448,6 +448,9 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
   let activeParticipant: Participant | null = null;
 
   let activeGeneration: number | null = null;
+  socket.on('error', (error) => {
+    console.error(JSON.stringify({ event: 'multiplayer_socket_error', address, message: error instanceof Error ? error.message : String(error) }));
+  });
   socket.on('message', (data, isBinary) => {
     const now = Date.now();
     if (now - messageRate.startedAt >= MESSAGE_RATE_WINDOW_MS) messageRate = { startedAt: now, count: 0 };
@@ -531,6 +534,7 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
           send(socket, errorMessage('resume_invalid', '恢复凭据无效或房间已失效'));
           return;
         }
+        activeRoom = room;
         activeParticipant = participant;
         activeGeneration = attachParticipant(socket, room, participant, true);
         return;
