@@ -10,8 +10,10 @@ import {
   buildGameSystemPrompt,
   CHARACTER_CATALOG,
   FREE_CLIENT_PROTOCOL,
+  formatCreatureName,
   formatPublicSkill,
   INVALID_GAME_REQUEST_MESSAGE,
+  PROMPT_LIMITS,
 } from '../shared/gamePromptContract.js';
 import { startMainServer } from '../server/main.mjs';
 import { buildUpstreamPayload, startProxyServer } from '../proxy/server.mjs';
@@ -75,6 +77,7 @@ function validPayload() {
           legalCandidates: [players[1]],
           allowAbstain: false,
           options: {},
+          publicVotes: [],
           currentDaySpeeches: [],
           historicalSpeeches: [],
           recentPublic: [],
@@ -284,7 +287,14 @@ try {
 
   const targetSkill = await postMain(mainPort, targetSkillPayload(), '203.0.113.24');
   assert.equal(targetSkill.status, 200);
-  assert.equal((await targetSkill.json()).choices[0].message.content, '{"targetPlayerId":1}');
+  const validCreatureVotePayload = validPayload();
+  mutatePrompt(validCreatureVotePayload, (prompt) => {
+    prompt.alivePlayers.push({ playerId: 99, name: formatCreatureName(CHARACTER_CATALOG[3].name) });
+    prompt.publicVotes = [{ round: 1, voterPlayerId: 99, targetPlayerId: 1 }];
+  });
+  const validCreatureVote = await postMain(mainPort, validCreatureVotePayload, '203.0.113.27');
+  assert.equal(validCreatureVote.status, 200);
+  assert.equal((await validCreatureVote.json()).choices[0].message.content, '{"targetPlayerId":1}');
 
   upstreamMode = 'wolf-council';
   const wolfCouncil = await postMain(mainPort, wolfCouncilPayload(), '203.0.113.25');
@@ -436,12 +446,22 @@ try {
     ['legal_candidates_unique', 'legalCandidates.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.legalCandidates = [prompt.alivePlayers[1], prompt.alivePlayers[1]]; })],
     ['allow_abstain', 'allowAbstain', (payload) => mutatePrompt(payload, (prompt) => { prompt.allowAbstain = SENSITIVE_MARKER; })],
     ['options_shape', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = []; })],
-    ['options_size', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = { value: 'x'.repeat(8_001) }; })],
+    ['options_size', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = { value: 'x'.repeat(12_001) }; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = null; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 99, targetPlayerId: 2 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 100, targetPlayerId: 2 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 99 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 100 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 3, voterPlayerId: 1, targetPlayerId: 2 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 1 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 2, voterPlayerId: 1, targetPlayerId: null }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 2 }, { round: 1, voterPlayerId: 1, targetPlayerId: null }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = Array.from({ length: PROMPT_LIMITS.publicVotesMaxItems + 1 }, (_, index) => ({ round: index % 2 + 1, voterPlayerId: index % 14, targetPlayerId: null })); })],
     ['current_day_speeches', 'currentDaySpeeches', (payload) => mutatePrompt(payload, (prompt) => { prompt.currentDaySpeeches = ['x'.repeat(2_001)]; })],
     ['historical_speeches', 'historicalSpeeches', (payload) => mutatePrompt(payload, (prompt) => { prompt.historicalSpeeches = ['x'.repeat(2_001)]; })],
     ['recent_public', 'recentPublic', (payload) => mutatePrompt(payload, (prompt) => { prompt.recentPublic = ['x'.repeat(2_001)]; })],
     ['private_events', 'privateEvents', (payload) => mutatePrompt(payload, (prompt) => { prompt.privateEvents = ['x'.repeat(2_001)]; })],
-    ['private_knowledge_shape', 'privateKnowledge', (payload) => mutatePrompt(payload, (prompt) => { prompt.privateKnowledge = Array.from({ length: 65 }, () => ({ subjectPlayerId: 0, kind: 'role', value: 'wolf', observedDay: 0 })); })],
+    ['private_knowledge_shape', 'privateKnowledge', (payload) => mutatePrompt(payload, (prompt) => { prompt.privateKnowledge = Array.from({ length: 197 }, () => ({ subjectPlayerId: 0, kind: 'role', value: 'wolf', observedDay: 0 })); })],
     ['private_knowledge_entry', 'privateKnowledge', (payload) => mutatePrompt(payload, (prompt) => { prompt.privateKnowledge = [{ subjectPlayerId: 0, kind: 'role', value: SENSITIVE_MARKER, observedDay: 0 }]; })],
     ['public_skills_shape', 'publicSkills', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicSkills.pop(); })],
     ['public_skills_unique_player', 'publicSkills.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicSkills[1].playerId = 0; })],

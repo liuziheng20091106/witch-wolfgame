@@ -251,10 +251,19 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
   if (isPostGame) {
     recentPublic = [];
   }
+  const formatPrivateEvent = (event: GameObservation['privateEvents'][number]): string => {
+    if (event.viewerPlayerIds.length === 1) {
+      return `【仅当前行动者可见】${event.text}`;
+    }
+    if (event.data.actionKind === 'wolf-suggestion' || event.data.actionKind === 'wolf-decision') {
+      return `【狼队共享记录】${event.text}`;
+    }
+    return `【与相关角色共享】${event.text}`;
+  };
   let privateEvents = observation.privateEvents
     .filter((event) => event.day !== observation.day || event.data.actionKind !== 'wolf-suggestion')
     .slice(-8)
-    .map((event) => event.text);
+    .map(formatPrivateEvent);
   if (isPostGame) {
     privateEvents = [];
   }
@@ -292,6 +301,11 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     const name = player?.name ?? `${playerId + 1}号`;
     return { playerId, name };
   });
+  const publicVotes = observation.currentVotes.map(({ round, voterPlayerId, targetPlayerId }) => ({
+    round,
+    voterPlayerId,
+    targetPlayerId,
+  }));
   const systemContent = buildGameSystemPrompt(pendingDecision.schemaKey);
 
   const promptPayload: Record<string, unknown> = {
@@ -311,6 +325,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     legalCandidates,
     allowAbstain: pendingDecision.allowAbstain,
     options: pendingDecision.options,
+    publicVotes,
     currentDaySpeeches,
     historicalSpeeches,
     recentPublic,

@@ -495,7 +495,10 @@ function votingPending(state: GameState, round: 1 | 2, candidates: PlayerId[] | 
   if (voter === undefined) {
     return null;
   }
-  const targets = (candidates ?? getAlivePlayerIds(state)).filter((playerId) => playerId !== voter);
+  const ownedCreatureId = state.creatures.some((creature) => creature.id === CREATURE_ID && creature.alive && creature.ownerPlayerId === voter)
+    ? CREATURE_ID
+    : null;
+  const targets = (candidates ?? getAlivePlayerIds(state)).filter((playerId) => playerId !== voter && playerId !== ownedCreatureId);
   if (targets.length === 0) {
     state.currentVotes.push({ voterPlayerId: voter, targetPlayerId: null, round });
     return votingPending(state, round, candidates);

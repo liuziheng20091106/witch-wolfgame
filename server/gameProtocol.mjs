@@ -45,6 +45,7 @@ const PRIVATE_KNOWLEDGE_KEYS = new Set(PROMPT_FIELD_KEYS.privateKnowledge);
 const PUBLIC_SKILL_KEYS = new Set(PROMPT_FIELD_KEYS.publicSkill);
 const FINAL_ROLE_KEYS = new Set(PROMPT_FIELD_KEYS.finalRole);
 const WOLF_COUNCIL_MESSAGE_KEYS = new Set(PROMPT_FIELD_KEYS.wolfCouncilMessage);
+const PUBLIC_VOTE_KEYS = new Set(PROMPT_FIELD_KEYS.publicVote);
 
 function validResult() {
   return { ok: true };
@@ -105,6 +106,17 @@ function validFinalRole(value) {
     && typeof value.roleName === 'string'
     && ROLE_NAMES_BY_ID.get(value.roleId) === value.roleName;
 }
+function validPublicVote(value, entityIds) {
+  return isObject(value)
+    && Object.keys(value).length === PUBLIC_VOTE_KEYS.size
+    && hasOnlyKeys(value, PUBLIC_VOTE_KEYS)
+    && (value.round === 1 || value.round === 2)
+    && entityIds.has(value.voterPlayerId)
+    && (value.targetPlayerId === null || entityIds.has(value.targetPlayerId))
+    && (value.round === 1 || value.targetPlayerId !== null)
+    && value.voterPlayerId !== value.targetPlayerId;
+}
+
 
 function validateWolfCouncilOptions(prompt) {
   const actionKind = prompt.action.kind;
@@ -295,6 +307,7 @@ export function validateGamePrompt(messages) {
     return wolfCouncilValidation;
   }
 
+
   const activePlayerIds = Array.isArray(prompt.publicSkills)
     ? prompt.publicSkills.map((skill) => skill?.playerId)
     : [];
@@ -364,6 +377,25 @@ export function validateGamePrompt(messages) {
     || sortedPlayerIds.length > MAX_PLAYERS
     || sortedPlayerIds.some((playerId, index) => playerId !== index)) {
     return invalidResult('public_skills_players', 'publicSkills.playerId');
+  }
+  const promptEntityIds = new Set(prompt.publicSkills.map((skill) => skill.playerId));
+  for (const player of prompt.alivePlayers) {
+    if (player.playerId === CREATURE_ID) {
+      promptEntityIds.add(CREATURE_ID);
+    }
+  }
+  if (!Array.isArray(prompt.publicVotes)
+    || prompt.publicVotes.length > PROMPT_LIMITS.publicVotesMaxItems
+    || !prompt.publicVotes.every((vote) => validPublicVote(vote, promptEntityIds))) {
+    return invalidResult('public_votes', 'publicVotes');
+  }
+  const publicVoteKeys = new Set();
+  for (const vote of prompt.publicVotes) {
+    const key = `${vote.round}:${vote.voterPlayerId}`;
+    if (publicVoteKeys.has(key)) {
+      return invalidResult('public_votes', 'publicVotes');
+    }
+    publicVoteKeys.add(key);
   }
   const boardMatch = /^(\d+)人局：/.exec(prompt.board);
   if (!boardMatch || Number(boardMatch[1]) !== sortedPlayerIds.length) {

@@ -159,11 +159,12 @@ export const PROMPT_FIELD_KEYS = freeze({
  payload: freeze(/** @type {const} */(['client', 'messages', 'response_format'])),
  client: freeze(/** @type {const} */(['name', 'version', 'protocol'])),
  message: freeze(/** @type {const} */(['role', 'content'])),
- prompt: freeze(/** @type {const} */(['action', 'actor', 'phase', 'day', 'board', 'alivePlayers', 'legalCandidates', 'allowAbstain', 'options', 'currentDaySpeeches', 'historicalSpeeches', 'recentPublic', 'privateKnowledge', 'publicSkills', 'privateEvents', 'finalRoles', 'postGameContext'])),
+ prompt: freeze(/** @type {const} */(['action', 'actor', 'phase', 'day', 'board', 'alivePlayers', 'legalCandidates', 'allowAbstain', 'options', 'publicVotes', 'currentDaySpeeches', 'historicalSpeeches', 'recentPublic', 'privateKnowledge', 'publicSkills', 'privateEvents', 'finalRoles', 'postGameContext'])),
  action: freeze(/** @type {const} */(['kind', 'title', 'description', 'schema'])),
  actor: freeze(/** @type {const} */(['playerId', 'name', 'personality', 'speechStyle', 'decisionTraits', 'role', 'skill'])),
  decisionTraits: freeze(/** @type {const} */(['conservative', 'trusting', 'aggressive'])),
  observedPlayer: freeze(/** @type {const} */(['playerId', 'name'])),
+ publicVote: freeze(/** @type {const} */(['round', 'voterPlayerId', 'targetPlayerId'])),
  privateKnowledge: freeze(/** @type {const} */(['subjectPlayerId', 'kind', 'value', 'observedDay'])),
  publicSkill: freeze(/** @type {const} */(['playerId', 'name', 'skill'])),
  finalRole: freeze(/** @type {const} */(['playerId', 'name', 'roleId', 'roleName'])),
@@ -201,6 +202,7 @@ export const PROMPT_LIMITS = freeze(/** @type {const} */({
  privateKnowledgeMaxItems: MAX_PLAYERS * MAX_PLAYERS,
  publicSkillsMinItems: MIN_PLAYERS,
  publicSkillsMaxItems: MAX_PLAYERS,
+ publicVotesMaxItems: 2 * (MAX_PLAYERS + 1),
 }));
 
 export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成的合法游戏请求';
@@ -212,6 +214,7 @@ export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成�
 export function buildGameSystemPrompt(schemaKey) {
  if (!Object.hasOwn(DECISION_EXAMPLES, schemaKey)) throw new Error(`未知提示词响应契约：${String(schemaKey)}`);
  let promptHint = ' 性别与称谓边界：本作所有可选角色均为女性。佐伯米莉亚的“大叔我”只是她的自称和纪念，不代表男性身份；称呼其他角色时使用姓名、小姐等女性或中性称谓，不使用“哥”“哥哥”“先生”等男性称谓。“名字+亲”是泽渡可可的专属口癖，其他角色不得使用。除非当前角色卡明确要求，否则不得改变角色性别。';
+ promptHint += ' publicVotes 由官方客户端仅从已经公开揭晓的已提交投票记录构成，包含弃权（targetPlayerId:null），不是隐藏票或最终生效票型；不得据此推断缺失或未揭晓的投票、最终票数或生效状态。玩家死亡或投票被作废/烧毁后，历史记录仍可能保留。privateEvents 标签不可扩大受众：`【仅当前行动者可见】`仅是当前提示词行动者可知的事实，`【狼队共享记录】`是狼人内部频道共享事实，`【与相关角色共享】`是与列出的相关角色共享的私密事实。存活不证明行动者知道自己被袭击、被解药救回或受到治愈保护；他人的“银水”是公开证据/声称，不是行动者的私密记忆；直接提供的行动者本人千里眼或其他行动结果是确定的个人事实。结论必须区分“已知”“公开声称”“推测”。';
  if (schemaKey === 'ignition') {
   promptHint += ' 该决策只需回答是否使用（true 或 false），无需选择任何目标。';
  }
@@ -230,7 +233,7 @@ export function buildGameSystemPrompt(schemaKey) {
  if (schemaKey === 'target') {
   promptHint += ' 若 options.wolfCouncilMessages 存在，它是本夜完整且仅狼队可见的议事记录；最终袭击应比较其中的理由与推荐目标，但仍只提交一个合法 targetPlayerId。';
  }
- return `你正在进行 6 至 14 人可配置阵容的魔女狼人杀，具体人数与职业构成以 board 和 publicSkills 为准。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。先按信息可靠度决策：privateKnowledge 中明确的职业/阵营事实与 privateEvents 中亲历结果最高；可核对的公开事件、完整发言链与票型其次；基于语气、角色人格或 publicSkills 的猜测最低。任何结论都要区分“已知”“公开声称”“推测”，不得把公开声称自动当成事实。actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；两者只约束稳定性格、关系语气、表达边界与思考方式，不提供本局身份、阵营、存活、技能或隐藏情报；actor.role、actor.skill、phase、day、board、alivePlayers、legalCandidates、currentDaySpeeches、historicalSpeeches、recentPublic、privateKnowledge、publicSkills、privateEvents 与其他观察字段才是本局事实来源。只能依据提供的观察作决定，不得假设隐藏身份，不得把静态卡或原作旧剧情中的死亡、凶手、证据、关系变化当成本局事实。当前对局默认不继承角色在其他作品时间线中的权能，只有 actor.skill 和本局事件明确授予的效果有效。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。若 options.postGame 为 true，当前是赛后复盘阶段：finalRoles 是全部座位的最终基础职业真相；postGameContext 汇总本局完整公开事件、私密行动、死亡回溯旧时间线与此前赛后发言；请承认真相已揭晓，可讨论自己的真实身份和全部过程，但仍不得捏造上下文中不存在的事实。仅返回一个 JSON 对象，不要 Markdown，不要解释。响应格式示例：${DECISION_EXAMPLES[schemaKey]}${promptHint}`;
+ return `你正在进行 6 至 14 人可配置阵容的魔女狼人杀，具体人数与职业构成以 board 和 publicSkills 为准。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。先按信息可靠度决策：privateKnowledge 中明确的职业/阵营事实与 privateEvents 中亲历结果最高；可核对的公开事件、完整发言链与票型其次；基于语气、角色人格或 publicSkills 的猜测最低。任何结论都要区分“已知”“公开声称”“推测”，不得把公开声称自动当成事实。actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；两者只约束稳定性格、关系语气、表达边界与思考方式，不提供本局身份、阵营、存活、技能或隐藏情报；actor.role、actor.skill、phase、day、board、alivePlayers、legalCandidates、currentDaySpeeches、historicalSpeeches、recentPublic、privateKnowledge、publicSkills、privateEvents 与其他观察字段才是本局事实来源。只能依据提供的观察作决定，不得假设隐藏身份，不得把静态卡或原作旧剧情中的死亡、凶手、证据、关系变化当成本局事实。当前对局默认不继承角色在其他作品时间线中的权能，只有 actor.skill 和本局事件明确授予的效果有效。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。若 options.postGame 为 true，当前是赛后复盘阶段：finalRoles 是最终身份唯一来源，提供全部座位的最终基础职业真相；postGameContext 汇总本局完整公开事件、私密行动、死亡回溯旧时间线与此前赛后发言；请承认真相已揭晓，可讨论自己的真实身份和全部过程，但仍不得捏造上下文中不存在的事实。仅返回一个 JSON 对象，不要 Markdown，不要解释。响应格式示例：${DECISION_EXAMPLES[schemaKey]}${promptHint}`;
 }
 
 /**
