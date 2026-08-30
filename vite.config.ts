@@ -35,7 +35,8 @@ const indexUrl = new URL('./index.html', scopeUrl).href;
 const precacheUrls = new Set(PRECACHE_FILES.map((file) => new URL(file, scopeUrl).href));
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(precacheUrls)));
+  const requests = [...precacheUrls].map((url) => new Request(url, { cache: 'reload' }));
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(requests)));
 });
 
 self.addEventListener('message', (event) => {
@@ -59,7 +60,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     const scope = new URL(scopeUrl);
     event.respondWith(url.pathname === scope.pathname
-      ? fetch(request).catch(() => caches.match(indexUrl))
+      ? fetch(new Request(request, { cache: 'reload' })).catch(() => caches.match(indexUrl))
       : Promise.resolve(Response.redirect(scopeUrl, 302)));
     return;
   }
