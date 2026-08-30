@@ -1,13 +1,14 @@
 .backdrop { position: fixed; inset: 0; z-index: 100; display: flex; justify-content: flex-end; background: rgb(23 22 26 / 62%); }
-.drawer { width: min(540px, 100%); height: 100%; overflow-y: auto; background: var(--paper); border-left: 4px solid var(--ink); box-shadow: -18px 0 48px rgb(0 0 0 / 24%); }
+.drawer { width: min(680px, 100%); height: 100%; overflow-x: hidden; overflow-y: auto; background: var(--paper); border-left: 4px solid var(--ink); box-shadow: -18px 0 48px rgb(0 0 0 / 24%); }
 .header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 24px 28px 18px; background: var(--paper); border-bottom: 1px solid var(--line); }
 .header h2 { margin: 4px 0 0; font-size: 28px; }
 .eyebrow { color: var(--verdict); font-family: var(--sans); font-size: 12px; font-weight: 800; }
 .iconButton, .keyField button { display: inline-grid; width: 44px; height: 44px; place-items: center; padding: 0; border: 1px solid var(--line); background: transparent; color: var(--ink); }
 .iconButton svg, .keyField svg { width: 20px; }
 .form { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 28px; }
+.form > *, .form label, .profileGrid, .profileGrid fieldset { min-width: 0; }
 .form label { display: grid; gap: 8px; color: var(--muted); font-family: var(--sans); font-size: 14px; font-weight: 750; }
-.form input, .form select { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 2px; background: var(--paper-bright); color: var(--ink); }
+.form input, .form select { width: 100%; min-width: 0; min-height: 48px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 2px; background: var(--paper-bright); color: var(--ink); }
 .providerPicker { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .providerOption, .providerSelected { min-height: 86px; display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--line-strong); background: var(--paper-bright); color: var(--ink); text-align: left; }
 .providerOption > svg, .providerSelected > svg { width: 21px; color: var(--intel-dark); }
@@ -30,7 +31,14 @@
 .support svg { width: 20px; color: var(--verdict); }
 .support strong { font-size: 16px; }
 .support p { margin: 0; color: var(--intel-dark); font-size: 13px; line-height: 1.55; }
-.reasoning { grid-column: 1 / -1; }
+.profiles { grid-column: 1 / -1; display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); background: var(--paper-bright); }
+.profiles header { display: grid; gap: 4px; }
+.profiles header span { color: var(--verdict); font-size: 10px; font-weight: 900; }
+.profiles h3, .profiles p { margin: 0; }
+.profiles header p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.profileGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.profileGrid fieldset { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 10px; margin: 0; padding: 12px; box-sizing: border-box; border: 1px solid var(--line); }
+.profileGrid legend { max-width: calc(100% - 10px); padding: 0 5px; overflow: hidden; color: var(--ink); font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .wide, .disclosure, .error, .actions { grid-column: 1 / -1; }
 .keyField { display: grid; grid-template-columns: 1fr 44px; }
 .keyField input { border-right: 0; }
@@ -55,4 +63,26 @@
 .judgmentToggle strong { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-family: var(--sans); font-size: 14px; }
 .judgmentToggle strong svg { width: 16px; color: var(--intel-dark); }
 .judgmentToggle small { color: var(--muted); font-family: var(--sans); font-size: 11px; line-height: 1.45; }
-@media (max-width: 600px) { .form { grid-template-columns: 1fr; padding: 22px 18px; } .header { padding-inline: 18px; } .providerPicker { grid-template-columns: 1fr; } .support { grid-template-columns: 96px 1fr; } .qrFrame { width: 96px; height: 96px; } .actions { flex-direction: column-reverse; } .actions button { justify-content: center; } }
+@media (max-width: 600px) {
+  .drawer { width: 100%; border-left: 0; }
+  .header { padding: 18px 16px 14px; }
+  .header h2 { font-size: 25px; }
+  .form { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 20px 16px 28px; }
+  .providerPicker { grid-template-columns: 1fr 1fr; }
+  .providerOption, .providerSelected { min-height: 92px; grid-template-columns: auto 1fr; padding: 11px; }
+  .providerOption > svg:last-child, .providerSelected > svg:last-child { grid-column: 1 / -1; justify-self: end; margin-top: -26px; }
+  .profiles { padding: 14px; }
+  .profileGrid { grid-template-columns: minmax(0, 1fr); }
+  .profileGrid fieldset { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 12px; padding: 12px; }
+  .profileGrid legend { grid-column: 1 / -1; }
+  .support { grid-template-columns: 96px 1fr; }
+  .qrFrame { width: 96px; height: 96px; }
+  .themeSelect { max-width: none; }
+  .actions { flex-direction: column-reverse; }
+  .actions button { justify-content: center; }
+}
+
+@media (max-width: 380px) {
+  .providerPicker { grid-template-columns: 1fr; }
+  .profileGrid fieldset { grid-template-columns: 1fr; }
+}

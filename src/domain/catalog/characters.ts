@@ -14,20 +14,6 @@ import soul10 from '../../data/characters/10.json';
 import soul11 from '../../data/characters/11.json';
 import soul12 from '../../data/characters/12.json';
 import soul13 from '../../data/characters/13.json';
-import avatar0 from '../../assets/avatars/avatar_0.png';
-import avatar1 from '../../assets/avatars/avatar_1.png';
-import avatar2 from '../../assets/avatars/avatar_2.png';
-import avatar3 from '../../assets/avatars/avatar_3.png';
-import avatar4 from '../../assets/avatars/avatar_4.png';
-import avatar5 from '../../assets/avatars/avatar_5.png';
-import avatar6 from '../../assets/avatars/avatar_6.png';
-import avatar7 from '../../assets/avatars/avatar_7.png';
-import avatar8 from '../../assets/avatars/avatar_8.png';
-import avatar9 from '../../assets/avatars/avatar_9.png';
-import avatar10 from '../../assets/avatars/avatar_10.png';
-import avatar11 from '../../assets/avatars/avatar_11.png';
-import avatar12 from '../../assets/avatars/avatar_12.png';
-import avatar13 from '../../assets/avatars/avatar_13.png';
 import type { CharacterDefinition, CharacterId } from '../model';
 
 const rawCharacterSchema = z.object({
@@ -42,7 +28,22 @@ const rawCharacterSchema = z.object({
 });
 
 const rawCharacters: unknown[] = [soul0, soul1, soul2, soul3, soul4, soul5, soul6, soul7, soul8, soul9, soul10, soul11, soul12, soul13];
-const avatars = [avatar0, avatar1, avatar2, avatar3, avatar4, avatar5, avatar6, avatar7, avatar8, avatar9, avatar10, avatar11, avatar12, avatar13];
+const avatars = [
+  new URL('../../assets/avatars/avatar_0.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_1.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_2.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_3.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_4.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_5.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_6.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_7.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_8.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_9.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_10.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_11.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_12.png', import.meta.url).href,
+  new URL('../../assets/avatars/avatar_13.png', import.meta.url).href,
+] as const;
 
 export const characters: CharacterDefinition[] = rawCharacters.map((raw, index) => {
   const parsed = rawCharacterSchema.parse(raw);

@@ -113,17 +113,15 @@ function fitPostGameContext(
   return buildPostGamePromptContext(best);
 }
 
-function historicalSpeechLimit(pendingDecision: PendingDecision): number {
+function historicalSpeechLimit(pendingDecision: PendingDecision, playerCount: number): number {
   const isSocialDecision = pendingDecision.kind === 'speech'
     || pendingDecision.kind === 'vote'
     || pendingDecision.kind === 'runoff'
     || pendingDecision.kind === 'tie-break'
     || pendingDecision.kind === 'wolf-suggestion'
     || pendingDecision.kind === 'wolf-decision';
-  if (isSocialDecision) {
-    return 6;
-  }
-  return 3;
+  if (isSocialDecision) return Math.min(playerCount * 2, PROMPT_LIMITS.historicalSpeechesMaxItems);
+  return Math.min(playerCount, 6);
 }
 
 function fitRuntimeContext(
@@ -240,7 +238,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
   }
   let historicalSpeeches: string[] = [];
   if (!isPostGame) {
-    const historyLimit = historicalSpeechLimit(pendingDecision);
+    const historyLimit = historicalSpeechLimit(pendingDecision, observation.players.filter((player) => player.id !== CREATURE_ID).length);
     historicalSpeeches = observation.publicEvents
       .filter((event) => event.kind === 'speech' && event.day < observation.day)
       .slice(-historyLimit)

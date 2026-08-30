@@ -156,11 +156,14 @@ export function selectObservation(
 
   return {
     gameId: state.gameId,
+    roundNumber: state.roundNumber,
     mode: state.mode,
     automationMode: state.automationMode,
     board: state.board,
     seed: state.seed,
     usedFreeProvider: state.usedFreeProvider,
+    aiFailureOccurred: state.aiFailureOccurred,
+    lastAiFailure: state.lastAiFailure,
     day: state.day,
     phase: state.phase,
     viewerPlayerId,

@@ -43,6 +43,8 @@ function rewindForDeath(state: GameState, deadPlayerIds: PlayerId[]): GameState 
   const restored: GameState = {
     ...checkpoint,
     usedFreeProvider: state.usedFreeProvider,
+    aiFailureOccurred: state.aiFailureOccurred,
+    lastAiFailure: state.lastAiFailure,
     pendingDecision: null,
     morningCheckpoint: structuredClone(state.morningCheckpoint),
     causalLocks: [...state.causalLocks, trigger.id],

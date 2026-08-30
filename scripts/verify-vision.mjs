@@ -51,7 +51,7 @@ console.log('=== 1. day-start 询问：候选排除自己、排除已查看者 =
 {
   let verified = false;
   for (let seed = 1; seed <= 300; seed++) {
-    const game0 = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const game0 = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const vision = game0.skillInstances.find((s) => s.definitionId === 'mind-reading');
     if (!vision) continue;
     // 推进到第一个 day-start 技能询问
@@ -85,7 +85,7 @@ console.log('\n=== 2. 概率分布（25/50/25）===');
   // 用确定性 rngState 模拟多次结算（不同 rngState 输入）
   let counts = { fail: 0, small: 0, big: 0 };
   for (let i = 0; i < 200; i++) {
-    const game0 = createGame({ mode: 'spectator', humanCharacterId: null, seed: (i + 1) >>> 0 });
+    const game0 = createGame({ mode: 'spectator', humanCharacterId: null, seed: (i + 1) >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const vision = game0.skillInstances.find((s) => s.definitionId === 'mind-reading');
     if (!vision) continue;
     const target = game0.players.find((p) => p.id !== vision.ownerPlayerId)?.id;
@@ -114,7 +114,7 @@ console.log('\n=== 3. 完整对局正常结束 ===');
   const total = 30;
   let visionUses = 0;
   for (let seed = 1; seed <= total; seed++) {
-    let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     let iter = 0;
     while (game.phase !== 'ended' && iter < 1500) {
       iter += 1;
@@ -140,7 +140,7 @@ console.log('\n=== 4. 轨迹聚合（脱敏）与目标不重复 ===');
   let visionResults = [];
   let verified = false;
   for (let seed = 1; seed <= 200; seed++) {
-    let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const vision = game.skillInstances.find((s) => s.definitionId === 'mind-reading');
     if (!vision) continue;
     let iter = 0;
@@ -204,7 +204,7 @@ console.log('\n=== 4. 轨迹聚合（脱敏）与目标不重复 ===');
 // ===== 5. 轨迹聚合确定性验证（直接测 describeNightTrajectory）=====
 console.log('\n=== 5. 轨迹聚合（确定性）===');
 {
-  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 42 >>> 0 });
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 42 >>> 0, playerCount: 6, selectedCharacterIds: [] });
   const target = game.players[0];
   const wolf = game.players[1];
   const witch = game.players[2];
@@ -251,7 +251,7 @@ console.log('\n=== 6. 目标不可重复与意图语义 ===');
 {
   // 目标不可重复：构造狼刀 + 解药救同一目标的场景，
   // 幻视应显示"被救下"（生效结果）+ "遭到狼人袭击"（意图），而非"被刀死"
-  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 7 >>> 0 });
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 7 >>> 0, playerCount: 6, selectedCharacterIds: [] });
   const vision = game.skillInstances.find((s) => s.definitionId === 'mind-reading');
   if (!vision) {
     check('找到幻视持有者', false);

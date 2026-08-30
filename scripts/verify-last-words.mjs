@@ -60,7 +60,7 @@ function findSkillOwner(game, definitionId) {
 
 function findGameWithSkill(definitionId, seedStart) {
   for (let seed = seedStart; seed < seedStart + 600; seed += 1) {
-    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     if (findSkillOwner(game, definitionId) >= 0) {
       return game;
     }
@@ -165,7 +165,7 @@ console.log('=== 2. 首夜多死者 → 逐个遗言 ===');
   let witchId = null;
   let seed = 50;
   while (seed < 4000 && !game) {
-    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const withoutRewind = (list) => list.filter((p) => !candidate.skillInstances.some((s) => s.definitionId === 'death-rewind' && s.ownerPlayerId === p.id));
     const safeGood = withoutRewind(candidate.players.filter((p) => getRoleAssignment(candidate, p.id).roleId !== 'wolf'));
     const safeWolves = withoutRewind(candidate.players.filter((p) => getRoleAssignment(candidate, p.id).roleId === 'wolf'));
@@ -201,7 +201,7 @@ console.log('=== 2. 首夜多死者 → 逐个遗言 ===');
 // ===== 2b. 首夜双死触发狼人优势 → 两人遗言后才终局 =====
 console.log('=== 2b. 首夜双死触发胜负 → 遗言后终局 ===');
 {
-  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 912 >>> 0 });
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 912 >>> 0, playerCount: 6, selectedCharacterIds: [] });
   const wolf = game.players.find((player) => getRoleAssignment(game, player.id).roleId === 'wolf');
   const victims = game.players
     .filter((player) => getRoleAssignment(game, player.id).roleId !== 'wolf' && !hasDeathRewind(game, player.id))
@@ -260,7 +260,7 @@ console.log('=== 4. 白天放逐 → 遗言 ===');
 // ===== 4b. 白天放逐触发人数优势 → 放逐者遗言后才终局 =====
 console.log('=== 4b. 白天放逐触发胜负 → 遗言后终局 ===');
 {
-  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 913 >>> 0 });
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 913 >>> 0, playerCount: 6, selectedCharacterIds: [] });
   game.day = 1;
   const safeGood = game.players.filter(
     (player) => getRoleAssignment(game, player.id).roleId !== 'wolf' && !hasDeathRewind(game, player.id),
@@ -346,7 +346,7 @@ console.log('=== 8. 遗言洗脑（夏目安安）===');
   let ananId = -1;
   let secondVictim = null;
   for (let seed = 600; seed < 1600 && !game; seed += 1) {
-    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const ownerId = findSkillOwner(candidate, 'brainwash');
     const other = candidate.players.find(
       (player) => player.id !== ownerId
@@ -405,7 +405,7 @@ console.log('=== 10. 回收洗脑后遗言洗脑（月代雪）===');
   let game = null;
   let seed = 1;
   while (seed < 4000 && !game) {
-    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const candidate = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const hasBrainwash = candidate.skillInstances.some((s) => s.definitionId === 'brainwash');
     const hasRecovery = candidate.skillInstances.some((s) => s.definitionId === 'witch-factor-recovery');
     if (hasBrainwash && hasRecovery) {
@@ -483,7 +483,7 @@ console.log('=== 11. 完整对局（本地策略）===');
   let sawLastWords = 0;
   const total = 40;
   for (let seed = 1; seed <= total; seed += 1) {
-    let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     let iter = 0;
     while (game.phase !== 'ended' && iter < 2000) {
       iter += 1;

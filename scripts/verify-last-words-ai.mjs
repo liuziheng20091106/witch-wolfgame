@@ -43,7 +43,7 @@ function check(label, ok, detail = '') {
 }
 
 // 找一个对局并构造首夜狼刀死亡 → 遗言决策
-const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 42 >>> 0 });
+const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 42 >>> 0, playerCount: 6, selectedCharacterIds: [] });
 const realWolf = game.players.find((p) => getRoleAssignment(game, p.id).roleId === 'wolf');
 const victim = game.players.find((p) => p.id !== realWolf?.id);
 if (!realWolf || !victim) {

@@ -1,4 +1,5 @@
-import { Bot, Check, ChevronRight, Copy, Eye, Play, Settings, Trash2, TriangleAlert, UserRound } from 'lucide-react';
+import { Bot, Check, ChevronRight, Copy, Eye, Minus, Play, Plus, Settings, Trash2, TriangleAlert, UserRound } from 'lucide-react';
+import { MAX_PLAYERS, MIN_PLAYERS } from '../../../shared/gamePromptContract.js';
 import { useState } from 'react';
 import type { AiProviderConfig } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
@@ -7,6 +8,8 @@ import { postGameDone } from '../../domain/skills/postGame';
 import type { CharacterId } from '../../domain/model';
 import { getSavedGameCompatibilityWarning, type GameHistoryEntry, type SavedGameEnvelope, type SetupPreferences } from '../../storage/browserStorage';
 import brandMark from '../../assets/icon.ico';
+import type { MultiplayerController } from '../../multiplayer/useMultiplayerRoom';
+import { MultiplayerLobby } from './MultiplayerLobby';
 import styles from './SetupView.module.css';
 
 
@@ -17,6 +20,7 @@ interface SetupViewProps {
   savedGame: SavedGameEnvelope | null;
   historyError: string | null;
   storageError: string | null;
+  multiplayer: MultiplayerController;
   onUpdateSetup(setup: SetupPreferences): void;
   onOpenSettings(): void;
   onContinue(): void;
@@ -27,7 +31,7 @@ interface SetupViewProps {
 
 function hasUsableSettings(settings: AiProviderConfig): boolean {
   if (settings.provider === 'free') return true;
-  if (!settings.endpoint.trim() || !settings.apiKey.trim() || !settings.model.trim()) return false;
+  if (!settings.endpoint.trim() || !settings.apiKey.trim() || !settings.profiles.default.model.trim()) return false;
   try {
     const url = new URL(settings.endpoint);
     return url.pathname.endsWith('/chat/completions')
@@ -37,11 +41,14 @@ function hasUsableSettings(settings: AiProviderConfig): boolean {
   }
 }
 
-export function SetupView({ settings, setup, history, historyError, savedGame, storageError, onUpdateSetup, onOpenSettings, onContinue, onStart, onClearHistory, onDiscard }: SetupViewProps) {
+export function SetupView({ settings, setup, history, historyError, savedGame, storageError, multiplayer, onUpdateSetup, onOpenSettings, onContinue, onStart, onClearHistory, onDiscard }: SetupViewProps) {
   const [confirming, setConfirming] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copiedSeed, setCopiedSeed] = useState<number | null>(null);
-  const ready = hasUsableSettings(settings) && (setup.mode === 'spectator' || setup.humanCharacterId !== null);
+  const customRosterComplete = setup.selectedCharacterIds.length === 0 || setup.selectedCharacterIds.length === setup.playerCount;
+  const humanCharacterReady = setup.mode === 'spectator'
+    || (setup.humanCharacterId !== null && (setup.selectedCharacterIds.length === 0 || setup.selectedCharacterIds.includes(setup.humanCharacterId)));
+  const ready = hasUsableSettings(settings) && customRosterComplete && humanCharacterReady;
   const savedLabel = savedGame
     ? `${savedGame.state.day === 0 ? '首夜' : `第 ${savedGame.state.day} 天`} · ${savedGame.state.phase === 'ended' || savedGame.state.phase === 'post-game' ? '已结束' : '进行中'}`
     : null;
@@ -50,7 +57,23 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
     savedGameWarning = getSavedGameCompatibilityWarning(savedGame);
   }
 
-  const chooseCharacter = (characterId: CharacterId) => onUpdateSetup({ ...setup, humanCharacterId: characterId });
+  const toggleCharacter = (characterId: CharacterId) => {
+    const alreadySelected = setup.selectedCharacterIds.includes(characterId);
+    if (!alreadySelected && setup.selectedCharacterIds.length >= setup.playerCount) return;
+    const selectedCharacterIds = alreadySelected
+      ? setup.selectedCharacterIds.filter((id) => id !== characterId)
+      : [...setup.selectedCharacterIds, characterId];
+    const humanCharacterId = setup.humanCharacterId === characterId && alreadySelected ? null : setup.humanCharacterId;
+    onUpdateSetup({ ...setup, selectedCharacterIds, humanCharacterId });
+  };
+  const updatePlayerCount = (playerCount: number) => {
+    const boundedCount = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, playerCount));
+    const selectedCharacterIds = setup.selectedCharacterIds.slice(0, boundedCount);
+    const humanCharacterId = setup.humanCharacterId && selectedCharacterIds.length > 0 && !selectedCharacterIds.includes(setup.humanCharacterId)
+      ? null
+      : setup.humanCharacterId;
+    onUpdateSetup({ ...setup, playerCount: boundedCount, selectedCharacterIds, humanCharacterId });
+  };
   const copySeed = async (seed: number) => {
     try {
       await copyTextToClipboard(String(seed));
@@ -76,19 +99,22 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
   return (
     <main className={styles.page}>
       <header className={styles.masthead}>
-        <img className={styles.brandMark} src={brandMark} alt="魔女狼人杀" />
+        <div className={styles.brandLockup}><img className={styles.brandMark} src={brandMark} alt="" /><div><span>MAJO WOLF / CASE SYSTEM</span><strong>魔女狼人杀</strong></div></div>
+        <p>在封闭审判中观察证言、身份与魔法留下的裂痕。</p>
         <button className={styles.settingsButton} type="button" onClick={onOpenSettings}><Settings />设置</button>
       </header>
 
       <section className={styles.commandBand} aria-labelledby="setup-title">
         <div className={styles.intro}>
-          <span>审判准备</span>
-          <h2 id="setup-title">选择你的观察位置</h2>
+          <span>FILE 01 · 审判准备</span>
+          <h2 id="setup-title">决定你如何进入这桩案件</h2>
+          <p>旁观所有真相，或认领一名少女的席位。</p>
         </div>
         <div className={styles.modeSwitch} role="group" aria-label="游戏模式">
           <button type="button" className={setup.mode === 'spectator' ? styles.activeMode : ''} onClick={() => onUpdateSetup({ ...setup, mode: 'spectator', humanCharacterId: null })}><Eye />全自动观战</button>
-          <button type="button" className={setup.mode === 'player' ? styles.activeMode : ''} onClick={() => onUpdateSetup({ ...setup, mode: 'player' })}><UserRound />加入一个席位</button>
+          <button type="button" className={setup.mode === 'player' ? styles.activeMode : ''} onClick={() => onUpdateSetup({ ...setup, mode: 'player', humanCharacterId: setup.humanCharacterId ?? setup.selectedCharacterIds[0] ?? null })}><UserRound />加入一个席位</button>
         </div>
+        <div className={styles.countField}><span>出庭人数</span><div><button type="button" onClick={() => updatePlayerCount(setup.playerCount - 1)} disabled={setup.playerCount <= MIN_PLAYERS} aria-label="减少出庭人数"><Minus /></button><strong>{setup.playerCount}</strong><button type="button" onClick={() => updatePlayerCount(setup.playerCount + 1)} disabled={setup.playerCount >= MAX_PLAYERS} aria-label="增加出庭人数"><Plus /></button></div></div>
         <div className={styles.seedField}>
           <span>随机种子</span>
           <div className={styles.seedControls}>
@@ -103,27 +129,33 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
         </div>
       </section>
 
-      {setup.mode === 'player' && <section className={styles.characterSection} aria-labelledby="character-title">
-        <div className={styles.sectionHeading}><div><span>PLAYER SEAT</span><h2 id="character-title">选择出庭角色</h2></div><p>基础职业将在六人入场后随机分配。</p></div>
+      <section className={styles.characterSection} aria-labelledby="character-title">
+        <div className={styles.sectionHeading}><div><span>CAST SELECTION</span><h2 id="character-title">配置出庭阵容</h2></div><p>{setup.selectedCharacterIds.length === 0 ? `当前使用种子随机选择 ${setup.playerCount} 人` : `已选择 ${setup.selectedCharacterIds.length} / ${setup.playerCount} 人`}{setup.mode === 'player' ? '；先将角色加入阵容，再点击角色卡下方独立的「设为我的角色」按钮认领席位。' : '。'}</p></div>
         <div className={styles.characterGrid}>
-          {characters.map((character, index) => {
-            const selected = setup.humanCharacterId === character.id;
-            return <button key={character.id} type="button" className={selected ? styles.selectedCharacter : styles.character} onClick={() => chooseCharacter(character.id)} aria-pressed={selected}>
-              <span className={styles.seatNumber}>{String(index + 1).padStart(2, '0')}</span>
-              <img src={character.avatarUrl} alt="" />
-              <span className={styles.characterName}>{character.name}</span>
-              <span className={styles.trait}>{character.speechStyle.slice(0, 18)}…</span>
-              {selected && <span className={styles.check}><Check /></span>}
-            </button>;
+          {characters.map((character) => {
+            const included = setup.selectedCharacterIds.includes(character.id);
+            const selectedSeat = included ? setup.selectedCharacterIds.indexOf(character.id) + 1 : null;
+            const human = setup.humanCharacterId === character.id;
+            const inclusionDisabled = !included && setup.selectedCharacterIds.length >= setup.playerCount;
+            return <article key={character.id} className={`${styles.characterCard} ${included ? styles.selectedCharacter : ''} ${human ? styles.humanCharacter : ''}`}>
+              <button type="button" className={styles.characterToggle} onClick={() => toggleCharacter(character.id)} aria-pressed={included} disabled={inclusionDisabled}>
+                <span className={styles.seatNumber}>{selectedSeat === null ? '候选' : `${String(selectedSeat).padStart(2, '0')} 席`}</span>
+                <img src={character.avatarUrl} alt="" />
+                <span className={styles.characterMeta}><strong>{character.name}</strong></span>
+                {included && <span className={styles.check}><Check /></span>}
+              </button>
+              {setup.mode === 'player' && (included || setup.selectedCharacterIds.length === 0) && <button type="button" className={styles.humanSeat} onClick={() => onUpdateSetup({ ...setup, humanCharacterId: character.id })}>{human ? '已认领此席' : '设为我的角色'}</button>}
+            </article>;
           })}
         </div>
-      </section>}
+        {setup.selectedCharacterIds.length > 0 && setup.selectedCharacterIds.length !== setup.playerCount && <p className={styles.rosterError} role="status">还需选择 {setup.playerCount - setup.selectedCharacterIds.length} 名角色才能开始。</p>}
+      </section>
 
-      <section className={styles.launchBand}>
+      <section className={styles.launchBand} aria-label="案件启动">
         <div className={styles.aiStatus}>
           <div className={styles.aiSummary}>
             <span className={styles.aiIcon}><Bot /></span>
-            <div className={styles.aiCopy}><strong>{settings.provider === 'free' ? '免费服务' : '自定义服务'}</strong><span>{settings.provider === 'free' ? '公益服务，不保证稳定可用' : settings.model || '请填写模型'}</span></div>
+            <div className={styles.aiCopy}><strong>{settings.provider === 'free' ? '免费服务' : '自定义服务'}</strong><span>{settings.provider === 'free' ? '公益服务，不保证稳定可用' : settings.profiles.default.model || '请填写默认模型'}</span></div>
           </div>
           <button type="button" onClick={onOpenSettings}>{settings.provider === 'free' ? '服务详情' : '打开设置'}<ChevronRight /></button>
         </div>
@@ -135,12 +167,13 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
             {savedGameWarning && <p className={styles.saveVersionWarning} role="alert"><TriangleAlert aria-hidden="true" /><span>{savedGameWarning}</span></p>}
             <div className={styles.savedRun}><span>可恢复记录</span><strong>{savedLabel}</strong><button type="button" onClick={onContinue}><Play />继续上局</button><button type="button" className={styles.deleteButton} onClick={onDiscard} aria-label="删除存档"><Trash2 /></button></div>
           </div>}
-          <button className={styles.startButton} type="button" disabled={!ready} onClick={requestStart}><Play />开始新局</button>
+          <button className={styles.startButton} type="button" disabled={!ready} onClick={requestStart}><span>OPEN CASE</span><Play />开启审判</button>
         </div>
       </section>
+      <div className={styles.multiplayerWrap}><MultiplayerLobby multiplayer={multiplayer} defaultCharacterId={setup.humanCharacterId} /></div>
 
       {history.length > 0 && <section className={styles.historySection} aria-labelledby="seed-history-title">
-        <div className={styles.sectionHeading}><div><span>SEED ARCHIVE</span><h2 id="seed-history-title">对局历史</h2></div><p>复制种子分享给他人；对方把种子填入上方输入框后点「开始新局」即可复现同一阵容。</p></div>
+        <div className={styles.sectionHeading}><div><span>FILE 03 · SEED ARCHIVE</span><h2 id="seed-history-title">封存案件</h2></div><p>种子是案件编号；复制后即可复现完全相同的入场阵容。</p></div>
         <div className={styles.historyList}>
           {history.map((entry) => (
             <div key={entry.gameId} className={styles.historyEntry}>

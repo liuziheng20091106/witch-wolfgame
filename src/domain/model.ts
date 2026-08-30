@@ -120,7 +120,6 @@ export type TimelineEventKind =
   | 'role-exchange'
   | 'factor-recovered'
   | 'timeline-rewound'
-  | 'ai-error'
   | 'result'
   | 'post-game-speech';
 
@@ -236,10 +235,14 @@ export interface GameResult {
 export interface GameState {
   schemaVersion: 1;
   gameId: string;
+  seriesId: string;
+  roundNumber: number;
   board: string;
   mode: GameMode;
   automationMode: AutomationMode;
   usedFreeProvider: boolean;
+  aiFailureOccurred: boolean;
+  lastAiFailure: { kind: string; message: string; pendingDecisionId: string; actorId: PlayerId; day: number; phase: GamePhase } | null;
   humanPlayerId: PlayerId | null;
   seed: number;
   rngState: number;
@@ -260,11 +263,14 @@ export interface GameState {
   causalLocks: string[];
   result: GameResult | null;
 }
-export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks' | 'archivedTimelines' | 'usedFreeProvider'>;
+export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks' | 'archivedTimelines' | 'usedFreeProvider' | 'aiFailureOccurred' | 'lastAiFailure'>;
 
 export interface GameSetup {
   mode: GameMode;
   humanCharacterId: CharacterId | null;
+  playerCount: number;
+  selectedCharacterIds: CharacterId[];
+  seatCharacterIds?: CharacterId[];
   seed: number;
 }
 
@@ -274,7 +280,7 @@ export type GameEvent =
   | { type: 'set-automation'; automationMode: AutomationMode }
   | { type: 'set-rng-state'; rngState: number }
   | { type: 'mark-free-provider-used' }
-  | { type: 'record-ai-error'; message: string };
+  | { type: 'mark-ai-failure'; failure?: { kind: string; message: string; pendingDecisionId: string; actorId: PlayerId } };
 
 export interface GameCommand {
   type: 'decision';
@@ -298,7 +304,10 @@ export interface GameObservation {
   automationMode: AutomationMode;
   board: string;
   seed: number;
+  roundNumber: number;
   usedFreeProvider: boolean;
+  aiFailureOccurred: boolean;
+  lastAiFailure: GameState['lastAiFailure'];
   day: number;
   phase: GamePhase;
   viewerPlayerId: PlayerId | null;

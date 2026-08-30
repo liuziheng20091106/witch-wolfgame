@@ -7,19 +7,23 @@
   height: 100dvh;
   min-height: 600px;
   display: grid;
-  grid-template-rows: 72px 1fr;
+  grid-template-rows: 76px 1fr;
   overflow: hidden;
   background: var(--paper);
   color: var(--ink);
 }
 
 .topbar {
+  position: relative;
+  z-index: 2;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding: 0 18px;
-  border-bottom: 4px solid var(--ink);
-  background: var(--paper-bright);
+  padding: 0 22px;
+  border-bottom: 7px double var(--magic);
+  background: var(--ink-surface);
+  color: var(--ink-on-surface);
+  box-shadow: 0 8px 22px var(--paper-shadow);
 }
 
 .brand {
@@ -27,18 +31,14 @@
   align-items: center;
 }
 
-.brand img {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-}
+.brand img { width: 49px; height: 49px; padding: 4px; border: 1px solid var(--magic); object-fit: contain; }
 
 .phase {
   display: grid;
-  min-width: 150px;
-  padding: 7px 18px;
-  border-right: 1px solid var(--line);
-  border-left: 1px solid var(--line);
+  min-width: 190px;
+  padding: 8px 22px;
+  border-right: 1px solid rgb(255 255 255 / 16%);
+  border-left: 1px solid rgb(255 255 255 / 16%);
   text-align: center;
 }
 
@@ -58,31 +58,10 @@
   font-size: 21px;
 }
 
-.seedDisplay>span {
-  text-align: right;
-}
-
-.seedDisplay {
-  justify-self: end;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--muted);
-}
-
-.seedDisplay button {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-}
+.seedDisplay>span { text-align: right; }
+.seedDisplay { justify-self: end; display: inline-flex; align-items: center; gap: 8px; font-family: var(--sans); font-size: 11px; font-weight: 800; color: var(--paper-dim); }
+.seedDisplay button { display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; border: 1px solid rgb(255 255 255 / 24%); background: transparent; color: var(--ink-on-surface); }
+.seedDisplay button:hover { border-color: var(--magic); color: var(--magic); }
 
 .seedDisplay svg {
   width: 15px;
@@ -91,8 +70,10 @@
 .workspace {
   min-height: 0;
   display: grid;
-  grid-template-columns: 270px minmax(360px, 1fr) 360px;
+  grid-template-columns: clamp(300px, 22vw, 360px) minmax(440px, 1fr) clamp(340px, 25vw, 400px);
+  gap: 4px;
   overflow: hidden;
+  background: var(--ink-surface);
 }
 
 .rosterPane,
@@ -104,25 +85,22 @@
 
 .sidePane {
   display: grid;
-  grid-template-rows: auto minmax(250px, auto) 1fr;
-  border-left: 1px solid var(--line);
-  overflow: hidden;
-  background: var(--paper-bright);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow-y: auto;
+  background: var(--paper);
 }
 
 .intel {
   min-height: 0;
+  margin: 8px;
   overflow: hidden;
-  border-top: 1px solid var(--line);
+  border: 1px solid var(--intel-dark);
+  border-top: 4px solid var(--intel);
+  background: var(--intel-soft);
+  box-shadow: 3px 3px 0 var(--paper-shadow);
 }
 
-.intel header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
-}
+.intel header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 3px double var(--intel-dark); }
 
 .intel header svg {
   width: 17px;
@@ -163,14 +141,7 @@
 }
 
 .intel p,
-.historyBody p {
-  margin: 0;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
+.historyBody p { margin: 0; padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1.58; }
 
 .historyBody p {
   white-space: pre-line;
@@ -188,7 +159,7 @@
   bottom: 22px;
   width: min(680px, calc(100% - 32px));
   display: grid;
-  grid-template-columns: 54px 1fr auto;
+  grid-template-columns: 54px 1fr minmax(190px, auto);
   gap: 16px;
   align-items: center;
   padding: 17px 20px;
@@ -242,6 +213,22 @@
 .result p {
   margin: 0;
   color: var(--paper-dim);
+}
+
+.resultActions {
+  display: grid;
+  gap: 8px;
+}
+
+.resultActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.resultActions svg {
+  width: 17px;
 }
 
 .result button {
@@ -631,8 +618,12 @@
     font-size: 19px;
   }
 
-  .result button {
+  .resultActions {
     grid-column: 1 / -1;
+  }
+
+  .resultActions button {
+    width: 100%;
   }
 
   .resultWithSupport {

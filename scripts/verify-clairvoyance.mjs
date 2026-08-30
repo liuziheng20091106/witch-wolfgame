@@ -65,7 +65,7 @@ function findClairvoyanceOwner(game) {
 // 遍历 seed 生成一个含千里眼持有者的对局（spectator 模式 6 人从 14 角色随机抽取）
 function createGameWithClairvoyance(seedStart) {
   for (let seed = seedStart; seed < seedStart + 200; seed += 1) {
-    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     if (findClairvoyanceOwner(game) >= 0) {
       return game;
     }

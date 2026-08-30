@@ -50,7 +50,7 @@ const nameOf = (game, id) => characterById[game.players.find((p) => p.id === id)
 // ===== 1. burnAllSkills：目标白板 + burned 标记 =====
 console.log('=== 1. 烧技能（burnAllSkills）===');
 {
-  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 1 >>> 0 });
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 1 >>> 0, playerCount: 6, selectedCharacterIds: [] });
   const target = game.players[0];
   const before = game.skillInstances.filter((s) => s.ownerPlayerId === target.id);
   const burned = burnAllSkills(game, target.id);
@@ -82,7 +82,7 @@ console.log('\n=== 2. 夜间点火：完整流程（RNG 判定）===');
   {
     let verified = false;
     for (let seed = 1; seed <= 100 && !verified; seed++) {
-      const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+      const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
       const ignition = game.skillInstances.find((s) => s.definitionId === 'ignition');
       if (!ignition) continue;
       const ownerId = ignition.ownerPlayerId;
@@ -110,7 +110,7 @@ console.log('\n=== 2. 夜间点火：完整流程（RNG 判定）===');
   {
     let verified = false;
     for (let seed = 1; seed <= 100 && !verified; seed++) {
-      const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+      const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
       const ignition = game.skillInstances.find((s) => s.definitionId === 'ignition');
       if (!ignition) continue;
       const ownerId = ignition.ownerPlayerId;
@@ -154,7 +154,7 @@ console.log('\n=== 2. 夜间点火：完整流程（RNG 判定）===');
   {
     let verified = false;
     for (let seed = 1; seed <= 200 && !verified; seed++) {
-      const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+      const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
       const ignition = game.skillInstances.find((s) => s.definitionId === 'ignition');
       if (!ignition) continue;
       const ownerId = ignition.ownerPlayerId;
@@ -180,7 +180,7 @@ console.log('\n=== 2. 夜间点火：完整流程（RNG 判定）===');
 console.log('\n=== 3. 白天点火：烧投票（计票过滤验证）===');
 {
   const { resolveVotes } = await server.ssrLoadModule('/src/domain/engine/vote.ts');
-  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 2 >>> 0 });
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 2 >>> 0, playerCount: 6, selectedCharacterIds: [] });
   const ignition = game.skillInstances.find((s) => s.definitionId === 'ignition');
   if (!ignition) { check('找到点火持有者', false); }
   else {
@@ -215,7 +215,7 @@ console.log('\n=== 4. 完整对局（本地策略）正常结束 ===');
   let ok = 0;
   const total = 30;
   for (let seed = 1; seed <= total; seed++) {
-    let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     let iter = 0;
     while (game.phase !== 'ended' && iter < 2000) {
       iter += 1;

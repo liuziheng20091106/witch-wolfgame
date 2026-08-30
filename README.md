@@ -1,19 +1,23 @@
 # 魔女狼人杀
 
-六人 AI 狼人杀网页游戏。每局从 14 位角色中选择 6 位，随机分配 2 名狼人、1 名预言家、1 名女巫和 2 名村民。角色人格、基础职业与魔女技互相独立；
+支持 6–14 人的 AI 狼人杀网页游戏。开局可指定人数与出庭角色，职业按人数自动平衡为 2–4 名狼人、1 名预言家、1 名女巫和其余村民。角色人格、基础职业与魔女技互相独立；
 
 当前客户端与提示词协议版本为 `2.4.0`。发布时必须同步更新 `package.json`、Vite 版本回退值，以及主后端和代理配置中的 `acceptedClientVersions`。
 
 ## 功能
 
-- 全自动 AI 观战，以及用户加入一个席位的参与模式
+- 6–14 人可配置阵容：可随机或手动选择出庭角色，支持全自动 AI 观战及用户加入一个席位
 - 仅狼队可见的夜间文字议事与匿名团队袭击、预言家查验、女巫解药/毒药、公开顺序投票和一次平票重投
+- 对局结束后可保留当前参赛角色与玩家席位，确定性重新分配职业并开始下一轮连续审判
 - 14 项完整魔女技：魔女杀手、死亡回溯、洗脑、操控液体、怪力、漂浮、治愈、千里眼、视线诱导、灵魂交换、幻视、点火、声音模仿、魔女因子回收
 - 深度机制：诺亚的液态造物（独立意志/可毒主人）、漂浮隐匿（免疫追溯）、千里眼直播（观看者暴露职业）
 - 默认使用经主后端校验与限流的公益免费服务，无需 API Key；服务不保证稳定可用，可随时切换到自定义服务
-- 也可切换到自定义 Chat Completions 服务，填写完整 `/chat/completions` 端点、模型、API Key 与思考强度；`none` 不发送 `reasoning_effort`，默认 `low`
+- 也可切换到自定义 Chat Completions 服务，填写完整 `/chat/completions` 端点、API Key 和三档模型配置：`default` 为必填兜底档；`fast`、`deep` 的模型留空时继承 `default.model`，思考强度选择“继承”时继承 `default.reasoningEffort`；最终强度为 `none` 时不发送 `reasoning_effort`
+  - `fast`：预言家查验、治疗、点火和其他简单可选目标动作
+  - `deep`：发言、狼议、最终狼刀、女巫行动、投票/平票、操控液体、漂浮和声音模仿
+  - `default`：其余决策，以及 `fast`/`deep` 未填写的模型或思考强度
 - 设置、准备区选择和可恢复游戏进度保存在浏览器 `localStorage`
-- 桌面三栏、平板双栏、手机标签页与底部行动面板
+- 桌面三栏、大阵容双列名册、平板自适应网格、手机横向角色带与底部行动面板
 
 ## 本地运行
 
@@ -25,6 +29,16 @@ npm run dev
 ```
 
 开发服务器默认使用 `http://127.0.0.1:5173/`。开发时可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
+
+多人服务默认监听 `127.0.0.1:34024`，开发时 Vite 会代理 `/multiplayer`：
+多人联机支持房主配置 **6–14 席**；房间人数会贯穿协议校验、持久化状态、真人/AI 驱动数组和 `createGame`。未被真人占用的席位由确定性 AI 驱动。
+
+```bash
+npm run server:multiplayer
+```
+
+公网部署应在反向代理上把 `/multiplayer` 升级为 WebSocket，并用 `VITE_MULTIPLAYER_ENDPOINT=wss://example.com/multiplayer` 覆盖前端地址；同时必须设置 `MAJO_MULTIPLAYER_ALLOWED_ORIGINS=https://example.com`，多个来源用逗号分隔，服务只接受白名单中的精确 Origin，不支持通配符。房间状态原子写入 `.runtime/multiplayer-rooms.json`；恢复令牌只保存在参与者浏览器和服务端状态文件中。
+本地 OpenAI 兼容代理默认监听 `127.0.0.1:34025`，并允许 Vite 默认的 `http://127.0.0.1:5173` 与 `http://localhost:5173` 来源。自定义开发端口时，用逗号分隔的 `LOCAL_AI_ALLOWED_ORIGINS` 显式配置允许来源后运行 `npm run server:local-ai`。代理仅从 OMP 配置或环境变量读取上游凭据。
 
 
 ## 模型提供商验证工具
@@ -42,6 +56,7 @@ API Key 以遮蔽文本输入，仅在当前进程中通过 `Authorization: Bear
 ```bash
 npm run build
 npm run preview
+npm run test:multiplayer
 ```
 
 生产文件输出到 `dist/`。Vite 使用相对资源路径，可部署到静态站点或子路径。公益服务使用独立 API 域名，避免 Cloudflare 静态 Worker 对同域 `POST /api/*` 返回 405；也可在构建时通过 `VITE_MAIN_BACKEND_ENDPOINT` 覆盖完整入口。
@@ -107,7 +122,7 @@ npm run test:update
 
 ## 浏览器存储
 
-- `majo-wolf.settings.v1`：免费服务选择，或自定义 Chat Completions 端点、模型、API Key 与思考强度
+- `majo-wolf.settings.v1`：免费服务选择，或自定义 Chat Completions 端点、API Key、`default`/`fast`/`deep` 三档模型与思考强度继承配置
 - `majo-wolf.setup.v1`：模式、玩家角色和随机种子
 - `majo-wolf.game.v1`：版本化完整游戏状态
 

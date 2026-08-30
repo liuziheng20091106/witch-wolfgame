@@ -76,8 +76,11 @@ export function AiSettingsDrawer({ open, config, theme, onClose, onSave }: AiSet
     setDraft(next);
     setValidationError(null);
   };
-  const updateReasoningEffort = (reasoningEffort: CustomAiProviderConfig['reasoningEffort']) => {
-    updateCustom({ reasoningEffort });
+  const updateDefaultProfile = (patch: Partial<CustomAiProviderConfig['profiles']['default']>) => {
+    updateCustom({ profiles: { ...customDraft.profiles, default: { ...customDraft.profiles.default, ...patch } } });
+  };
+  const updateOverrideProfile = (kind: 'fast' | 'deep', patch: Partial<CustomAiProviderConfig['profiles']['fast']>) => {
+    updateCustom({ profiles: { ...customDraft.profiles, [kind]: { ...customDraft.profiles[kind], ...patch } } });
   };
   const chooseProvider = (provider: AiProviderConfig['provider']) => {
     setDraft(provider === 'free' ? { provider: 'free', retryCount: config.provider === 'free' ? config.retryCount : 2 } : customDraft);
@@ -85,8 +88,8 @@ export function AiSettingsDrawer({ open, config, theme, onClose, onSave }: AiSet
   };
   const validate = () => {
     if (draft.provider === 'free') return;
-    if (!draft.apiKey.trim() || !draft.model.trim()) {
-      throw new Error('API Key 和模型不能为空');
+    if (!draft.apiKey.trim() || !draft.profiles.default.model.trim()) {
+      throw new Error('API Key 和默认模型不能为空');
     }
     validateAiEndpoint(draft.endpoint);
   };
@@ -126,10 +129,10 @@ export function AiSettingsDrawer({ open, config, theme, onClose, onSave }: AiSet
             <div className={styles.support}><div className={styles.qrFrame}><img src={supportQr} alt="微信赞赏二维码" /></div><div><Heart /><strong>支持免费服务</strong><p>若这局体验不错，欢迎扫码赞赏，让免费服务持续可用。</p></div></div>
           </section> : <>
             <label className={styles.wide}>完整端点<input value={customDraft.endpoint} onChange={(event) => updateCustom({ endpoint: event.target.value })} inputMode="url" placeholder="https://example.com/v1/chat/completions" /></label>
-            <label>模型<input value={customDraft.model} onChange={(event) => updateCustom({ model: event.target.value })} placeholder="模型 ID" /></label>
+            <section className={styles.profiles} aria-labelledby="model-profiles-title"><header><span>DECISION PROFILES</span><h3 id="model-profiles-title">动态模型档位</h3><p>快速动作使用快速档；发言、狼议、投票和复杂技能使用深度档；留空模型或继承思考强度时回退默认档。</p></header><div className={styles.profileGrid}><fieldset><legend>默认档</legend><label>模型<input value={customDraft.profiles.default.model} onChange={(event) => updateDefaultProfile({ model: event.target.value })} placeholder="必填模型 ID" /></label><label>思考强度<select value={customDraft.profiles.default.reasoningEffort} onChange={(event) => updateDefaultProfile({ reasoningEffort: event.target.value as CustomAiProviderConfig['profiles']['default']['reasoningEffort'] })}><option value="none">none</option><option value="low">low</option><option value="high">high</option><option value="max">max</option></select></label></fieldset><fieldset><legend>快速档</legend><label>模型<input value={customDraft.profiles.fast.model} onChange={(event) => updateOverrideProfile('fast', { model: event.target.value })} placeholder="留空继承默认模型" /></label><label>思考强度<select value={customDraft.profiles.fast.reasoningEffort ?? 'inherit'} onChange={(event) => updateOverrideProfile('fast', { reasoningEffort: event.target.value === 'inherit' ? null : event.target.value as CustomAiProviderConfig['profiles']['fast']['reasoningEffort'] })}><option value="inherit">继承默认</option><option value="none">none</option><option value="low">low</option><option value="high">high</option><option value="max">max</option></select></label></fieldset><fieldset><legend>深度档</legend><label>模型<input value={customDraft.profiles.deep.model} onChange={(event) => updateOverrideProfile('deep', { model: event.target.value })} placeholder="留空继承默认模型" /></label><label>思考强度<select value={customDraft.profiles.deep.reasoningEffort ?? 'inherit'} onChange={(event) => updateOverrideProfile('deep', { reasoningEffort: event.target.value === 'inherit' ? null : event.target.value as CustomAiProviderConfig['profiles']['deep']['reasoningEffort'] })}><option value="inherit">继承默认</option><option value="none">none</option><option value="low">low</option><option value="high">high</option><option value="max">max</option></select></label></fieldset></div></section>
             <label>API Key<span className={styles.keyField}><input type={showKey ? 'text' : 'password'} value={customDraft.apiKey} onChange={(event) => updateCustom({ apiKey: event.target.value })} autoComplete="off" /><button type="button" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? '隐藏 API Key' : '显示 API Key'}>{showKey ? <EyeOff /> : <Eye />}</button></span></label>
           </>}
-          {draft.provider === 'custom' && <><label className={styles.reasoning}>思考强度<select value={customDraft.reasoningEffort} onChange={(event) => updateReasoningEffort(event.target.value as CustomAiProviderConfig['reasoningEffort'])}><option value="none">none</option><option value="low">low</option><option value="high">high</option><option value="max">max</option></select></label><label className={styles.retry}>模型错误重试次数<input type="number" min="0" max="5" value={customDraft.retryCount} onChange={(event) => updateCustom({ retryCount: Math.min(5, Math.max(0, Number(event.target.value) || 0)) })} /></label><label className={styles.jsonMode}>JSON Output<select value={customDraft.jsonOutputMode} onChange={(event) => updateCustom({ jsonOutputMode: event.target.value as CustomAiProviderConfig['jsonOutputMode'] })}><option value="auto">自动</option><option value="force">强制</option><option value="disabled">禁用</option></select></label><p className={styles.disclosure}><ShieldCheck />自动模式在格式错误后仅对当前浏览器会话关闭 JSON Output。</p></>}
+          {draft.provider === 'custom' && <><label className={styles.retry}>模型错误重试次数<input type="number" min="0" max="5" value={customDraft.retryCount} onChange={(event) => updateCustom({ retryCount: Math.min(5, Math.max(0, Number(event.target.value) || 0)) })} /></label><label className={styles.jsonMode}>JSON Output<select value={customDraft.jsonOutputMode} onChange={(event) => updateCustom({ jsonOutputMode: event.target.value as CustomAiProviderConfig['jsonOutputMode'] })}><option value="auto">自动</option><option value="force">强制</option><option value="disabled">禁用</option></select></label><p className={styles.disclosure}><ShieldCheck />自动模式在格式错误后仅对当前浏览器会话关闭 JSON Output。</p></>}
           {draft.provider === 'free' && <label className={styles.retry}>模型错误重试次数<input type="number" min="0" max="5" value={draft.retryCount} onChange={(event) => setDraft({ provider: 'free', retryCount: Math.min(5, Math.max(0, Number(event.target.value) || 0)) })} /></label>}
           <section className={styles.themeSection} aria-labelledby="theme-title">
             <div className={styles.themeHeading}><Palette /><div><span>INTERFACE</span><h3 id="theme-title">界面主题</h3></div></div>

@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { BOARD_DESCRIPTION, CHARACTER_IDS, GAME_ENTITY_IDS, GAME_PHASES, ROLE_IDS, WITCH_SKILL_IDS } from '../../shared/gamePromptContract.js';
+import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS } from '../../shared/gamePromptContract.js';
 import { APP_VERSION } from '../config/version';
 import type { CharacterId, GameMode, GameState, PlayerId, RewindSnapshot } from '../domain/model';
 import type { AiProviderConfig } from '../ai/types';
+import { gameStateSchema } from './gameStateSchema';
 
 export const SETTINGS_KEY = 'majo-wolf.settings.v1';
 export const GAME_KEY = 'majo-wolf.game.v1';
@@ -25,6 +26,8 @@ export const defaultThemeSettings: ThemeSettings = {
 export interface SetupPreferences {
   mode: GameMode;
   humanCharacterId: CharacterId | null;
+  playerCount: number;
+  selectedCharacterIds: CharacterId[];
   seed: number;
   randomSeed: boolean;
 }
@@ -40,9 +43,15 @@ export type StorageResult<T> =
   | { ok: true; value: T | null }
   | { ok: false; error: string };
 
-const playerIdSchema = z.custom<PlayerId>((value) => typeof value === 'number' && GAME_ENTITY_IDS.includes(value as PlayerId));
-const roleIdSchema = z.enum(ROLE_IDS);
-const skillIdSchema = z.enum(WITCH_SKILL_IDS);
+const reasoningEffortSchema = z.enum(['none', 'low', 'high', 'max']);
+const modelProfileSchema = z.strictObject({
+  model: z.string(),
+  reasoningEffort: reasoningEffortSchema,
+});
+const modelProfileOverrideSchema = z.strictObject({
+  model: z.string().default(''),
+  reasoningEffort: reasoningEffortSchema.nullable().default(null),
+});
 
 const freeSettingsSchema = z.object({
   provider: z.literal('free'),
@@ -52,75 +61,43 @@ const customSettingsSchema = z.object({
   provider: z.literal('custom'),
   endpoint: z.string(),
   apiKey: z.string(),
-  model: z.string(),
-  reasoningEffort: z.enum(['none', 'low', 'high', 'max']),
+  profiles: z.strictObject({
+    default: modelProfileSchema,
+    fast: modelProfileOverrideSchema,
+    deep: modelProfileOverrideSchema,
+  }),
   retryCount: z.number().int().min(0).max(5).default(2),
   jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
 });
 const settingsSchema = z.discriminatedUnion('provider', [freeSettingsSchema, customSettingsSchema]);
+const singleProfileSettingsSchema = z.object({
+  provider: z.literal('custom'),
+  endpoint: z.string(),
+  apiKey: z.string(),
+  model: z.string(),
+  reasoningEffort: reasoningEffortSchema.default('low'),
+  retryCount: z.number().int().min(0).max(5).default(2),
+  jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
+});
 const legacySettingsSchema = z.object({
   endpoint: z.string(),
   apiKey: z.string(),
   model: z.string(),
-  reasoningEffort: z.enum(['none', 'low', 'high', 'max']),
+  reasoningEffort: reasoningEffortSchema.default('low'),
 }).passthrough();
 const setupSchema = z.strictObject({
   mode: z.enum(['spectator', 'player']),
   humanCharacterId: z.enum(CHARACTER_IDS).nullable(),
+  playerCount: z.number().int().min(MIN_PLAYERS).max(MAX_PLAYERS).default(MIN_PLAYERS),
+  selectedCharacterIds: z.array(z.enum(CHARACTER_IDS)).max(MAX_PLAYERS).default([]),
   seed: z.number().int().min(0).max(0xffff_ffff),
   randomSeed: z.boolean().default(true),
-});
-const stateSchema = z.object({
-  schemaVersion: z.literal(1),
-  gameId: z.string().min(1),
-  board: z.string().default(BOARD_DESCRIPTION),
-  mode: z.enum(['spectator', 'player']),
-  automationMode: z.enum(['remote', 'local']),
-  usedFreeProvider: z.boolean().default(false),
-  humanPlayerId: playerIdSchema.nullable(),
-  seed: z.number().int().min(0).max(0xffff_ffff),
-  rngState: z.number().int().min(0).max(0xffff_ffff),
-  day: z.number().int().min(0),
-  phase: z.enum(GAME_PHASES),
-  players: z.array(z.object({
-    id: playerIdSchema,
-    characterId: z.enum(CHARACTER_IDS),
-    roleAssignmentId: z.string(),
-    skillInstanceId: z.string().nullable(),
-    alive: z.boolean(),
-  })).length(6),
-  roleAssignments: z.array(z.object({
-    id: z.string(), ownerPlayerId: playerIdSchema, roleId: roleIdSchema,
-    resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
-  })).min(6),
-  skillInstances: z.array(z.object({
-    id: z.string(), definitionId: skillIdSchema, ownerPlayerId: playerIdSchema,
-    status: z.enum(['ready', 'active', 'exhausted']), remainingUses: z.number().nullable(), data: z.record(z.string(), z.unknown()),
-  })).min(6),
-  knowledgeByPlayer: z.record(z.string(), z.array(z.unknown())),
-  creatures: z.array(z.object({
-    id: playerIdSchema,
-    ownerPlayerId: playerIdSchema,
-    characterId: z.enum(CHARACTER_IDS),
-    roleAssignmentId: z.string(),
-    alive: z.boolean(),
-    resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
-  })).default([]),
-  speechOrder: z.array(playerIdSchema).length(6),
-  publicEvents: z.array(z.unknown()),
-  privateEvents: z.array(z.unknown()),
-  archivedTimelines: z.array(z.unknown()),
-  currentVotes: z.array(z.unknown()),
-  pendingDecision: z.unknown().nullable(),
-  morningCheckpoint: z.unknown().nullable(),
-  causalLocks: z.array(z.string()),
-  result: z.unknown().nullable(),
 });
 const envelopeSchema = z.strictObject({
   schemaVersion: z.literal(1),
   appVersion: z.string().trim().min(1).max(64).nullable().default(null),
   savedAt: z.iso.datetime(),
-  state: stateSchema,
+  state: gameStateSchema,
 });
 
 function readValue<T>(key: string, schema: z.ZodType<T>): StorageResult<T> {
@@ -149,6 +126,24 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
   }
   const current = settingsSchema.safeParse(value);
   if (current.success) return { ok: true, value: current.data };
+  const singleProfile = singleProfileSettingsSchema.safeParse(value);
+  if (singleProfile.success) {
+    return {
+      ok: true,
+      value: {
+        provider: 'custom',
+        endpoint: singleProfile.data.endpoint,
+        apiKey: singleProfile.data.apiKey,
+        profiles: {
+          default: { model: singleProfile.data.model, reasoningEffort: singleProfile.data.reasoningEffort },
+          fast: { model: '', reasoningEffort: 'none' },
+          deep: { model: '', reasoningEffort: 'high' },
+        },
+        retryCount: singleProfile.data.retryCount,
+        jsonOutputMode: singleProfile.data.jsonOutputMode,
+      },
+    };
+  }
   const legacy = legacySettingsSchema.safeParse(value);
   if (legacy.success) {
     if (!legacy.data.endpoint.trim() || !legacy.data.apiKey.trim() || !legacy.data.model.trim()) {
@@ -160,8 +155,11 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
         provider: 'custom',
         endpoint: legacy.data.endpoint,
         apiKey: legacy.data.apiKey,
-        model: legacy.data.model,
-        reasoningEffort: legacy.data.reasoningEffort,
+        profiles: {
+          default: { model: legacy.data.model, reasoningEffort: legacy.data.reasoningEffort },
+          fast: { model: '', reasoningEffort: 'none' },
+          deep: { model: '', reasoningEffort: 'high' },
+        },
         retryCount: 2,
         jsonOutputMode: 'auto',
       },
@@ -213,7 +211,12 @@ export function loadGame(): StorageResult<SavedGameEnvelope> {
   if (!result.ok || result.value === null) return result as StorageResult<SavedGameEnvelope>;
   const envelope = result.value as unknown as SavedGameEnvelope;
   migrateCreatureFields(envelope.state);
+  envelope.state.seriesId ??= envelope.state.gameId;
   if (envelope.state.morningCheckpoint) migrateCreatureFields(envelope.state.morningCheckpoint);
+  if (envelope.state.morningCheckpoint) {
+    envelope.state.morningCheckpoint.seriesId ??= envelope.state.seriesId;
+    envelope.state.morningCheckpoint.roundNumber ??= envelope.state.roundNumber;
+  }
   return { ok: true, value: envelope };
 }
 

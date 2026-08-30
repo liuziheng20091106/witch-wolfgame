@@ -902,6 +902,7 @@ export function reduceGame(state: GameState, event: GameEvent): GameState {
     next.usedFreeProvider = true;
     return next;
   }
-  addPublicEvent(next, 'ai-error', `AI 决策暂停：${event.message}`);
+  next.aiFailureOccurred = true;
+  if (event.failure) next.lastAiFailure = { ...event.failure, day: next.day, phase: next.phase };
   return next;
 }

@@ -52,7 +52,7 @@ try {
 }
 
 function playOne(seed) {
-  let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+  let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
   let iterations = 0;
   while (game.phase !== 'ended') {
     if (++iterations > MAX_ITER) return { timedOut: true, winner: null, day: game.day, exhausted: new Set(), deadByRole: {} };

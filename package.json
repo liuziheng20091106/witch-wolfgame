@@ -9,8 +9,12 @@
     "preview": "vite preview",
     "server:main": "node server/main.mjs",
     "server:proxy": "node proxy/server.mjs",
+    "server:multiplayer": "tsx multiplayer/server.ts",
+    "server:local-ai": "node scripts/local-ai-proxy.mjs",
+    "test:ai-live": "node scripts/live-ai-integration-smoke.mjs",
     "certs:generate": "node scripts/generate-certs.mjs certs",
     "test:backend": "node scripts/backend-smoke.mjs",
+    "test:multiplayer": "node scripts/multiplayer-smoke.mjs",
     "test:update": "node scripts/test-update.mjs",
     "test:domain": "node scripts/knowledge-fact-smoke.mjs && node scripts/verify-voting.mjs",
     "test:storage": "node scripts/browser-storage-smoke.mjs",
@@ -18,6 +22,9 @@
     "test:roleplay": "node scripts/roleplay-resource-smoke.mjs",
     "test:wolf-council": "node scripts/verify-wolf-council.mjs",
     "test:ai-guidance": "node scripts/verify-ai-decision-guidance.mjs",
+    "test:visual-evidence": "node scripts/integration-visual-test.mjs",
+    "test:continuation": "node scripts/verify-continuation.mjs",
+    "test:roster": "node scripts/configurable-roster-smoke.mjs",
     "test:voting": "node scripts/verify-voting.mjs",
     "sim": "node scripts/monte-carlo.mjs"
   },
@@ -25,13 +32,16 @@
     "lucide-react": "^1.31.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "ws": "^8.21.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.5",
+    "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vite": "^8.2.1"
   }

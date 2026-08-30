@@ -46,7 +46,7 @@ function check(label, ok, detail = '') {
 // 找一个有声音模仿持有者的局，并推进到其声音模仿决策
 function findVoiceMimicDecision() {
   for (let seed = 1; seed < 400; seed += 1) {
-    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+    const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
     const skill = game.skillInstances.find((s) => s.definitionId === 'voice-mimic');
     if (!skill) {
       continue;
@@ -103,7 +103,7 @@ console.log('=== 1. 候选与说话风格映射 ===');
 // ===== 2. 非 voice-mimic 决策不注入 speechStyle =====
 console.log('=== 2. 不泄露说话风格 ===');
 {
-  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 1 >>> 0 });
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 1 >>> 0, playerCount: 6, selectedCharacterIds: [] });
   // 构造一个非 voice-mimic 决策（如视线诱导/怪力），检查其候选无 speechStyle
   const skill = game.skillInstances.find((s) => s.definitionId === 'speech-restrain' || s.definitionId === 'gaze-guidance');
   check('找到对照技能', skill !== undefined);
@@ -120,7 +120,7 @@ console.log('=== 2. 不泄露说话风格 ===');
 // ===== 3. 开局公屏含发言顺序公示 =====
 console.log('=== 3. 发言顺序公示 ===');
 {
-  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 3 >>> 0 });
+  const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 3 >>> 0, playerCount: 6, selectedCharacterIds: [] });
   const hasOrder = game.publicEvents.some((e) => e.text.includes('发言顺序'));
   check('开局公屏播报发言顺序', hasOrder);
 }

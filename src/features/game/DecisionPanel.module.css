@@ -2,9 +2,12 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 18px;
-  border-top: 4px solid var(--ink);
+  margin: 8px;
+  padding: 16px;
+  border: 1px solid var(--verdict-dark);
+  border-top: 5px solid var(--verdict);
   background: var(--paper-bright);
+  box-shadow: 3px 3px 0 var(--paper-shadow);
 }
 
 .panel header>span,
@@ -18,7 +21,7 @@
 
 .panel h2 {
   margin: 3px 0 0;
-  font-size: 22px;
+  font-size: 21px;
 }
 
 .panel p {
@@ -91,15 +94,17 @@
 
 .candidates label {
   min-width: 0;
-  min-height: 42px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
   font-family: var(--sans);
   font-size: 12px;
 }
+.candidates label:has(input:checked) { border-color: var(--verdict); background: var(--verdict-soft); box-shadow: inset 4px 0 var(--verdict); }
 
 .candidates input {
   accent-color: var(--verdict);
@@ -207,18 +212,8 @@
   background: var(--verdict-soft);
 }
 
-.submit {
-  min-height: 50px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 14px;
-  border: 0;
-  background: var(--verdict);
-  color: white;
-  font-weight: 900;
-}
+.submit { min-height: 54px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; border: 1px solid var(--verdict-dark); background: var(--verdict); color: white; font-weight: 900; box-shadow: inset 0 -5px var(--verdict-dark), 3px 3px 0 var(--paper-shadow); }
+.submit:hover:not(:disabled) { background: var(--verdict-dark); }
 
 .submit:disabled {
   background: var(--line-strong);
@@ -252,18 +247,19 @@
 
 .debugActions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px;
-  margin-top: 6px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .debugActions button {
-  min-height: 42px;
+  min-width: 0;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 0 9px;
+  padding: 6px 9px;
   border: 1px solid var(--intel-dark);
   background: var(--intel-soft);
   color: var(--intel-dark);

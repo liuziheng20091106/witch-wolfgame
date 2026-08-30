@@ -45,7 +45,7 @@ function check(label, ok, detail = '') {
 
 /** 跑完整对局（本地策略）直到结束。 */
 function runToEnd(seed) {
-  let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0 });
+  let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
   let iter = 0;
   while (game.phase !== 'ended' && iter < 3000) {
     iter += 1;
