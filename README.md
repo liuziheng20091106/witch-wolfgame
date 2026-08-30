@@ -84,14 +84,17 @@ npm run server:proxy
 npm run server:main
 ```
 
-Docker 部署使用官方 `node:22-alpine` 镜像，不构建自定义镜像。`server/`、`proxy/` 和 `.runtime/` 以可读写绑定卷挂载到容器，证书目录只读挂载；代码更新后只需重启进程，无需重新构建镜像：
+Docker 部署使用官方 `node:22-alpine` 镜像，不构建自定义镜像。`server/`、`proxy/`、`multiplayer/` 和 `.runtime/` 以绑定卷挂载到容器，证书目录只读挂载；主后端和多人服务依赖 `ws`、`zod`、`tsx`，首次部署或依赖变更后先安装锁定依赖：
 
 ```bash
+npm ci
 copy deploy.main.env.example deploy.main.env
 copy deploy.proxy.env.example deploy.proxy.env
 docker compose up -d
 docker compose ps
 ```
+
+代码更新后只需重启进程，无需重新构建镜像。
 
 `deploy.main.env` 只保存主后端所需的连接密码；`deploy.proxy.env` 额外保存独立的 `MAJO_UPDATE_PASS` 和 `providers.json` 引用的 API Key 环境变量。两个真实文件均被 Git 忽略，且 `MAJO_PROXY_PASSWORD_PRIMARY` 必须一致。主后端和代理容器共享代码卷与 `.runtime/restart-token`：更新事务全部成功后，代理写入重启信号；两个服务都会停止并由 Compose 的 `restart: unless-stopped` 使用原镜像重新启动，从而避免协议模块版本分裂。
 
