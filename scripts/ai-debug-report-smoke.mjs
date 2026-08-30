@@ -152,9 +152,9 @@ for (const forbidden of [secret, 'private-api.example.com', 'debug-user', 'debug
 assert.match(buildGameSystemPrompt('target'), /legalCandidates 是唯一合法目标集合/);
 const systemPrompt = buildGameSystemPrompt('speech');
 assert.match(systemPrompt, /publicVotes 由官方客户端仅从已经公开揭晓的已提交投票记录构成/);
-assert.match(systemPrompt, /`【仅当前行动者可见】`仅是当前提示词行动者可知的事实/);
-assert.match(systemPrompt, /`【狼队共享记录】`是狼人内部频道共享事实/);
-assert.match(systemPrompt, /`【与相关角色共享】`是与列出的相关角色共享的私密事实/);
+assert.match(systemPrompt, /`【仅当前行动者可见；受众：\.\.\.】`只表示当前提示词行动者可知的事实/);
+assert.match(systemPrompt, /`【狼队共享记录；受众：\.\.\.】`表示狼人内部频道共享事实/);
+assert.match(systemPrompt, /`【相关角色共享；受众：\.\.\.】`表示与标签中明确列出的受众共享的私密事实/);
 assert.match(systemPrompt, /存活不证明行动者知道自己被袭击、被解药救回或受到治愈保护/);
 assert.match(systemPrompt, /他人的“银水”是公开证据\/声称，不是行动者的私密记忆/);
 assert.match(systemPrompt, /直接提供的行动者本人千里眼或其他行动结果是确定的个人事实/);
@@ -175,12 +175,12 @@ const privateLabelMessages = buildDecisionPrompt({
 });
 const privateLabelPrompt = JSON.parse(privateLabelMessages[1].content);
 assert.deepEqual(privateLabelPrompt.privateEvents, [
-  '【仅当前行动者可见】个人结果',
-  '【与相关角色共享】他人私密结果',
-  '【与相关角色共享】相关角色记录',
-  '【狼队共享记录】狼队建议',
-  '【狼队共享记录】狼队决定',
-  '【仅当前行动者可见】回溯狼队决定',
+  `【仅当前行动者可见；受众：1号（${players[0].name}）】个人结果`,
+  `【相关角色共享；受众：2号（${players[1].name}）】他人私密结果`,
+  `【相关角色共享；受众：1号（${players[0].name}）、2号（${players[1].name}）】相关角色记录`,
+  `【狼队共享记录；受众：1号（${players[0].name}）、2号（${players[1].name}）】狼队建议`,
+  `【狼队共享记录；受众：1号（${players[0].name}）、2号（${players[1].name}）】狼队决定`,
+  `【仅当前行动者可见；受众：1号（${players[0].name}）】回溯狼队决定`,
 ]);
 
 for (const skill of WITCH_SKILL_CATALOG) {

@@ -251,14 +251,23 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
   if (isPostGame) {
     recentPublic = [];
   }
+  const audienceLabel = (viewerPlayerIds: number[]): string => {
+    const audience = viewerPlayerIds.map((playerId) => {
+      const name = nameById.get(playerId);
+      if (playerId === CREATURE_ID) return name ? `99号造物（${name}）` : '99号造物';
+      return name ? `${playerId + 1}号（${name}）` : `${playerId + 1}号`;
+    });
+    return audience.length > 0 ? audience.join('、') : '未列明';
+  };
   const formatPrivateEvent = (event: GameObservation['privateEvents'][number]): string => {
+    const audience = audienceLabel(event.viewerPlayerIds);
     if (event.viewerPlayerIds.length === 1 && event.viewerPlayerIds[0] === pendingDecision.actorId) {
-      return `【仅当前行动者可见】${event.text}`;
+      return `【仅当前行动者可见；受众：${audience}】${event.text}`;
     }
     if (event.data.actionKind === 'wolf-suggestion' || event.data.actionKind === 'wolf-decision') {
-      return `【狼队共享记录】${event.text}`;
+      return `【狼队共享记录；受众：${audience}】${event.text}`;
     }
-    return `【与相关角色共享】${event.text}`;
+    return `【相关角色共享；受众：${audience}】${event.text}`;
   };
   let privateEvents = observation.privateEvents
     .filter((event) => event.day !== observation.day || event.data.actionKind !== 'wolf-suggestion')
