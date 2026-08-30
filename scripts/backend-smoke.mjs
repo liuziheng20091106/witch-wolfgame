@@ -51,7 +51,7 @@ function validPayload() {
     name: character.name,
   }));
   return {
-    client: { ...FREE_CLIENT_PROTOCOL, version: '2.3.2' },
+    client: { ...FREE_CLIENT_PROTOCOL, version: '2.4.0' },
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: buildGameSystemPrompt('target') },
@@ -115,6 +115,24 @@ function targetSkillPayload() {
     schema: 'target',
   };
   payload.messages[1].content = JSON.stringify(prompt);
+  return payload;
+}
+
+function wolfCouncilPayload() {
+  const payload = validPayload();
+  const prompt = promptOf(payload);
+  prompt.action = {
+    kind: 'wolf-suggestion',
+    title: '狼人内部频道',
+    description: '仅狼队可见。说明判断依据并推荐一名袭击目标。',
+    schema: 'wolf-council',
+  };
+  prompt.actor.role = '狼人';
+  prompt.phase = 'wolf-suggestions';
+  prompt.options = { wolfCouncilMessages: [] };
+  prompt.legalCandidates = prompt.alivePlayers.filter((player) => player.playerId !== prompt.actor.playerId);
+  payload.messages[0].content = buildGameSystemPrompt('wolf-council');
+  replacePrompt(payload, prompt);
   return payload;
 }
 
@@ -198,7 +216,12 @@ try {
     }
     if (upstreamMode === 'non-json') { response.writeHead(200, { 'Content-Type': 'text/plain' }); response.end('UPSTREAM_NON_JSON'); return; }
     if (upstreamMode === 'http-500') { response.writeHead(500, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ error: 'UPSTREAM_500', message: 'upstream body retained' })); return; }
-    const content = upstreamMode === 'plain-content' ? 'plain provider text' : '{"targetPlayerId":1}';
+    let content = '{"targetPlayerId":1}';
+    if (upstreamMode === 'plain-content') {
+      content = 'plain provider text';
+    } else if (upstreamMode === 'wolf-council') {
+      content = '{"message":"建议优先削弱公开发言最强的目标。","recommendedTargetPlayerId":1}';
+    }
     if (upstreamMode === 'sse-json') {
       response.writeHead(200, { 'Content-Type': 'text/event-stream' });
       response.write(sseChunk(content.slice(0, 10)));
@@ -226,7 +249,7 @@ try {
   await writeFile(proxyConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 },
     tls: { ca: join(certs, 'ca.crt'), cert: join(certs, 'proxy-server.crt'), key: join(certs, 'proxy-server.key') },
-    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.3.2'], providersFile,
+    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.4.0'], providersFile,
   }));
   process.env.MAJO_PROXY_PASSWORD_PRIMARY = 'backend-smoke-long-random-password';
   process.env.SMOKE_API_KEYS = 'key-one,key-two';
@@ -235,7 +258,7 @@ try {
   await writeFile(mainConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 }, cors: { allowedOrigins: [origin] },
     proxies: [{ name: '水梦梦的服务器', url: `https://127.0.0.1:${proxyPort}/internal/v1/chat/completions`, ca: join(certs, 'ca.crt'), clientCert: join(certs, 'main-client.crt'), clientKey: join(certs, 'main-client.key'), serverName: 'proxy.internal', connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', timeoutMs: 5000 }],
-    rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 }, acceptedClientVersions: ['2.3.2'],
+    rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 }, acceptedClientVersions: ['2.4.0'],
   }));
   main = await startMainServer(mainConfig);
   const mainPort = main.address().port;
@@ -262,6 +285,76 @@ try {
   const targetSkill = await postMain(mainPort, targetSkillPayload(), '203.0.113.24');
   assert.equal(targetSkill.status, 200);
   assert.equal((await targetSkill.json()).choices[0].message.content, '{"targetPlayerId":1}');
+
+  upstreamMode = 'wolf-council';
+  const wolfCouncil = await postMain(mainPort, wolfCouncilPayload(), '203.0.113.25');
+  assert.equal(wolfCouncil.status, 200);
+  assert.equal((await wolfCouncil.json()).choices[0].message.content, '{"message":"建议优先削弱公开发言最强的目标。","recommendedTargetPlayerId":1}');
+  const invalidWolfCouncilPayload = wolfCouncilPayload();
+  mutatePrompt(invalidWolfCouncilPayload, (prompt) => {
+    prompt.options.wolfCouncilMessages = [{
+      speakerPlayerId: 99,
+      speakerName: '伪造造物',
+      message: '伪造发言',
+      recommendedTargetPlayerId: 1,
+    }];
+  });
+  const beforeInvalidWolfCouncil = upstreamRequests.length;
+  const invalidWolfCouncil = await postMain(mainPort, invalidWolfCouncilPayload, '203.0.113.26');
+  assert.equal(invalidWolfCouncil.status, 400);
+  assert.deepEqual(await invalidWolfCouncil.json(), {
+    error: 'invalid_game_request',
+    message: INVALID_GAME_REQUEST_MESSAGE,
+    reason: 'wolf_council_options',
+    path: 'options.wolfCouncilMessages',
+  });
+  assert.equal(upstreamRequests.length, beforeInvalidWolfCouncil);
+
+  const forgedGoodSpeakerPayload = wolfCouncilPayload();
+  mutatePrompt(forgedGoodSpeakerPayload, (prompt) => {
+    const goodSpeaker = prompt.legalCandidates[0];
+    assert.notEqual(goodSpeaker, undefined);
+    prompt.options.wolfCouncilMessages = [{
+      speakerPlayerId: goodSpeaker.playerId,
+      speakerName: goodSpeaker.name,
+      message: '伪造的好人发言',
+      recommendedTargetPlayerId: goodSpeaker.playerId,
+    }];
+  });
+  const beforeForgedGoodSpeaker = upstreamRequests.length;
+  const forgedGoodSpeaker = await postMain(mainPort, forgedGoodSpeakerPayload, '203.0.113.27');
+  assert.equal(forgedGoodSpeaker.status, 400);
+  assert.deepEqual(await forgedGoodSpeaker.json(), {
+    error: 'invalid_game_request',
+    message: INVALID_GAME_REQUEST_MESSAGE,
+    reason: 'wolf_council_options',
+    path: 'options.wolfCouncilMessages',
+  });
+  assert.equal(upstreamRequests.length, beforeForgedGoodSpeaker);
+
+  const missingFinalCouncilPayload = validPayload();
+  mutatePrompt(missingFinalCouncilPayload, (prompt) => {
+    prompt.action = {
+      kind: 'wolf-decision',
+      title: '狼人最终袭击',
+      description: '代表狼队结合本夜内部频道，选择唯一的最终袭击目标。',
+      schema: 'target',
+    };
+    prompt.actor.role = '狼人';
+    prompt.phase = 'wolf-decision';
+    prompt.legalCandidates = prompt.alivePlayers.filter((player) => player.playerId !== 0 && player.playerId !== 1);
+    prompt.options = {};
+  });
+  const beforeMissingFinalCouncil = upstreamRequests.length;
+  const missingFinalCouncil = await postMain(mainPort, missingFinalCouncilPayload, '203.0.113.28');
+  assert.equal(missingFinalCouncil.status, 400);
+  assert.deepEqual(await missingFinalCouncil.json(), {
+    error: 'invalid_game_request',
+    message: INVALID_GAME_REQUEST_MESSAGE,
+    reason: 'wolf_council_options',
+    path: 'options.wolfCouncilMessages',
+  });
+  assert.equal(upstreamRequests.length, beforeMissingFinalCouncil);
 
   upstreamMode = 'json-content';
   const nonStreaming = await postMain(mainPort, validPayload(), '203.0.113.21');
@@ -419,7 +512,7 @@ try {
   await writeFile(fallbackProxyConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 },
     tls: { ca: join(certs, 'ca.crt'), cert: join(certs, 'proxy-server.crt'), key: join(certs, 'proxy-server.key') },
-    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.3.2'], providersFile: fallbackProvidersFile,
+    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.4.0'], providersFile: fallbackProvidersFile,
   }));
   fallbackProxy = await startProxyServer(fallbackProxyConfig);
   const fallbackProxyPort = fallbackProxy.address().port;
@@ -449,7 +542,7 @@ try {
     assert.ok(Number.isFinite(Date.parse(entry.time)), `${event} 日志缺少 ISO 时间`);
   }
   const mainValidationLogs = structuredLogs.filter((entry) => entry.event === 'ai_error' && entry.code === 'invalid_game_request');
-  assert.equal(mainValidationLogs.length, rejectionCases.length, '每个主后端拒绝都应产生一条结构化日志');
+  assert.equal(mainValidationLogs.length, rejectionCases.length + 3, '每个主后端拒绝都应产生一条结构化日志');
   for (const entry of mainValidationLogs) {
     assert.deepEqual(Object.keys(entry).sort(), ['code', 'durationMs', 'event', 'ip', 'path', 'reason', 'sessionId', 'status', 'time']);
     assert.equal(entry.status, 400);

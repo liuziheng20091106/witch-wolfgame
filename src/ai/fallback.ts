@@ -1,7 +1,7 @@
 import { characterById } from '../domain/catalog/characters';
 import type { GameState, PendingDecision, PlayerId, SubmittedDecision } from '../domain/model';
 import { chooseWithState } from '../domain/engine/random';
-import { getPlayer } from '../domain/engine/selectors';
+import { getName, getPlayer } from '../domain/engine/selectors';
 import { gazeRequiredMention } from '../domain/skills/speechSkills';
 
 export interface FallbackResult {
@@ -45,6 +45,17 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
   if (pending.schemaKey === 'speech') {
     const speech = fallbackSpeech(state, pending.actorId, pending, state.rngState);
     return { decision: { speech: speech.speech }, rngState: speech.rngState };
+  }
+  if (pending.schemaKey === 'wolf-council') {
+    const selected = chooseCandidate(pending, state.rngState);
+    const targetName = getName(state, selected.playerId);
+    return {
+      decision: {
+        message: `我建议袭击${targetName}。她仍在场，优先削弱好人的发言与投票空间更稳妥。`,
+        recommendedTargetPlayerId: selected.playerId,
+      },
+      rngState: selected.rngState,
+    };
   }
   if (pending.schemaKey === 'witch') {
     const canSave = state.day === 0 && pending.options.canSave === true;

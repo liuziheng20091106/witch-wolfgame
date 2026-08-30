@@ -43,6 +43,7 @@ const OBSERVED_PLAYER_KEYS = new Set(PROMPT_FIELD_KEYS.observedPlayer);
 const PRIVATE_KNOWLEDGE_KEYS = new Set(PROMPT_FIELD_KEYS.privateKnowledge);
 const PUBLIC_SKILL_KEYS = new Set(PROMPT_FIELD_KEYS.publicSkill);
 const FINAL_ROLE_KEYS = new Set(PROMPT_FIELD_KEYS.finalRole);
+const WOLF_COUNCIL_MESSAGE_KEYS = new Set(PROMPT_FIELD_KEYS.wolfCouncilMessage);
 
 function validResult() {
   return { ok: true };
@@ -102,6 +103,80 @@ function validFinalRole(value) {
     && ROLE_VALUES.has(value.roleId)
     && typeof value.roleName === 'string'
     && ROLE_NAMES_BY_ID.get(value.roleId) === value.roleName;
+}
+
+function validateWolfCouncilOptions(prompt) {
+  const actionKind = prompt.action.kind;
+  if (actionKind !== 'wolf-suggestion' && actionKind !== 'wolf-decision') {
+    return validResult();
+  }
+  const messages = prompt.options.wolfCouncilMessages;
+  if (messages === undefined
+    && actionKind === 'wolf-suggestion'
+    && prompt.action.schema === 'target') {
+    return validResult();
+  }
+  if (!Array.isArray(messages) || messages.length > PROMPT_LIMITS.wolfCouncilMessagesMaxItems) {
+    return invalidResult('wolf_council_options', 'options.wolfCouncilMessages');
+  }
+  const aliveNamesById = new Map(prompt.alivePlayers.map((player) => [player.playerId, player.name]));
+  const legalTargetIds = new Set(prompt.legalCandidates.map((player) => player.playerId));
+  // 狼刀候选必须覆盖全部存活非狼人，因此可由其补集交叉校验本次狼议的真实座位发言者。
+  const inferredRealWolfIds = new Set();
+  for (const player of prompt.alivePlayers) {
+    if (PLAYER_ID_VALUES.has(player.playerId) && !legalTargetIds.has(player.playerId)) {
+      inferredRealWolfIds.add(player.playerId);
+    }
+  }
+  const creatureIsLivingWolf = aliveNamesById.has(CREATURE_ID) && !legalTargetIds.has(CREATURE_ID);
+  const speakerIds = new Set();
+  for (const message of messages) {
+    if (!isObject(message)
+      || !hasOnlyKeys(message, WOLF_COUNCIL_MESSAGE_KEYS)
+      || !PLAYER_ID_VALUES.has(message.speakerPlayerId)
+      || !inferredRealWolfIds.has(message.speakerPlayerId)
+      || aliveNamesById.get(message.speakerPlayerId) !== message.speakerName
+      || typeof message.message !== 'string'
+      || message.message.trim().length < 1
+      || message.message.length > PROMPT_LIMITS.wolfCouncilMessageMaxLength
+      || !legalTargetIds.has(message.recommendedTargetPlayerId)
+      || speakerIds.has(message.speakerPlayerId)) {
+      return invalidResult('wolf_council_options', 'options.wolfCouncilMessages');
+    }
+    speakerIds.add(message.speakerPlayerId);
+  }
+  if (actionKind === 'wolf-suggestion') {
+    if (!inferredRealWolfIds.has(prompt.actor.playerId) || speakerIds.has(prompt.actor.playerId)) {
+      return invalidResult('wolf_council_options', 'options.wolfCouncilMessages');
+    }
+    return validResult();
+  }
+  const actorIsRealWolf = inferredRealWolfIds.has(prompt.actor.playerId);
+  const actorIsSoleCreatureWolf = prompt.actor.playerId === CREATURE_ID
+    && creatureIsLivingWolf
+    && inferredRealWolfIds.size === 0;
+  if (!actorIsRealWolf && !actorIsSoleCreatureWolf) {
+    return invalidResult('wolf_council_options', 'options.wolfCouncilMessages');
+  }
+  let livingWolfCount = inferredRealWolfIds.size;
+  if (creatureIsLivingWolf) {
+    livingWolfCount += 1;
+  }
+  if (livingWolfCount <= 1) {
+    if (messages.length !== 0) {
+      return invalidResult('wolf_council_options', 'options.wolfCouncilMessages');
+    }
+    return validResult();
+  }
+  if (messages.length !== inferredRealWolfIds.size) {
+    return invalidResult('wolf_council_options', 'options.wolfCouncilMessages');
+  }
+  for (const realWolfId of inferredRealWolfIds) {
+    if (!speakerIds.has(realWolfId)) {
+      return invalidResult('wolf_council_options', 'options.wolfCouncilMessages');
+    }
+  }
+  return validResult();
 }
 
 export function validateGamePrompt(messages) {
@@ -214,6 +289,10 @@ export function validateGamePrompt(messages) {
   if (!isObject(prompt.options)) return invalidResult('options_shape', 'options');
   if (JSON.stringify(prompt.options).length > PROMPT_LIMITS.optionsMaxJsonLength) {
     return invalidResult('options_size', 'options');
+  }
+  const wolfCouncilValidation = validateWolfCouncilOptions(prompt);
+  if (!wolfCouncilValidation.ok) {
+    return wolfCouncilValidation;
   }
 
   if (prompt.finalRoles !== undefined) {

@@ -26,7 +26,7 @@
     "maxConcurrent": 2
   },
   "acceptedClientVersions": [
-    "2.3.2"
+    "2.4.0"
   ],
   "proxyUpdatePassEnv": "MAJO_PROXY_UPDATE_PASS",
   "updateNodes": [

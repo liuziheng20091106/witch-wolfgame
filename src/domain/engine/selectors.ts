@@ -85,6 +85,20 @@ export function getAlivePlayerIds(state: GameState): PlayerId[] {
   return playerIds;
 }
 
+function revealedCurrentVotes(state: GameState) {
+  const revealedRounds = new Set<number>();
+  for (const event of state.publicEvents) {
+    if (event.day !== state.day || event.kind !== 'vote') {
+      continue;
+    }
+    const round = event.data.revealedVoteRound;
+    if (round === 1 || round === 2) {
+      revealedRounds.add(round);
+    }
+  }
+  return state.currentVotes.filter((vote) => revealedRounds.has(vote.round));
+}
+
 export function selectObservation(
   state: GameState,
   viewer: { kind: 'spectator' } | { kind: 'player'; playerId: PlayerId },
@@ -156,7 +170,7 @@ export function selectObservation(
     privateEvents,
     archivedTimelines: omniscient ? state.archivedTimelines : [],
     knowledge: viewerPlayerId === null ? [] : state.knowledgeByPlayer[viewerPlayerId],
-    currentVotes: state.currentVotes,
+    currentVotes: revealedCurrentVotes(state),
     pendingDecision: state.pendingDecision?.actorId === viewerPlayerId || omniscient ? state.pendingDecision : null,
     result: state.result,
   };

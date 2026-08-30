@@ -14,5 +14,5 @@
     }
   ],
   "rateLimit": { "windowMs": 60000, "maxRequests": 20, "maxConcurrent": 2 },
-  "acceptedClientVersions": ["2.3.2"]
+  "acceptedClientVersions": ["2.4.0"]
 }

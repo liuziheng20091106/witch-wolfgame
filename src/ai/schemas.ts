@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../shared/gamePromptContract.js';
 import type { PendingDecision, PlayerId, SpeechDecision, SubmittedDecision, WitchDecision } from '../domain/model';
 import { AiCommandError } from './types';
 
@@ -9,6 +10,10 @@ import { AiCommandError } from './types';
 const SPEECH_MAX_LENGTH = 100;
 export const speechDecisionSchema = z.object({ speech: z.string().max(SPEECH_MAX_LENGTH) });
 export const targetDecisionSchema = z.object({ targetPlayerId: z.number().int().min(0).max(99).nullable() });
+export const wolfCouncilDecisionSchema = z.object({
+  message: z.string().trim().min(1).max(WOLF_COUNCIL_MESSAGE_MAX_LENGTH),
+  recommendedTargetPlayerId: z.number().int().min(0).max(99),
+});
 export const optionalTargetDecisionSchema = z.object({
   use: z.boolean(),
   targetPlayerId: z.number().int().min(0).max(99).nullable(),
@@ -61,6 +66,7 @@ export const ignitionDecisionSchema = z.object({ use: z.boolean() });
 const schemaByKey = {
   speech: speechDecisionSchema,
   target: targetDecisionSchema,
+  'wolf-council': wolfCouncilDecisionSchema,
   'optional-target': optionalTargetDecisionSchema,
   witch: witchDecisionSchema,
   'liquid-control': liquidControlDecisionSchema,
@@ -149,7 +155,7 @@ function validateWitchDecision(pending: PendingDecision, decision: SubmittedDeci
 
 function validateDecisionTargets(pending: PendingDecision, decision: SubmittedDecision): void {
   const record = decision as unknown as Record<string, unknown>;
-  for (const key of ['targetPlayerId', 'poisonTargetPlayerId']) {
+  for (const key of ['targetPlayerId', 'poisonTargetPlayerId', 'recommendedTargetPlayerId']) {
     const value = record[key];
     if (value !== null && value !== undefined && !pending.candidates.includes(value as PlayerId)) {
       throw new AiCommandError('target', `AI 返回了非法目标：${String(value)}`);

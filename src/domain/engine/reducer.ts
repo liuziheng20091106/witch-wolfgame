@@ -1,3 +1,4 @@
+import { CREATURE_ID, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
 import { roleNames } from '../catalog/roles';
 import type {
   GameEvent,
@@ -8,6 +9,7 @@ import type {
   SubmittedDecision,
   TargetDecision,
   VoteRecord,
+  WolfCouncilDecision,
   WitchDecision,
 } from '../model';
 import {
@@ -43,7 +45,7 @@ import { addKnowledge, addPrivateEvent, addPublicEvent } from './events';
 import { finalizeGameIfWon, refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
 import { getAlivePlayerIds, getName, getPlayer, getRoleAssignment, getSkillInstance } from './selectors';
 import { exhaustSkill } from '../skills/types';
-import { resolveVotes } from './vote';
+import { formatVoteRound, formatVoteTally, resolveVotes, tallyVoteRound } from './vote';
 import { applyLastWords, getNextLastWordsDecision } from '../skills/lastWords';
 import { applyPostGameSpeech, getNextPostGameDecision } from '../skills/postGame';
 import { withFactionStrategyGuidance } from '../skills/decisionGuidance';
@@ -61,6 +63,12 @@ function pendingId(state: GameState, kind: string, actorId: PlayerId): string {
 function hasPrivateAction(state: GameState, kind: string, actorId: PlayerId): boolean {
   return state.privateEvents.some(
     (event) => event.day === state.day && event.actorPlayerId === actorId && event.data.actionKind === kind,
+  );
+}
+
+function hasPrivateActionKind(state: GameState, kind: string): boolean {
+  return state.privateEvents.some(
+    (event) => event.day === state.day && event.data.actionKind === kind,
   );
 }
 
@@ -92,6 +100,67 @@ function makeRoleDecision(
 
 function livingWolves(state: GameState): PlayerId[] {
   return getAlivePlayerIds(state).filter((playerId) => getRoleAssignment(state, playerId).roleId === 'wolf');
+}
+
+function speakingWolves(state: GameState): PlayerId[] {
+  return livingWolves(state).filter((playerId) => playerId !== CREATURE_ID);
+}
+
+function wolfDecisionActor(state: GameState, wolves: PlayerId[]): PlayerId | undefined {
+  const humanPlayerId = state.humanPlayerId;
+  if (humanPlayerId !== null && humanPlayerId !== CREATURE_ID && wolves.includes(humanPlayerId)) {
+    return humanPlayerId;
+  }
+  const realWolf = wolves.find((playerId) => playerId !== CREATURE_ID);
+  if (realWolf !== undefined) {
+    return realWolf;
+  }
+  return wolves[0];
+}
+
+function wolfTargetLabel(state: GameState, playerId: PlayerId): string {
+  if (playerId === CREATURE_ID) {
+    return `造物（${nameOf(state, playerId)}）`;
+  }
+  return `${playerId + 1}号（${nameOf(state, playerId)}）`;
+}
+
+function wolfCouncilMessages(state: GameState) {
+  const messages: Array<{
+    speakerPlayerId: PlayerId;
+    speakerName: string;
+    message: string;
+    recommendedTargetPlayerId: PlayerId;
+  }> = [];
+  for (const event of state.privateEvents) {
+    if (event.day !== state.day || event.data.actionKind !== 'wolf-suggestion') {
+      continue;
+    }
+    const speakerPlayerId = event.actorPlayerId;
+    if (speakerPlayerId === null || speakerPlayerId === CREATURE_ID) {
+      continue;
+    }
+    let recommendedTargetPlayerId: PlayerId | null = null;
+    if (typeof event.data.recommendedTargetPlayerId === 'number') {
+      recommendedTargetPlayerId = event.data.recommendedTargetPlayerId as PlayerId;
+    } else if (typeof event.data.targetPlayerId === 'number') {
+      recommendedTargetPlayerId = event.data.targetPlayerId as PlayerId;
+    }
+    if (recommendedTargetPlayerId === null) {
+      continue;
+    }
+    let message = event.text;
+    if (typeof event.data.message === 'string') {
+      message = event.data.message;
+    }
+    messages.push({
+      speakerPlayerId,
+      speakerName: nameOf(state, speakerPlayerId),
+      message,
+      recommendedTargetPlayerId,
+    });
+  }
+  return messages;
 }
 
 function wolfTargets(state: GameState): PlayerId[] {
@@ -129,9 +198,20 @@ function advanceWolfSuggestions(state: GameState): GameState {
     state.phase = 'wolf-decision';
     return state;
   }
-  const actorId = wolves.find((playerId) => !hasPrivateAction(state, 'wolf-suggestion', playerId));
+  const actorId = speakingWolves(state).find((playerId) => !hasPrivateAction(state, 'wolf-suggestion', playerId));
   if (actorId !== undefined) {
-    state.pendingDecision = makeRoleDecision(state, 'wolf-suggestion', actorId, '狼人密议', '私下建议一名非狼人目标。', wolfTargets(state), false);
+    const pending = makeRoleDecision(
+      state,
+      'wolf-suggestion',
+      actorId,
+      '狼人内部频道',
+      '仅狼队可见。结合已有狼议，简要说明判断依据并推荐一名袭击目标。',
+      wolfTargets(state),
+      false,
+      'wolf-council',
+    );
+    pending.options = { wolfCouncilMessages: wolfCouncilMessages(state) };
+    state.pendingDecision = pending;
   } else {
     state.phase = 'wolf-decision';
   }
@@ -140,25 +220,24 @@ function advanceWolfSuggestions(state: GameState): GameState {
 
 function advanceWolfDecision(state: GameState): GameState {
   const wolves = livingWolves(state);
-  const actorId = wolves[0];
+  const actorId = wolfDecisionActor(state, wolves);
   if (actorId === undefined) {
     state.phase = 'night-resolution';
     return state;
   }
-  if (!hasPrivateAction(state, 'wolf-decision', actorId)) {
-    const suggestions = state.privateEvents
-      .filter((event) => event.day === state.day && event.data.actionKind === 'wolf-suggestion')
-      .map((event) => event.data.targetPlayerId)
-      .filter((value): value is PlayerId => typeof value === 'number');
-    state.pendingDecision = makeRoleDecision(
+  if (!hasPrivateActionKind(state, 'wolf-decision')) {
+    const councilMessages = wolfCouncilMessages(state);
+    const pending = makeRoleDecision(
       state,
       'wolf-decision',
       actorId,
       '狼人最终袭击',
-      suggestions.length > 0 ? `队友建议座位：${suggestions.map((id) => id + 1).join('、')}。确认本夜目标。` : '选择本夜袭击目标。',
+      '代表狼队结合本夜内部频道，选择唯一的最终袭击目标。',
       wolfTargets(state),
       false,
     );
+    pending.options = { wolfCouncilMessages: councilMessages };
+    state.pendingDecision = pending;
   } else {
     state.phase = 'witch-action';
   }
@@ -380,6 +459,36 @@ function attachCreatureVotes(state: GameState, round: 1 | 2): void {
   }
 }
 
+function voteRoundIsRevealed(state: GameState, round: 1 | 2): boolean {
+  return state.publicEvents.some(
+    (event) => event.day === state.day && event.kind === 'vote' && event.data.revealedVoteRound === round,
+  );
+}
+
+/** 所有投票收齐后一次性公开完整票型，提交期间不产生公开事件。 */
+function revealVoteRound(state: GameState, round: 1 | 2): void {
+  if (voteRoundIsRevealed(state, round)) {
+    return;
+  }
+  const votes = state.currentVotes.filter((vote) => vote.round === round);
+  const voteTally = tallyVoteRound(votes, round);
+  const targetPlayerIds: PlayerId[] = [];
+  for (const vote of votes) {
+    if (vote.targetPlayerId !== null && !targetPlayerIds.includes(vote.targetPlayerId)) {
+      targetPlayerIds.push(vote.targetPlayerId);
+    }
+  }
+  const playerName = (playerId: PlayerId) => nameOf(state, playerId);
+  addPublicEvent(state, 'vote', `第 ${round} 轮完整提交票型（点火前）：${formatVoteRound(votes, round, playerName)}。\n提交票数汇总（点火前）：${formatVoteTally(voteTally, playerName)}。`, {
+    targetPlayerIds,
+    data: {
+      revealedVoteRound: round,
+      voteRecords: votes.map((vote) => ({ ...vote })),
+      submittedVoteTally: voteTally.map((entry) => ({ ...entry })),
+    },
+  });
+}
+
 function votingPending(state: GameState, round: 1 | 2, candidates: PlayerId[] | null): PendingDecision | null {
   const order = getVoteOrder(state);
   const voter = order.find((playerId) => !state.currentVotes.some((vote) => vote.round === round && vote.voterPlayerId === playerId));
@@ -391,7 +500,23 @@ function votingPending(state: GameState, round: 1 | 2, candidates: PlayerId[] | 
     state.currentVotes.push({ voterPlayerId: voter, targetPlayerId: null, round });
     return votingPending(state, round, candidates);
   }
-  return makeRoleDecision(state, round === 1 ? 'vote' : 'runoff', voter, round === 1 ? '公开投票' : '平票重投', '选择一名候选，当前票会立即公开。', targets, round === 1);
+  let kind: PendingDecision['kind'] = 'vote';
+  let title = '秘密投票';
+  let allowAbstain = true;
+  if (round === 2) {
+    kind = 'runoff';
+    title = '平票秘密重投';
+    allowAbstain = false;
+  }
+  return makeRoleDecision(
+    state,
+    kind,
+    voter,
+    title,
+    '秘密选择一名候选；所有人完成本轮投票后统一公布完整票型，提交期间无法查看其他人的选择。',
+    targets,
+    allowAbstain,
+  );
 }
 
 function advanceVoting(state: GameState): GameState {
@@ -400,13 +525,14 @@ function advanceVoting(state: GameState): GameState {
     state.pendingDecision = pending;
     return state;
   }
-  // 投票全部完成：先询问白天点火（烧票/烧技能），再计票
+  // 投票全部完成：先补齐造物跟票并统一揭票，再询问点火，最后计票。
+  attachCreatureVotes(state, 1);
+  revealVoteRound(state, 1);
   const ignition = getDayIgnitionDecision(state);
   if (ignition) {
     state.pendingDecision = ignition;
     return state;
   }
-  attachCreatureVotes(state, 1);
   const resolution = resolveVotes(state.currentVotes, 1, burnedVoters(state));
   if (resolution.outcome === 'runoff') {
     addPublicEvent(state, 'vote', `最高票并列：${resolution.tiedPlayerIds.map((id) => nameOf(state, id)).join('、')}，进行一次重投。`, {
@@ -442,6 +568,12 @@ function advanceRunoff(state: GameState): GameState {
     return state;
   }
   attachCreatureVotes(state, 2);
+  revealVoteRound(state, 2);
+  const ignition = getDayIgnitionDecision(state);
+  if (ignition) {
+    state.pendingDecision = ignition;
+    return state;
+  }
   const resolution = resolveVotes(state.currentVotes, 2, burnedVoters(state));
   if (resolution.outcome === 'exile' && resolution.targetPlayerId !== null) {
     addExileIntent(state, resolution.targetPlayerId);
@@ -547,6 +679,33 @@ function validateTarget(state: GameState, decision: SubmittedDecision, pending: 
   return targetPlayerId;
 }
 
+function validateWolfCouncilDecision(
+  state: GameState,
+  decision: SubmittedDecision,
+  pending: PendingDecision,
+): WolfCouncilDecision {
+  if (pending.schemaKey === 'target') {
+    const targetPlayerId = validateTarget(state, decision, pending);
+    if (targetPlayerId === null) {
+      throw new Error('狼议必须推荐袭击目标');
+    }
+    return {
+      message: `我建议袭击${nameOf(state, targetPlayerId)}。`,
+      recommendedTargetPlayerId: targetPlayerId,
+    };
+  }
+  const councilDecision = decision as WolfCouncilDecision;
+  const message = councilDecision.message.trim();
+  if (message.length === 0 || message.length > WOLF_COUNCIL_MESSAGE_MAX_LENGTH) {
+    throw new Error(`狼议发言必须为 1～${WOLF_COUNCIL_MESSAGE_MAX_LENGTH} 字`);
+  }
+  const recommendedTargetPlayerId = councilDecision.recommendedTargetPlayerId;
+  if (!pending.candidates.includes(recommendedTargetPlayerId) || !getPlayer(state, recommendedTargetPlayerId).alive) {
+    throw new Error('狼议推荐目标不在当前合法候选中');
+  }
+  return { message, recommendedTargetPlayerId };
+}
+
 
 function applyRoleDecision(state: GameState, pending: PendingDecision, decision: SubmittedDecision): GameState {
   if (pending.kind === 'speech') {
@@ -605,16 +764,30 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
     });
     return state;
   }
-  const targetPlayerId = validateTarget(state, decision, pending);
   if (pending.kind === 'wolf-suggestion') {
-    addPrivateEvent(state, livingWolves(state), 'wolf-suggestion', `${nameOf(state, pending.actorId)} 建议袭击 ${nameOf(state, targetPlayerId as PlayerId)}。`, {
-      actorPlayerId: pending.actorId,
-      targetPlayerIds: [targetPlayerId as PlayerId],
-      data: { actionKind: 'wolf-suggestion', targetPlayerId: targetPlayerId as PlayerId },
-    });
-  } else if (pending.kind === 'wolf-decision') {
-    addPrivateEvent(state, livingWolves(state), 'wolf-attack', `狼队决定袭击 ${nameOf(state, targetPlayerId as PlayerId)}。`, {
-      actorPlayerId: pending.actorId,
+    const councilDecision = validateWolfCouncilDecision(state, decision, pending);
+    const targetPlayerId = councilDecision.recommendedTargetPlayerId;
+    addPrivateEvent(
+      state,
+      livingWolves(state),
+      'wolf-suggestion',
+      `${nameOf(state, pending.actorId)}：${councilDecision.message}（建议袭击 ${wolfTargetLabel(state, targetPlayerId)}）`,
+      {
+        actorPlayerId: pending.actorId,
+        targetPlayerIds: [targetPlayerId],
+        data: {
+          actionKind: 'wolf-suggestion',
+          message: councilDecision.message,
+          recommendedTargetPlayerId: targetPlayerId,
+        },
+      },
+    );
+    return state;
+  }
+  const targetPlayerId = validateTarget(state, decision, pending);
+  if (pending.kind === 'wolf-decision') {
+    addPrivateEvent(state, livingWolves(state), 'wolf-attack', `狼队决定袭击 ${wolfTargetLabel(state, targetPlayerId as PlayerId)}。`, {
+      actorPlayerId: null,
       targetPlayerIds: [targetPlayerId as PlayerId],
       data: { actionKind: 'wolf-decision', intentSource: 'wolf', preventable: true, targetPlayerId: targetPlayerId as PlayerId },
     });
@@ -650,13 +823,11 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
       }
     }
   } else if (pending.kind === 'vote' || pending.kind === 'runoff') {
-    const round: VoteRecord['round'] = pending.kind === 'vote' ? 1 : 2;
+    let round: VoteRecord['round'] = 1;
+    if (pending.kind === 'runoff') {
+      round = 2;
+    }
     state.currentVotes.push({ voterPlayerId: pending.actorId, targetPlayerId, round });
-    addPublicEvent(state, 'vote', `${nameOf(state, pending.actorId)} ${targetPlayerId === null ? '选择弃权' : `投给 ${nameOf(state, targetPlayerId)}`}。`, {
-      actorPlayerId: pending.actorId,
-      targetPlayerIds: targetPlayerId === null ? [] : [targetPlayerId],
-      data: { round, targetPlayerId },
-    });
   } else if (pending.kind === 'tie-break') {
     addExileIntent(state, targetPlayerId as PlayerId);
     state.phase = 'day-resolution';

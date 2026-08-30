@@ -1,6 +1,6 @@
 {
   "name": "majo-wolf",
-  "version": "2.3.2",
+  "version": "2.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,10 +12,13 @@
     "certs:generate": "node scripts/generate-certs.mjs certs",
     "test:backend": "node scripts/backend-smoke.mjs",
     "test:update": "node scripts/test-update.mjs",
-    "test:domain": "node scripts/knowledge-fact-smoke.mjs",
+    "test:domain": "node scripts/knowledge-fact-smoke.mjs && node scripts/verify-voting.mjs",
     "test:storage": "node scripts/browser-storage-smoke.mjs",
     "test:debug-report": "node scripts/ai-debug-report-smoke.mjs",
+    "test:roleplay": "node scripts/roleplay-resource-smoke.mjs",
+    "test:wolf-council": "node scripts/verify-wolf-council.mjs",
     "test:ai-guidance": "node scripts/verify-ai-decision-guidance.mjs",
+    "test:voting": "node scripts/verify-voting.mjs",
     "sim": "node scripts/monte-carlo.mjs"
   },
   "dependencies": {

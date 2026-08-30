@@ -6,7 +6,7 @@
  * - 对局结束（ended）且胜负已结算后，切入 post-game 阶段
  * - 全员按座位编号 0→5 依次发表赛后发言（跳过造物 99）
  * - 赛后发言为公开事件（post-game-speech），全员可见
- * - 每个发言者决策携带 postGame 标记，AI 提示词附带全量复盘上下文（postGameContext）
+ * - 每个发言者决策携带 postGame 标记，AI 提示词附带预算内的全知复盘上下文（postGameContext）
  * - 全部发完后停留在 post-game（不回到 ended，避免重复记录历史）
  */
 import { createServer } from 'vite';
@@ -35,7 +35,11 @@ function check(label, ok, detail = '') {
     console.log(`  ok ${label}`);
   } else {
     failures += 1;
-    console.log(`  FAIL ${label}${detail ? ` -- ${detail}` : ''}`);
+    let detailSuffix = '';
+    if (detail) {
+      detailSuffix = ` -- ${detail}`;
+    }
+    console.log(`  FAIL ${label}${detailSuffix}`);
   }
 }
 
@@ -144,7 +148,7 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   let after = reduceGame(game, { type: 'advance' });
   const pending = after.pendingDecision;
   check('赛后决策 schemaKey 为 speech', pending !== null && pending.schemaKey === 'speech', JSON.stringify(pending?.schemaKey));
-  const { isAllowedDecisionPair } = await server.ssrLoadModule('/shared/gamePromptContract.js');
+  const { buildFreeClientPayload, isAllowedDecisionPair } = await server.ssrLoadModule('/shared/gamePromptContract.js');
   check('契约允许 speech/speech 组合', isAllowedDecisionPair('speech', 'speech'));
   // 赛后决策以全知（spectator）视角请求 AI
   const observation = selectObservation(after, { kind: 'spectator' });
@@ -197,13 +201,20 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   check('AI 提示含 postGameContext', typeof payload.postGameContext === 'string' && payload.postGameContext.length > 0);
   check('AI 提示 action.title 为赛后复盘', payload.action.title === '赛后复盘');
   check('AI 提示含完整最终职业表', Array.isArray(payload.finalRoles) && payload.finalRoles.length >= 6 && payload.finalRoles.length <= 7 && [0, 1, 2, 3, 4, 5].every((playerId) => payload.finalRoles.some((entry) => entry.playerId === playerId && typeof entry.roleId === 'string' && typeof entry.roleName === 'string')));
-  // 全知原则：超长上下文也不截断（赛后必须完整复盘），契约 userContentMaxLength 才是最终防线
+  // 原始时间线始终完整；进入模型请求时才在固定预算内确定性保留首尾。
   const bigObservation = structuredClone(observation);
   for (let i = 0; i < 200; i += 1) {
     bigObservation.publicEvents.push({ kind: 'system', day: 1, phase: 'post-game', text: 'x'.repeat(500), actorPlayerId: null, targetPlayerIds: [], displayAuthorPlayerId: null, actualAuthorPlayerId: null, data: {} });
   }
   const bigContext = buildPostGameContext(bigObservation);
-  check('超长上下文不截断（保持全知）', bigContext.includes('x'.repeat(500)), '上下文被截断');
+  check('原始超长时间线保持完整', bigContext.includes('x'.repeat(500)), '原始时间线被截断');
+  const bigPrompt = buildDecisionPrompt({ observation: bigObservation, pendingDecision: pending }, 'free');
+  const bigPayload = JSON.parse(bigPrompt[1].content);
+  const bigBody = JSON.stringify(buildFreeClientPayload('2.4.0', bigPrompt));
+  check('超长赛后请求按目标预算截断', Buffer.byteLength(bigBody, 'utf8') <= 32 * 1024, `bytes=${Buffer.byteLength(bigBody, 'utf8')}`);
+  check('超长赛后请求保留截断标记', bigPayload.postGameContext.includes('上下文过长'), '缺少截断标记');
+  check('赛后不重复发送公开事件摘要', bigPayload.recentPublic.length === 0 && bigPayload.currentDaySpeeches.length === 0 && bigPayload.historicalSpeeches.length === 0);
+  check('赛后不重复发送私密事件摘要', bigPayload.privateEvents.length === 0);
 }
 
 // ===== 5. 死亡回溯的旧时间线进入复盘上下文 =====

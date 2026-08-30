@@ -9,10 +9,13 @@ import {
   isAllowedDecisionPair,
 } from '../../shared/gamePromptContract.js';
 import { characterById } from '../domain/catalog/characters';
-import { roleDescriptions, roleNames } from '../domain/catalog/roles';
+import { roleDescriptions, roleNames, roleUsageHints } from '../domain/catalog/roles';
 import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
 import { buildPostGameContext } from '../domain/skills/postGame';
 import { APP_VERSION } from '../config/version';
+import { buildRoleplayPersonality, buildRoleplaySpeechStyle } from './roleplayLore';
+import { buildPostGamePromptContext } from './postGameLore';
+import type { CharacterId, GameObservation, PendingDecision } from '../domain/model';
 import type { AiDecisionRequest, AiProviderKind } from './types';
 
 export interface PromptMessage {
@@ -20,9 +23,29 @@ export interface PromptMessage {
   content: string;
 }
 
-const CREATURE_PERSONALITY = '你是诺亚用魔法创造出来的造物，你拥有和她一样的基础身份和阵营，但不拥有她的魔法。除了每天的投票权（跟随诺亚）以外，你的所有行动可以独立决策；如果你想制造混乱，也可以用毒药毒死主人（但这对你并没有好处）。';
+const CREATURE_PERSONALITY = '你是诺亚用魔法创造、与当前主人绑定的造物。你明确知道自己与当前主人始终共享同一基础职业和阵营，但不拥有她的魔女技。你的投票跟随当前主人，其他行动可以独立决策；伤害主人等同于损害自己的阵营，通常没有好处。';
 const POST_GAME_TRUNCATION_MARKER = '\n【赛后复盘上下文过长，已保留开头和结尾；省略部分不代表没有发生】\n';
+// 中文上下文按 UTF-8 计量时，32 KiB 通常落在约 5k～10k 模型 token 的目标区间。
+const PROMPT_TARGET_BODY_BYTES = 32 * 1024;
 const UTF8_ENCODER = new TextEncoder();
+
+function promptBodyByteLength(
+  systemContent: string,
+  userContent: string,
+  provider: AiProviderKind,
+): number {
+  const messages: PromptMessage[] = [
+    { role: 'system', content: systemContent },
+    { role: 'user', content: userContent },
+  ];
+  let body: string;
+  if (provider === 'free') {
+    body = JSON.stringify(buildFreeClientPayload(APP_VERSION, messages));
+  } else {
+    body = JSON.stringify({ messages });
+  }
+  return UTF8_ENCODER.encode(body).byteLength;
+}
 
 /**
  * 在保留复盘开头、结尾的前提下做确定性截断。
@@ -37,7 +60,11 @@ function truncatePostGameContext(context: string, maxLength: number): string {
   const contentLength = maxLength - POST_GAME_TRUNCATION_MARKER.length;
   const headLength = Math.ceil(contentLength / 2);
   const tailLength = contentLength - headLength;
-  return `${context.slice(0, headLength)}${POST_GAME_TRUNCATION_MARKER}${tailLength > 0 ? context.slice(-tailLength) : ''}`;
+  let tail = '';
+  if (tailLength > 0) {
+    tail = context.slice(-tailLength);
+  }
+  return `${context.slice(0, headLength)}${POST_GAME_TRUNCATION_MARKER}${tail}`;
 }
 
 /**
@@ -45,33 +72,34 @@ function truncatePostGameContext(context: string, maxLength: number): string {
  */
 function fitPostGameContext(
   promptPayload: Record<string, unknown>,
-  context: string,
+  timelineContext: string,
   provider: AiProviderKind,
   systemContent: string,
 ): string {
-  const serializeUserContent = (candidate: string): string => JSON.stringify({ ...promptPayload, postGameContext: candidate });
-  const fitsCandidate = (candidate: string): boolean => {
-    const userContent = serializeUserContent(candidate);
+  const serializeUserContent = (candidateTimeline: string): string => JSON.stringify({
+    ...promptPayload,
+    postGameContext: buildPostGamePromptContext(candidateTimeline),
+  });
+  const fitsCandidate = (candidateTimeline: string): boolean => {
+    const userContent = serializeUserContent(candidateTimeline);
     if (userContent.length > PROMPT_LIMITS.userContentMaxLength) return false;
-    if (provider !== 'free') return true;
-    const body = JSON.stringify(buildFreeClientPayload(APP_VERSION, [
-      { role: 'system', content: systemContent },
-      { role: 'user', content: userContent },
-    ]));
-    return UTF8_ENCODER.encode(body).byteLength <= CHAT_COMPLETIONS_MAX_BODY_BYTES;
+    const bodyBytes = promptBodyByteLength(systemContent, userContent, provider);
+    if (bodyBytes > PROMPT_TARGET_BODY_BYTES) return false;
+    if (provider === 'free' && bodyBytes > CHAT_COMPLETIONS_MAX_BODY_BYTES) return false;
+    return true;
   };
-  if (fitsCandidate(context)) return context;
+  if (fitsCandidate(timelineContext)) return buildPostGamePromptContext(timelineContext);
   if (!fitsCandidate('')) {
     throw new Error('赛后复盘提示词的基础内容已超过提供方限制');
   }
 
   // 二分查找可放入完整请求的最大上下文长度，结果与事件顺序完全确定。
   let low = 0;
-  let high = context.length;
+  let high = timelineContext.length;
   let best = '';
   while (low <= high) {
     const middle = Math.floor((low + high) / 2);
-    const candidate = truncatePostGameContext(context, middle);
+    const candidate = truncatePostGameContext(timelineContext, middle);
     if (fitsCandidate(candidate)) {
       best = candidate;
       low = middle + 1;
@@ -79,14 +107,77 @@ function fitPostGameContext(
       high = middle - 1;
     }
   }
-  if (best.length === 0 && context.length > 0) {
+  if (best.length === 0 && timelineContext.length > 0) {
     throw new Error('赛后复盘上下文无法压缩到提供方限制内');
   }
-  return best;
+  return buildPostGamePromptContext(best);
 }
 
-/** 组装 actor 负载：造物（id=99）使用专属提示词，否则用角色原始数据。 */
-function buildActorPayload(actor: { id: number; name: string }, character: { personality: string; speechStyle: string; decisionTraits: { conservative: number; trusting: number; aggressive: number } }, visibleRole: string, visibleSkill: string) {
+function historicalSpeechLimit(pendingDecision: PendingDecision): number {
+  const isSocialDecision = pendingDecision.kind === 'speech'
+    || pendingDecision.kind === 'vote'
+    || pendingDecision.kind === 'runoff'
+    || pendingDecision.kind === 'tie-break'
+    || pendingDecision.kind === 'wolf-suggestion'
+    || pendingDecision.kind === 'wolf-decision';
+  if (isSocialDecision) {
+    return 6;
+  }
+  return 3;
+}
+
+function fitRuntimeContext(
+  promptPayload: Record<string, unknown>,
+  provider: AiProviderKind,
+  systemContent: string,
+): void {
+  const historicalSpeeches = promptPayload.historicalSpeeches as string[];
+  const recentPublic = promptPayload.recentPublic as string[];
+  const privateEvents = promptPayload.privateEvents as string[];
+  const fits = (): boolean => {
+    const userContent = JSON.stringify(promptPayload);
+    if (userContent.length > PROMPT_LIMITS.userContentMaxLength) {
+      return false;
+    }
+    return promptBodyByteLength(systemContent, userContent, provider) <= PROMPT_TARGET_BODY_BYTES;
+  };
+  while (!fits()) {
+    if (historicalSpeeches.length > 0) {
+      historicalSpeeches.shift();
+      continue;
+    }
+    if (recentPublic.length > 0) {
+      recentPublic.shift();
+      continue;
+    }
+    if (privateEvents.length > 0) {
+      privateEvents.shift();
+      continue;
+    }
+    break;
+  }
+  const userContent = JSON.stringify(promptPayload);
+  if (userContent.length > PROMPT_LIMITS.userContentMaxLength) {
+    throw new Error('AI 提示词的必要上下文已超过长度限制');
+  }
+  const bodyBytes = promptBodyByteLength(systemContent, userContent, provider);
+  if (bodyBytes > PROMPT_TARGET_BODY_BYTES) {
+    throw new Error('AI 提示词的必要上下文超过 32 KiB 目标预算，无法继续压缩');
+  }
+  if (provider === 'free' && bodyBytes > CHAT_COMPLETIONS_MAX_BODY_BYTES) {
+    throw new Error('免费提供方请求体的必要上下文已超过长度限制');
+  }
+}
+
+/** 组装 actor 负载：造物（id=99）使用专属提示词，其余角色使用紧凑静态卡。 */
+function buildActorPayload(
+  actor: { id: number; name: string },
+  character: { id: CharacterId; decisionTraits: { conservative: number; trusting: number; aggressive: number } },
+  visibleRole: string,
+  visibleSkill: string,
+  observation: GameObservation,
+  pendingDecision: PendingDecision,
+) {
   if (actor.id === CREATURE_ID) {
     return {
       playerId: actor.id,
@@ -99,7 +190,7 @@ function buildActorPayload(actor: { id: number; name: string }, character: { per
     };
   }
   // 诺亚（操控液体持有者）作为预言家时：提示她拥有自己与造物的双重查验结果
-  let personality = character.personality;
+  let personality = buildRoleplayPersonality(character.id, observation, pendingDecision);
   if (visibleRole.includes('预言家') && visibleSkill.includes('操控液体')) {
     personality = `${personality}你作为预言家，拥有自己和造物的查验结果，请善加利用这两条情报。`;
   }
@@ -107,7 +198,7 @@ function buildActorPayload(actor: { id: number; name: string }, character: { per
     playerId: actor.id,
     name: actor.name,
     personality,
-    speechStyle: character.speechStyle,
+    speechStyle: buildRoleplaySpeechStyle(character.id),
     decisionTraits: character.decisionTraits,
     role: visibleRole,
     skill: visibleSkill,
@@ -140,19 +231,35 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     }
     return `发言来源：${authorName}。发言内容：${event.text}`;
   };
-  const currentDaySpeeches = observation.publicEvents
-    .filter((event) => event.kind === 'speech' && event.day === observation.day)
-    .map(speechWithAuthor);
-  const historicalSpeeches = observation.publicEvents
-    .filter((event) => event.kind === 'speech' && event.day < observation.day)
-    .slice(-12)
-    .map(speechWithAuthor);
-  const recentPublic = observation.publicEvents.slice(-24).map((event) => {
-    if (event.kind === 'speech') {
-      return speechWithAuthor(event);
-    }
-    return event.text;
-  });
+  const isPostGame = pendingDecision.options.postGame === true;
+  let currentDaySpeeches: string[] = [];
+  if (!isPostGame) {
+    currentDaySpeeches = observation.publicEvents
+      .filter((event) => event.kind === 'speech' && event.day === observation.day)
+      .map(speechWithAuthor);
+  }
+  let historicalSpeeches: string[] = [];
+  if (!isPostGame) {
+    const historyLimit = historicalSpeechLimit(pendingDecision);
+    historicalSpeeches = observation.publicEvents
+      .filter((event) => event.kind === 'speech' && event.day < observation.day)
+      .slice(-historyLimit)
+      .map(speechWithAuthor);
+  }
+  let recentPublic = observation.publicEvents
+    .filter((event) => event.kind !== 'speech')
+    .slice(-16)
+    .map((event) => event.text);
+  if (isPostGame) {
+    recentPublic = [];
+  }
+  let privateEvents = observation.privateEvents
+    .filter((event) => event.day !== observation.day || event.data.actionKind !== 'wolf-suggestion')
+    .slice(-8)
+    .map((event) => event.text);
+  if (isPostGame) {
+    privateEvents = [];
+  }
   const privateKnowledge = observation.knowledge
     .filter((fact) => fact.kind === 'role' || fact.kind === 'alignment')
     .map((fact) => ({
@@ -161,8 +268,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
       value: fact.value,
       observedDay: fact.observedDay,
     }));
-  // 公开技能按角色默认技生成：与开局公开播报一致，始终恰好 6 项且唯一；
-  // 魔女因子回收等技能转移通过公开事件（factor-recovered）向 AI 呈现。
+  // 公开技能按角色默认技生成，与开局公开播报一致；技能转移仍通过公开事件表达。
   const publicSkills = observation.players
     .filter((player) => player.id !== CREATURE_ID)
     .map((player) => ({
@@ -170,10 +276,14 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
       name: player.name,
       skill: formatPublicSkill(defaultSkillByCharacterId[player.characterId]),
     }));
-  const visibleRole = actor.roleId ? `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}` : '未公开';
-  const visibleSkill = actor.skillId
-    ? `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}${skillUsageHints[actor.skillId] ?? ''}`
-    : '无可见技能';
+  let visibleRole = '未公开';
+  if (actor.roleId !== null) {
+    visibleRole = `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}${roleUsageHints[actor.roleId] ?? ''}`;
+  }
+  let visibleSkill = '无可见技能';
+  if (actor.skillId !== null) {
+    visibleSkill = `${witchSkillDefinitions[actor.skillId].name}：${witchSkillDefinitions[actor.skillId].description}${skillUsageHints[actor.skillId] ?? ''}`;
+  }
   const legalCandidates = pendingDecision.candidates.map((playerId) => {
     if (pendingDecision.options.potionChoice === true) {
       const potion = POTION_CHOICE_CATALOG.find((choice) => choice.playerId === playerId);
@@ -188,7 +298,14 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
 
   const promptPayload: Record<string, unknown> = {
     action: { kind: pendingDecision.kind, title: pendingDecision.title, description: pendingDecision.description, schema: pendingDecision.schemaKey },
-    actor: buildActorPayload(actor, character, visibleRole, visibleSkill),
+    actor: buildActorPayload(
+      actor,
+      character,
+      visibleRole,
+      visibleSkill,
+      observation,
+      pendingDecision,
+    ),
     phase: observation.phase,
     day: observation.day,
     board: observation.board,
@@ -201,15 +318,17 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     recentPublic,
     privateKnowledge,
     publicSkills,
-    privateEvents: observation.privateEvents.slice(-12).map((event) => event.text),
+    privateEvents,
   };
-  if (pendingDecision.options.postGame === true) {
+  if (isPostGame) {
     promptPayload.finalRoles = observation.players.map((player) => {
       if (player.roleId === null) throw new Error('赛后全知观察缺少最终职业');
       return { playerId: player.id, name: player.name, roleId: player.roleId, roleName: roleNames[player.roleId] };
     });
-    // 赛后复盘：额外提供全量对局时间线；超出当前提供方限制时确定性保留首尾。
+    // 赛后只保留一份全知时间线；超出目标请求预算时确定性保留首尾。
     promptPayload.postGameContext = fitPostGameContext(promptPayload, buildPostGameContext(observation), provider, systemContent);
+  } else {
+    fitRuntimeContext(promptPayload, provider, systemContent);
   }
 
   return [

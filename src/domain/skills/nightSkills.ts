@@ -16,6 +16,7 @@ import type {
 import { addKnowledge, addPrivateEvent, addPublicEvent } from '../engine/events';
 import { chooseWithState } from '../engine/random';
 import { getAlivePlayerIds, getName, getPlayer, getPlayerAlignment, getRoleAssignment, getSkillInstance } from '../engine/selectors';
+import { formatVoteRound, formatVoteTally, tallyVoteRound } from '../engine/vote';
 import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
 import { withFactionStrategyGuidance } from './decisionGuidance';
 
@@ -90,8 +91,7 @@ export function getNextNightSkillDecision(state: GameState): PendingDecision | n
       }
       // 操控液体：创造造物（use-only，无需目标，继承诺亚职业）
       // 策略提示按阵营区分：好人首夜召唤收益最大（造物是独立战力）；狼人保留（造物继承狼身份，被查验会暴露）
-      const ownerName = nameOf(state, skill.ownerPlayerId);
-      let creatureStrategyHint = '你是好人：强烈建议首个夜晚就召唤造物——它是独立战力，可独立查验/用药/投票，越早召唤收益越大，首夜使用通常是最优解。';
+      let creatureStrategyHint = '你是好人：强烈建议首个夜晚就召唤造物——它是独立战力，可独立查验或用药，投票跟随你；越早召唤收益越大，首夜使用通常是最优解。';
       if (getPlayerAlignment(state, skill.ownerPlayerId) === 'wolf') {
         creatureStrategyHint = '你是狼人：造物会继承你的狼身份，被查验或公开阵营会直接暴露你，建议保留不召唤。';
       }
@@ -99,7 +99,7 @@ export function getNextNightSkillDecision(state: GameState): PendingDecision | n
         state,
         skill,
         '操控液体',
-        `创造诺亚的造物吗？【选择：是/否】\n造物是液态分身，继承你的基础职业与阵营（不继承魔女技），拥有独立意志，不参与白天发言。每局限一次。\n${creatureStrategyHint}`,
+        `创造诺亚的造物吗？【选择：是/否】\n造物是与你绑定的液态分身，你和它都明确知道双方始终共享同一基础职业与阵营（不继承魔女技）。它拥有独立意志，不参与白天发言，投票跟随你。每局限一次。\n${creatureStrategyHint}`,
         [],
         'ignition',
       );
@@ -625,7 +625,21 @@ export function getDayIgnitionDecision(state: GameState): PendingDecision | null
   if (candidates.length === 0) {
     return null;
   }
-  return makeSkillDecision(state, skill, '点火-白天', '选择一名目标：火焰将随机烧毁她的投票（90%）或全部魔女技（10%）。', candidates, 'optional-target');
+  let round: 1 | 2 = 1;
+  if (state.phase === 'runoff') {
+    round = 2;
+  }
+  const playerName = (playerId: PlayerId) => nameOf(state, playerId);
+  const voteSummary = formatVoteRound(state.currentVotes, round, playerName);
+  const voteTally = formatVoteTally(tallyVoteRound(state.currentVotes, round), playerName);
+  return makeSkillDecision(
+    state,
+    skill,
+    '点火-白天',
+    `第 ${round} 轮完整提交票型已经公布：${voteSummary}。提交票数汇总（点火前）：${voteTally}。选择一名目标：火焰将随机烧毁她的投票（90%）或全部魔女技（10%）。`,
+    candidates,
+    'optional-target',
+  );
 }
 
 /** 白天点火结算：90% 烧投票 / 10% 烧技能。 */

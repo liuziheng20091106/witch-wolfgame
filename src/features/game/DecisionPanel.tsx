@@ -1,4 +1,4 @@
-import { POTION_CHOICE_CATALOG } from '../../../shared/gamePromptContract.js';
+import { POTION_CHOICE_CATALOG, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
 import { AlertTriangle, Clipboard, Download, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { aiDebugReportFilename, formatAiDebugReport } from '../../ai/debugReport';
@@ -10,6 +10,43 @@ import { isCreatureId } from '../../domain/engine/selectors';
 import styles from './DecisionPanel.module.css';
 
 const potionChoiceNames: ReadonlyMap<PlayerId, string> = new Map(POTION_CHOICE_CATALOG.map((choice) => [choice.playerId, choice.name]));
+
+interface WolfCouncilMessageView {
+  speakerPlayerId: PlayerId;
+  speakerName: string;
+  message: string;
+  recommendedTargetPlayerId: PlayerId;
+}
+
+function readWolfCouncilMessages(pending: PendingDecision | null): WolfCouncilMessageView[] {
+  const rawMessages = pending?.options.wolfCouncilMessages;
+  if (!Array.isArray(rawMessages)) {
+    return [];
+  }
+  const messages: WolfCouncilMessageView[] = [];
+  for (const rawMessage of rawMessages) {
+    if (rawMessage === null || typeof rawMessage !== 'object' || Array.isArray(rawMessage)) {
+      continue;
+    }
+    const speakerPlayerId = rawMessage.speakerPlayerId;
+    const speakerName = rawMessage.speakerName;
+    const message = rawMessage.message;
+    const recommendedTargetPlayerId = rawMessage.recommendedTargetPlayerId;
+    if (typeof speakerPlayerId !== 'number'
+      || typeof speakerName !== 'string'
+      || typeof message !== 'string'
+      || typeof recommendedTargetPlayerId !== 'number') {
+      continue;
+    }
+    messages.push({
+      speakerPlayerId: speakerPlayerId as PlayerId,
+      speakerName,
+      message,
+      recommendedTargetPlayerId: recommendedTargetPlayerId as PlayerId,
+    });
+  }
+  return messages;
+}
 
 function formatPayloadSize(text: string): string {
   const bytes = new TextEncoder().encode(text).byteLength;
@@ -87,6 +124,7 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   }, [aiError]);
 
   const candidateNames = useMemo(() => new Map(observation.players.map((player) => [player.id, player.name])), [observation.players]);
+  const wolfCouncilMessages = useMemo(() => readWolfCouncilMessages(pending), [pending]);
   const candidateLabel = (playerId: PlayerId): string => {
     const name = candidateNames.get(playerId) ?? '未知目标';
     return isCreatureId(playerId) ? name : `${playerId + 1}号 · ${name}`;
@@ -137,6 +175,7 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
 
   let valid = true;
   if (pending.schemaKey === 'speech') valid = speech.length <= 100 && mentionsRequired(speech);
+  if (pending.schemaKey === 'wolf-council') valid = speech.trim().length > 0 && speech.length <= WOLF_COUNCIL_MESSAGE_MAX_LENGTH && target !== '';
   if (pending.schemaKey === 'target') valid = pending.allowAbstain || target !== '';
   if (pending.schemaKey === 'optional-target') valid = !useSkill || target !== '';
   if (pending.schemaKey === 'liquid-control') valid = !useSkill || (mode === 'extract' ? target !== '' : mode === 'spread' && factId !== '');
@@ -146,6 +185,7 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   const submit = () => {
     let decision: SubmittedDecision;
     if (pending.schemaKey === 'speech') decision = { speech };
+    else if (pending.schemaKey === 'wolf-council') decision = { message: speech.trim(), recommendedTargetPlayerId: Number(target) as PlayerId };
     else if (pending.schemaKey === 'target') decision = { targetPlayerId: target === '' ? null : Number(target) as PlayerId };
     else if (pending.schemaKey === 'optional-target') decision = { use: useSkill, targetPlayerId: useSkill ? Number(target) as PlayerId : null };
     else if (pending.schemaKey === 'witch') decision = { save, poisonTargetPlayerId: poison === '' ? null : Number(poison) as PlayerId };
@@ -165,12 +205,24 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   } else if (pending.options.postGame === true) {
     speechLabel = '赛后复盘';
     speechPlaceholder = '说说你对这局的复盘（可留空）';
+  } else if (pending.schemaKey === 'wolf-council') {
+    speechLabel = '狼议发言';
+    speechPlaceholder = '说明推荐目标、公开依据与可能风险';
   }
 
   return <section className={styles.panel} aria-labelledby="decision-title">
     <header><span>YOUR DECISION</span><h2 id="decision-title">{pending.title}</h2><p>{pending.description}</p></header>
     <div className={styles.body}>
+      {wolfCouncilMessages.length > 0 && <section className={styles.councilLog} aria-labelledby="wolf-council-title">
+        <h3 id="wolf-council-title">狼人内部频道</h3>
+        {wolfCouncilMessages.map((entry) => <div key={entry.speakerPlayerId}>
+          <strong>{entry.speakerName}</strong>
+          <p>{entry.message}</p>
+          <span>建议袭击 {candidateLabel(entry.recommendedTargetPlayerId)}</span>
+        </div>)}
+      </section>}
       {pending.schemaKey === 'speech' && <label className={styles.textarea}>{speechLabel}<textarea maxLength={100} value={speech} onChange={(event) => setSpeech(event.target.value)} placeholder={speechPlaceholder} /><span>{speech.length}/100</span></label>}
+      {pending.schemaKey === 'wolf-council' && <><label className={styles.textarea}>{speechLabel}<textarea maxLength={WOLF_COUNCIL_MESSAGE_MAX_LENGTH} value={speech} onChange={(event) => setSpeech(event.target.value)} placeholder={speechPlaceholder} /><span>{speech.length}/{WOLF_COUNCIL_MESSAGE_MAX_LENGTH}</span></label>{targetControl(false)}</>}
       {pending.schemaKey === 'target' && targetControl(pending.allowAbstain)}
       {(pending.schemaKey === 'optional-target' || pending.schemaKey === 'liquid-control' || pending.schemaKey === 'levitation' || pending.schemaKey === 'voice-mimic' || pending.schemaKey === 'ignition') && <label className={styles.toggle}><input type="checkbox" checked={useSkill} onChange={(event) => setUseSkill(event.target.checked)} /><span>本次使用技能</span></label>}
       {pending.schemaKey === 'optional-target' && useSkill && targetControl(false)}

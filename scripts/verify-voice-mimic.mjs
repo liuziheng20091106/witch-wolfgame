@@ -10,7 +10,7 @@
  *
  * 验证：
  * 1. voice-mimic 决策的 candidates 与 mimicVoices 一一对应（playerId → speechStyle 不错位）
- * 2. 每个候选的 speechStyle 与对应角色的实际 speech_style 一致
+ * 2. 每个候选的 speechStyle 与对应角色的静态声音指纹一致
  * 3. 非 voice-mimic 决策不注入 speechStyle（不泄露说话风格）
  * 4. 开局公屏包含发言顺序公示
  */
@@ -20,12 +20,12 @@ import { resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
 
-let createGame, getPlayer, characterById;
+let createGame, getPlayer, formatRoleplaySpeechStyle;
 let getAfterSpeechSkillDecision, getBeforeSpeechSkillDecision;
 try {
   ({ createGame } = await server.ssrLoadModule('/src/domain/engine/createGame.ts'));
   ({ getPlayer } = await server.ssrLoadModule('/src/domain/engine/selectors.ts'));
-  ({ characterById } = await server.ssrLoadModule('/src/domain/catalog/characters.ts'));
+  ({ formatRoleplaySpeechStyle } = await server.ssrLoadModule('/src/data/roleplay-static.ts'));
   ({ getAfterSpeechSkillDecision, getBeforeSpeechSkillDecision } = await server.ssrLoadModule('/src/domain/skills/speechSkills.ts'));
 } finally {
   // 保持 server 打开
@@ -91,8 +91,8 @@ console.log('=== 1. 候选与说话风格映射 ===');
       allMatched = false;
       break;
     }
-    const character = characterById[getPlayer(game, playerId).characterId];
-    if (voice.speechStyle !== character.speechStyle.slice(0, 300)) {
+    const characterId = getPlayer(game, playerId).characterId;
+    if (voice.speechStyle !== formatRoleplaySpeechStyle(characterId).slice(0, 300)) {
       allMatched = false;
       break;
     }

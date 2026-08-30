@@ -38,6 +38,32 @@ const phaseNames: Record<GameObservation['phase'], string> = {
 
 type MobileTab = 'live' | 'players' | 'history';
 
+function automationStatus(observation: GameObservation): string {
+  const pending = observation.pendingDecision;
+  if (pending !== null) {
+    if (pending.kind === 'wolf-decision') {
+      return '狼队正在决定袭击目标';
+    }
+    const actor = observation.players.find((player) => player.id === pending.actorId);
+    let actorName = `${pending.actorId + 1}号`;
+    if (actor !== undefined) {
+      actorName = actor.name;
+    }
+    return `${actorName} 正在${pending.title}`;
+  }
+  if (observation.result !== null) {
+    return '审判已结束';
+  }
+  return '审判正在推进';
+}
+
+function automationModeLabel(observation: GameObservation): string {
+  if (observation.automationMode === 'local') {
+    return 'LOCAL STRATEGY';
+  }
+  return 'AI AUTOMATION';
+}
+
 function HistoryBody({ observation }: { observation: GameObservation }) {
   const empty = observation.privateEvents.length === 0 && observation.archivedTimelines.length === 0;
   return <div className={styles.historyBody}>
@@ -69,7 +95,10 @@ export function GameView(props: GameViewProps) {
   const selectedPlayer = selectedPlayerId === null ? null : observation.players.find((player) => player.id === selectedPlayerId) ?? null;
   let selectedSeatLabel: string | null = null;
   if (selectedPlayer) selectedSeatLabel = isCreatureId(selectedPlayer.id) ? '造物' : `${selectedPlayer.id + 1}号席位`;
-  const activeActorId = observation.pendingDecision?.actorId ?? null;
+  let activeActorId = observation.pendingDecision?.actorId ?? null;
+  if (observation.pendingDecision?.kind === 'wolf-decision') {
+    activeActorId = null;
+  }
   const recentPrivateEvents = observation.privateEvents.slice(-10).reverse();
   const hasResult = observation.result !== null;
   const humanDecisionPending = observation.pendingDecision?.actorId === observation.viewerPlayerId;
@@ -161,7 +190,7 @@ export function GameView(props: GameViewProps) {
         <HistoryBody observation={observation} />
       </section>
     </div>
-    {!decisionPanelVisible && <div className={styles.automationBar} aria-live="polite"><Bot /><div><span>{observation.automationMode === 'local' ? 'LOCAL STRATEGY' : 'AI AUTOMATION'}</span><strong>{observation.pendingDecision ? `${observation.players.find((player) => player.id === observation.pendingDecision?.actorId)?.name ?? `${observation.pendingDecision.actorId + 1}号`} 正在${observation.pendingDecision.title}` : observation.result ? '审判已结束' : '审判正在推进'}</strong></div>{observation.result && <button className={styles.mobileRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button>}{props.thinking && <LoaderCircle className={styles.automationSpin} />}</div>}
+    {!decisionPanelVisible && <div className={styles.automationBar} aria-live="polite"><Bot /><div><span>{automationModeLabel(observation)}</span><strong>{automationStatus(observation)}</strong></div>{observation.result && <button className={styles.mobileRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button>}{props.thinking && <LoaderCircle className={styles.automationSpin} />}</div>}
     {mobileChromeHidden && <button className={styles.mobileReveal} type="button" onClick={(event) => { event.stopPropagation(); revealMobileChrome(); }} aria-label="显示游戏控制"><ChevronDown />展开面板</button>}
     {selectedPlayer && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedPlayerId(null)}><section className={styles.playerDialog} role="dialog" aria-modal="true" aria-labelledby="player-detail-title"><button className={styles.close} type="button" onClick={() => setSelectedPlayerId(null)} aria-label="关闭角色详情"><X /></button><img src={selectedPlayer.avatarUrl} alt="" /><div><span>{selectedSeatLabel}</span><h2 id="player-detail-title">{selectedPlayer.name}</h2><p>{selectedPlayer.alive ? '存活' : '已死亡'}</p><dl><dt>基础职业</dt><dd>{selectedPlayer.roleId ? `${roleNames[selectedPlayer.roleId]} · ${roleDescriptions[selectedPlayer.roleId]}` : '尚未公开'}</dd><dt>魔女技</dt><dd>{selectedPlayer.skillId ? `${witchSkillDefinitions[selectedPlayer.skillId].name} · ${witchSkillDefinitions[selectedPlayer.skillId].description}` : '尚未公开'}</dd></dl></div></section></div>}
     {observation.result && !resultDismissed && <section className={`${styles.result} ${resultFaded ? styles.resultFaded : ''}`} aria-live="assertive"><Gavel /><div><span>FINAL VERDICT</span><h2>{observation.result.winner === 'wolf' ? '狼人阵营获胜' : '好人阵营获胜'}</h2><p>{observation.mode === 'player' && observation.viewerPlayerId !== null ? `你的阵营${observation.players.find((player) => player.id === observation.viewerPlayerId)?.roleId === 'wolf' ? observation.result.winner === 'wolf' ? '获胜' : '失败' : observation.result.winner === 'good' ? '获胜' : '失败'}。` : '对局详细已揭晓~'}</p></div><button className={styles.desktopRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button><button className={styles.resultClose} type="button" onClick={() => setResultDismissed(true)} aria-label="关闭结果面板" title="关闭结果面板"><X /></button></section>}
