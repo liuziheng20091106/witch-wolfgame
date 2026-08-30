@@ -3,6 +3,7 @@ import { resolveTheme } from './theme';
 import { useGameController } from './useGameController';
 import { SetupView } from '../features/setup/SetupView';
 import { useMultiplayerRoom } from '../multiplayer/useMultiplayerRoom';
+import { useServiceWorker } from './useServiceWorker';
 
 // Static imports would merge these optional surfaces into the setup entry chunk; React.lazy requires dynamic module loading for this split.
 const LazyGameView = lazy(async () => ({ default: (await import('../features/game/GameView')).GameView }));
@@ -15,6 +16,7 @@ function getSystemDark(): boolean {
 export function App() {
   const controller = useGameController();
   const multiplayer = useMultiplayerRoom();
+  const serviceWorker = useServiceWorker();
   const multiplayerObservation = multiplayer.room?.status === 'playing' || multiplayer.room?.status === 'ended'
     ? multiplayer.room.observation
     : null;
@@ -51,7 +53,14 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [effectiveTheme]);
 
+  const pwaNotice = serviceWorker.updateReady
+    ? <aside className="pwa-notice" role="status"><span>新版本已下载，可立即更新。</span><button type="button" onClick={serviceWorker.applyUpdate}>更新并重启</button></aside>
+    : serviceWorker.offline
+      ? <aside className="pwa-notice" role="status"><span>当前处于离线模式，本地对局仍可继续。</span></aside>
+      : null;
+
   return <>
+    {pwaNotice}
     {!multiplayerObservation && (controller.view === 'setup' || !controller.observation) ? <SetupView
       settings={controller.settings}
       setup={controller.setup}

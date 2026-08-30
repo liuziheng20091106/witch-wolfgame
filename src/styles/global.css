@@ -76,6 +76,11 @@ button { transition: color .16s ease, background-color .16s ease, border-color .
 button:not(:disabled):active { transform: translateY(1px); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 
+.pwa-notice { position: fixed; z-index: 1100; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); max-width: min(420px, calc(100vw - 32px)); display: flex; align-items: center; gap: 14px; box-sizing: border-box; padding: 13px 15px; border: 1px solid var(--magic); background: var(--ink-surface); color: var(--ink-on-surface); box-shadow: 5px 5px 0 var(--paper-shadow); font-family: var(--sans); font-size: 13px; }
+.pwa-notice span { line-height: 1.5; }
+.pwa-notice button { flex: none; min-height: 36px; padding: 0 12px; border: 0; background: var(--magic); color: #17151c; font-weight: 900; }
+@media (max-width: 520px) { .pwa-notice { right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); max-width: none; justify-content: space-between; } }
+
 
 html.theme-changing::after { content: ''; position: fixed; z-index: 1000; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 8%, rgb(213 173 61 / 24%) 42%, rgb(255 255 255 / 18%) 50%, transparent 72%); background-size: 220% 100%; animation: themeSweep .76s cubic-bezier(.22, .8, .3, 1) both; mix-blend-mode: screen; }
 html.theme-changing *, html.theme-changing *::before, html.theme-changing *::after { transition: background-color .55s ease, border-color .55s ease, color .55s ease, box-shadow .55s ease !important; }
