@@ -29,16 +29,18 @@ npm install
 npm run dev
 ```
 
-开发服务器默认使用 `http://127.0.0.1:5173/`。开发时可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
+开发服务器默认使用 `http://127.0.0.1:5173/`。开发时 Vite 将 `/multiplayer` 转发到主后端 `http://127.0.0.1:34022/multiplayer`；主后端再转发到多人服务。公益 AI 可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
 
-多人服务默认监听 `127.0.0.1:34024`，开发时 Vite 会代理 `/multiplayer`：
-多人联机支持房主配置 **6–14 席**；房间人数会贯穿协议校验、持久化状态、真人/AI 驱动数组和 `createGame`。未被真人占用的席位由确定性 AI 驱动。
+多人服务默认监听 `127.0.0.1:34024`，主后端通过 `MAJO_MULTIPLAYER_URL=ws://...:34024/multiplayer` 转发 WebSocket：
 
 ```bash
 npm run server:multiplayer
 ```
 
-公网部署应在反向代理上把 `/multiplayer` 升级为 WebSocket，并用 `VITE_MULTIPLAYER_ENDPOINT=wss://example.com/multiplayer` 覆盖前端地址；同时必须设置 `MAJO_MULTIPLAYER_ALLOWED_ORIGINS=https://example.com`，多个来源用逗号分隔，服务只接受白名单中的精确 Origin，不支持通配符。房间状态原子写入 `.runtime/multiplayer-rooms.json`；恢复令牌只保存在参与者浏览器和服务端状态文件中。
+生产环境前端默认将多人连接发送到公益主后端 `wss://freeapi.majowolf.tkcloud.online/multiplayer`；可用 `VITE_MULTIPLAYER_ENDPOINT` 覆盖。主后端必须把 `MAJO_MULTIPLAYER_URL` 配置为其运行环境可访问的多人服务地址。多人服务的 `MAJO_MULTIPLAYER_ALLOWED_ORIGINS` 仍需配置为前端的精确来源。
+多人联机支持房主配置 **6–14 席**；房间人数会贯穿协议校验、持久化状态、真人/AI 驱动数组和 `createGame`。未被真人占用的席位由确定性 AI 驱动。
+
+公网反向代理只需把 `/multiplayer` WebSocket 升级请求转发到主后端；主后端再转发到多人服务。房间状态原子写入 `.runtime/multiplayer-rooms.json`；恢复令牌只保存在参与者浏览器和服务端状态文件中。
 本地 OpenAI 兼容代理默认监听 `127.0.0.1:34025`，并允许 Vite 默认的 `http://127.0.0.1:5173` 与 `http://localhost:5173` 来源。自定义开发端口时，用逗号分隔的 `LOCAL_AI_ALLOWED_ORIGINS` 显式配置允许来源后运行 `npm run server:local-ai`。代理仅从 OMP 配置或环境变量读取上游凭据。
 
 

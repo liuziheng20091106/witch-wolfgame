@@ -15,6 +15,7 @@ import {
   INVALID_GAME_REQUEST_MESSAGE,
   PROMPT_LIMITS,
 } from '../shared/gamePromptContract.js';
+import { WebSocket, WebSocketServer } from 'ws';
 import { startMainServer } from '../server/main.mjs';
 import { buildUpstreamPayload, startProxyServer } from '../proxy/server.mjs';
 import { generateCertificates } from './generate-certs.mjs';
@@ -35,6 +36,9 @@ function listen(server) {
 
 function close(server) {
   return new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+}
+function closeWebSocketServer(server) {
+  return new Promise((resolvePromise) => server.close(() => resolvePromise()));
 }
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -174,6 +178,8 @@ const work = await mkdtemp(join(tmpdir(), 'majo-backend-smoke-'));
 const certs = join(work, 'certs');
 let upstream;
 let proxy;
+let multiplayerUpstream;
+let multiplayerClient;
 let fallbackProxy;
 let main;
 const capturedLogs = [];
@@ -261,10 +267,30 @@ try {
   await writeFile(mainConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 }, cors: { allowedOrigins: [origin] },
     proxies: [{ name: '水梦梦的服务器', url: `https://127.0.0.1:${proxyPort}/internal/v1/chat/completions`, ca: join(certs, 'ca.crt'), clientCert: join(certs, 'main-client.crt'), clientKey: join(certs, 'main-client.key'), serverName: 'proxy.internal', connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', timeoutMs: 5000 }],
-    rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 }, acceptedClientVersions: ['2.4.0'],
+    rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 },
+    acceptedClientVersions: ['2.4.0'],
   }));
+  multiplayerUpstream = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+  multiplayerUpstream.on('connection', (socket, request) => {
+    assert.equal(request.headers.origin, origin);
+    socket.on('message', (data) => socket.send(data));
+  });
+  await new Promise((resolvePromise, reject) => {
+    multiplayerUpstream.once('listening', resolvePromise);
+    multiplayerUpstream.once('error', reject);
+  });
+  const multiplayerPort = multiplayerUpstream.address().port;
+  process.env.MAJO_MULTIPLAYER_URL = `ws://127.0.0.1:${multiplayerPort}/multiplayer`;
   main = await startMainServer(mainConfig);
   const mainPort = main.address().port;
+  multiplayerClient = new WebSocket(`ws://127.0.0.1:${mainPort}/multiplayer`, { origin });
+  await new Promise((resolvePromise, reject) => {
+    multiplayerClient.once('open', resolvePromise);
+    multiplayerClient.once('error', reject);
+  });
+  const forwardedMessage = new Promise((resolvePromise) => multiplayerClient.once('message', (data) => resolvePromise(data.toString())));
+  multiplayerClient.send('forwarded-through-main');
+  assert.equal(await forwardedMessage, 'forwarded-through-main');
 
   await expectMtlsRejection(proxyPort, ca);
   const internalBody = Buffer.from(JSON.stringify(validPayload()));
@@ -584,10 +610,16 @@ try {
 
   console.log('后端烟测通过：固定 provider fallback 顺序、上游 SSE 聚合、非流式回退、首字节/总超时、重试、时间日志、mTLS、HMAC 与限流均已验证。');
 } finally {
+  if (multiplayerClient) {
+    if (multiplayerClient.readyState === WebSocket.OPEN) await new Promise((resolvePromise) => { multiplayerClient.once('close', resolvePromise); multiplayerClient.close(); });
+    else if (multiplayerClient.readyState === WebSocket.CONNECTING) multiplayerClient.terminate();
+  }
   if (fallbackProxy) await close(fallbackProxy);
   if (main) await close(main);
+  if (multiplayerUpstream) await closeWebSocketServer(multiplayerUpstream);
   if (proxy) await close(proxy);
   if (upstream) await close(upstream);
+  delete process.env.MAJO_MULTIPLAYER_URL;
   for (const [method, implementation] of Object.entries(originalConsole)) console[method] = implementation;
   await rm(work, { recursive: true, force: true });
 }
