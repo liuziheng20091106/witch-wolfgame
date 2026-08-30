@@ -21,6 +21,7 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
   const self = room?.participants.find((participant) => participant.participantId === room.selfParticipantId) ?? null;
   const host = room !== null && room.hostParticipantId === room.selfParticipantId;
   const canStart = host && room?.participants.every((participant) => participant.ready) === true;
+  const participantPlayerIds = new Set<number>(room?.participants.map((participant) => participant.playerId) ?? []);
 
   if (room !== null) {
     return <section className={styles.lobby} aria-labelledby="multiplayer-lobby-title">
@@ -30,9 +31,9 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
         {room.participants.map((participant) => <article key={participant.participantId} className={participant.participantId === room.selfParticipantId ? styles.self : ''}>
           <img src={characters.find((character) => character.id === participant.characterId)?.avatarUrl} alt="" />
           <div><strong>{participant.playerName}{participant.host ? ' · 房主' : ''}</strong><span>{characters.find((character) => character.id === participant.characterId)?.name} · {participant.playerId + 1}号席</span></div>
-          <small>{participant.connected ? participant.ready ? '已准备' : '未准备' : '等待重连'}</small>
+          <small>{room.drivers[participant.playerId]?.kind === 'ai' ? participant.connected ? 'AI 驱动' : 'AI 驱动 · 等待重连' : participant.connected ? participant.ready ? '已准备' : '未准备' : '等待重连'}</small>
         </article>)}
-        {room.drivers.map((driver, index) => driver.kind === 'ai' && <article key={`ai-${index}`} className={styles.aiSeat}><UserRound /><div><strong>AI 驱动</strong><span>{index + 1}号席</span></div><small>自动</small></article>)}
+        {room.drivers.map((driver, index) => driver.kind === 'ai' && !participantPlayerIds.has(index) && <article key={`ai-${index}`} className={styles.aiSeat}><UserRound /><div><strong>AI 驱动</strong><span>{index + 1}号席</span></div><small>自动</small></article>)}
       </div>
       {room.failureMessage && <p className={styles.error} role="alert">{room.failureMessage}。房间已停止推进，请离开房间重新创建。</p>}
       {room.status === 'failed' && <div className={styles.actions}><button type="button" onClick={multiplayer.leaveRoom}>离开房间</button></div>}

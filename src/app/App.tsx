@@ -79,6 +79,7 @@ export function App() {
       onSettings={() => controller.setSettingsOpen(true)}
       onPaused={multiplayerObservation ? () => undefined : controller.setPaused}
       onRestart={multiplayerObservation ? multiplayer.leaveRoom : controller.startNewGame}
+      showContinueRound={!multiplayerObservation}
       onContinueRound={multiplayerObservation ? multiplayer.leaveRoom : controller.continueWithNewRoles}
       onExit={multiplayerObservation ? multiplayer.leaveRoom : controller.returnToSetup}
     /></Suspense> : null}

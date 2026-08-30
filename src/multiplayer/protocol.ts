@@ -8,7 +8,7 @@ export const PLAYER_NAME_PATTERN = /^[^\r\n\t]{1,24}$/u;
 
 const roomCodeSchema = z.string().regex(ROOM_CODE_PATTERN);
 const resumeTokenSchema = z.string().regex(RESUME_TOKEN_PATTERN);
-const playerNameSchema = z.string().trim().regex(PLAYER_NAME_PATTERN);
+const playerNameSchema = z.string().trim().min(1).max(24).regex(PLAYER_NAME_PATTERN);
 const characterIdSchema = z.enum(CHARACTER_IDS);
 const decisionSchema = z.record(z.string(), z.unknown());
 

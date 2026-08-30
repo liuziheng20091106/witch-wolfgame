@@ -82,10 +82,18 @@ function decisionFor(pending, speech) {
 
 try {
   await waitReady();
+  const blankName = client();
+  await blankName.open();
+  blankName.send({ type: 'create-room', playerName: '   ', characterId: 'soul-0', playerCount: 6 });
+  const blankNameError = await blankName.next((message) => message.type === 'error', '空白名称拒绝');
+  assert.equal(blankNameError.code, 'invalid_message');
+  blankName.socket.close();
+
   const host = client();
   await host.open();
-  host.send({ type: 'create-room', playerName: '房主', characterId: 'soul-0', playerCount: 14, seed: 20260829 });
+  host.send({ type: 'create-room', playerName: '  房主  ', characterId: 'soul-0', playerCount: 14, seed: 20260829 });
   const hostWelcome = await host.next((message) => message.type === 'welcome', '房主创建');
+  assert.equal(hostWelcome.room.participants[0].playerName, '房主', '服务端必须保存规范化名称');
   assert.match(hostWelcome.room.roomCode, /^[A-Z2-9]{6}$/);
   assert.equal(hostWelcome.room.playerCount, 14);
   assert.equal(hostWelcome.room.drivers.length, 14);
@@ -94,8 +102,9 @@ try {
 
   const guest = client();
   await guest.open();
-  guest.send({ type: 'join-room', roomCode: hostWelcome.room.roomCode, playerName: '客人', characterId: 'soul-1' });
+  guest.send({ type: 'join-room', roomCode: hostWelcome.room.roomCode, playerName: ' 客人 ', characterId: 'soul-1' });
   const guestWelcome = await guest.next((message) => message.type === 'welcome', '客人加入');
+  assert.equal(guestWelcome.room.participants.find((participant) => participant.playerId === 1)?.playerName, '客人', '加入房间名称必须被规范化');
   assert.equal(guestWelcome.room.selfPlayerId, 1);
   assert.equal(guestWelcome.room.drivers[1].kind, 'human');
 
