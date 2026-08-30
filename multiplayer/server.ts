@@ -110,6 +110,7 @@ const persistedRoomSchema = z.strictObject({
 const rooms = new Map<string, Room>();
 const socketsByParticipant = new Map<string, WebSocket>();
 const connectionGenerationByParticipant = new Map<string, number>();
+const takeoverTimers = new Map<string, NodeJS.Timeout>();
 let connectionCount = 0;
 let persistChain = Promise.resolve();
 let shuttingDown = false;
@@ -302,8 +303,10 @@ function scheduleGame(room: Room): void {
   }, TICK_DELAY_MS);
 }
 
-function windowlessSetTimeout(callback: () => void, delay: number): void {
-  setTimeout(callback, delay).unref();
+function windowlessSetTimeout(callback: () => void, delay: number): NodeJS.Timeout {
+  const timer = setTimeout(callback, delay);
+  timer.unref();
+  return timer;
 }
 
 function driveGame(room: Room): void {
@@ -353,6 +356,7 @@ function driveGame(room: Room): void {
 }
 
 function attachParticipant(socket: WebSocket, room: Room, participant: Participant, welcome: boolean): number {
+  clearDisconnectTakeover(participant.participantId);
   const generation = (connectionGenerationByParticipant.get(participant.participantId) ?? 0) + 1;
   connectionGenerationByParticipant.set(participant.participantId, generation);
   const previousSocket = socketsByParticipant.get(participant.participantId);
@@ -369,9 +373,19 @@ function attachParticipant(socket: WebSocket, room: Room, participant: Participa
   void persistRooms();
   return generation;
 }
+function clearDisconnectTakeover(participantId: string): void {
+  const timer = takeoverTimers.get(participantId);
+  if (timer === undefined) return;
+  clearTimeout(timer);
+  takeoverTimers.delete(participantId);
+}
+
 function scheduleDisconnectTakeover(room: Room, participant: Participant, generation?: number): void {
+  clearDisconnectTakeover(participant.participantId);
   const expectedGeneration = generation ?? connectionGenerationByParticipant.get(participant.participantId) ?? 0;
-  windowlessSetTimeout(() => {
+  let timer: NodeJS.Timeout;
+  timer = windowlessSetTimeout(() => {
+    if (takeoverTimers.get(participant.participantId) === timer) takeoverTimers.delete(participant.participantId);
     if ((connectionGenerationByParticipant.get(participant.participantId) ?? 0) !== expectedGeneration || socketsByParticipant.has(participant.participantId) || participant.connected || participantById(room, participant.participantId) === null) return;
     const driver = room.drivers[participant.playerId];
     if (driver?.kind !== 'human' || driver.participantId !== participant.participantId) return;
@@ -385,10 +399,12 @@ function scheduleDisconnectTakeover(room: Room, participant: Participant, genera
     void persistRooms();
     scheduleGame(room);
   }, DISCONNECT_GRACE_MS);
+  takeoverTimers.set(participant.participantId, timer);
 }
 
 
 function leaveRoom(room: Room, participant: Participant): void {
+  clearDisconnectTakeover(participant.participantId);
   if (room.status === 'playing') {
     participant.connected = false;
     room.drivers[participant.playerId] = { kind: 'ai' };
@@ -562,9 +578,11 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
       }
       if (!activeRoom || !activeParticipant) throw new Error('请先创建、加入或恢复房间');
       if (message.type === 'leave-room') {
+        const participantId = activeParticipant.participantId;
+        const currentGeneration = connectionGenerationByParticipant.get(participantId) ?? activeGeneration ?? 0;
+        connectionGenerationByParticipant.set(participantId, currentGeneration + 1);
         leaveRoom(activeRoom, activeParticipant);
-        connectionGenerationByParticipant.set(activeParticipant.participantId, (activeGeneration ?? 0) + 1);
-        socketsByParticipant.delete(activeParticipant.participantId);
+        socketsByParticipant.delete(participantId);
         activeRoom = null;
         activeParticipant = null;
         activeGeneration = null;

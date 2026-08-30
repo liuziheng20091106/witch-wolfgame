@@ -183,10 +183,23 @@ try {
   assert.equal(afterStaleClose.room.drivers[1].kind, 'human', '旧连接超时不得把已恢复真人转为 AI');
 
   resumedGuest.socket.close();
-  const returnedGuest = client();
+  let returnedGuest = client();
   await returnedGuest.open();
   returnedGuest.send({ type: 'resume-room', roomCode: hostWelcome.room.roomCode, resumeToken });
-  const returnedWelcome = await returnedGuest.next((message) => message.type === 'welcome' && message.room.drivers[1].kind === 'human', '再次重连恢复真人驱动');
+  let returnedWelcome = await returnedGuest.next((message) => message.type === 'welcome' && message.room.drivers[1].kind === 'human', '再次重连恢复真人驱动');
+  returnedGuest.send({ type: 'leave-room' });
+  const racedLeave = await host.next((message) => message.type === 'room-state' && message.room.status === 'playing' && message.room.participants.find((participant) => participant.playerId === 1)?.connected === false && message.room.drivers[1].kind === 'ai', '断线后宽限期内离开转 AI');
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  const afterRacedLeave = [...host.messages].reverse().find((message) => message.type === 'room-state');
+  assert.equal(afterRacedLeave.room.hostParticipantId, hostWelcome.room.hostParticipantId, '过期接管定时器不得改变房主归属');
+  assert.equal(afterRacedLeave.room.participants.find((participant) => participant.playerId === 1)?.connected, false, '过期接管定时器不得恢复已离开的席位');
+  assert.equal(afterRacedLeave.room.drivers[1].kind, 'ai', '过期接管定时器不得覆盖离开后的 AI 驱动');
+  assert.notEqual(racedLeave, undefined);
+  returnedGuest.socket.close();
+  returnedGuest = client();
+  await returnedGuest.open();
+  returnedGuest.send({ type: 'resume-room', roomCode: hostWelcome.room.roomCode, resumeToken });
+  returnedWelcome = await returnedGuest.next((message) => message.type === 'welcome' && message.room.drivers[1].kind === 'human', '离开竞态后恢复真人驱动');
   await new Promise((resolve) => setTimeout(resolve, 220));
   const afterReconnectRace = [...host.messages].reverse().find((message) => message.type === 'room-state');
   assert.equal(afterReconnectRace.room.participants.find((participant) => participant.playerId === 1)?.connected, true, '断线宽限期间重连必须保持在线');
