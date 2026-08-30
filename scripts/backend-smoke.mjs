@@ -90,6 +90,7 @@ function validPayload() {
           day: 0,
           board: BOARD_DESCRIPTION,
           alivePlayers: players,
+          entityRoster: players,
           legalCandidates: [players[1]],
           allowAbstain: false,
           options: {},
@@ -338,7 +339,8 @@ try {
   const wrongSignature = createSignedHeaders('wrong-password', 'POST', '/internal/v1/chat/completions', internalBody);
   assert.equal((await postProxy(proxyPort, ca, clientCert, clientKey, internalBody, wrongSignature)).status, 401);
   const replayedSignature = createSignedHeaders('backend-smoke-long-random-password', 'POST', '/internal/v1/chat/completions', internalBody);
-  assert.equal((await postProxy(proxyPort, ca, clientCert, clientKey, internalBody, replayedSignature)).status, 200);
+  const replayedResponse = await postProxy(proxyPort, ca, clientCert, clientKey, internalBody, replayedSignature);
+  assert.equal(replayedResponse.status, 200);
   assert.equal((await postProxy(proxyPort, ca, clientCert, clientKey, internalBody, replayedSignature)).status, 401);
   assert.equal(upstreamRequests.length, 1);
   const valid = await postMain(mainPort, validPayload(), '203.0.113.9');
@@ -356,7 +358,7 @@ try {
   assert.equal(targetSkill.status, 200);
   const validCreatureVotePayload = validPayload();
   mutatePrompt(validCreatureVotePayload, (prompt) => {
-    prompt.alivePlayers.push({ playerId: 99, name: formatCreatureName(CHARACTER_CATALOG[3].name) });
+    prompt.entityRoster.push({ playerId: 99, name: formatCreatureName(CHARACTER_CATALOG[3].name) });
     prompt.publicVotes = [{ round: 1, voterPlayerId: 99, targetPlayerId: 1 }];
   });
   const validCreatureVote = await postMain(mainPort, validCreatureVotePayload, '203.0.113.27');
@@ -511,6 +513,10 @@ try {
     ['alive_players_unique', 'alivePlayers.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.alivePlayers[1].playerId = 0; })],
     ['legal_candidates_shape', 'legalCandidates', (payload) => mutatePrompt(payload, (prompt) => { prompt.legalCandidates = null; })],
     ['legal_candidates_unique', 'legalCandidates.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.legalCandidates = [prompt.alivePlayers[1], prompt.alivePlayers[1]]; })],
+    ['entity_roster_shape', 'entityRoster', (payload) => mutatePrompt(payload, (prompt) => { prompt.entityRoster = null; })],
+    ['entity_roster_unique', 'entityRoster.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.entityRoster[1].playerId = 0; })],
+    ['entity_roster_players', 'entityRoster.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.entityRoster[0].playerId = 13; })],
+    ['entity_roster_names', 'entityRoster.name', (payload) => mutatePrompt(payload, (prompt) => { prompt.entityRoster[1].name = CHARACTER_CATALOG[0].name; })],
     ['allow_abstain', 'allowAbstain', (payload) => mutatePrompt(payload, (prompt) => { prompt.allowAbstain = SENSITIVE_MARKER; })],
     ['options_shape', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = []; })],
     ['options_size', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = { value: 'x'.repeat(12_001) }; })],

@@ -41,6 +41,7 @@ const ACTION_KEYS = new Set(PROMPT_FIELD_KEYS.action);
 const ACTOR_KEYS = new Set(PROMPT_FIELD_KEYS.actor);
 const DECISION_TRAIT_KEYS = new Set(PROMPT_FIELD_KEYS.decisionTraits);
 const OBSERVED_PLAYER_KEYS = new Set(PROMPT_FIELD_KEYS.observedPlayer);
+const ENTITY_ROSTER_KEYS = new Set(PROMPT_FIELD_KEYS.entityRoster);
 const PRIVATE_KNOWLEDGE_KEYS = new Set(PROMPT_FIELD_KEYS.privateKnowledge);
 const PUBLIC_SKILL_KEYS = new Set(PROMPT_FIELD_KEYS.publicSkill);
 const FINAL_ROLE_KEYS = new Set(PROMPT_FIELD_KEYS.finalRole);
@@ -79,6 +80,12 @@ function validEntityName(playerId, name) {
 function validObservedPlayer(value) {
   return isObject(value)
     && hasOnlyKeys(value, OBSERVED_PLAYER_KEYS)
+    && validEntityId(value.playerId)
+    && validEntityName(value.playerId, value.name);
+}
+function validEntityRosterEntry(value) {
+  return isObject(value)
+    && hasOnlyKeys(value, ENTITY_ROSTER_KEYS)
     && validEntityId(value.playerId)
     && validEntityName(value.playerId, value.name);
 }
@@ -378,11 +385,26 @@ export function validateGamePrompt(messages) {
     || sortedPlayerIds.some((playerId, index) => playerId !== index)) {
     return invalidResult('public_skills_players', 'publicSkills.playerId');
   }
-  const promptEntityIds = new Set(prompt.publicSkills.map((skill) => skill.playerId));
-  if (prompt.alivePlayers.some((player) => player.playerId === CREATURE_ID)
-    || (Array.isArray(prompt.finalRoles) && prompt.finalRoles.some((role) => role.playerId === CREATURE_ID))) {
-    promptEntityIds.add(CREATURE_ID);
+  if (!Array.isArray(prompt.entityRoster)
+    || prompt.entityRoster.length < PROMPT_LIMITS.entityRosterMinItems
+    || prompt.entityRoster.length > PROMPT_LIMITS.entityRosterMaxItems
+    || !prompt.entityRoster.every(validEntityRosterEntry)) {
+    return invalidResult('entity_roster_shape', 'entityRoster');
   }
+  const entityRosterIds = prompt.entityRoster.map((entity) => entity.playerId);
+  if (new Set(entityRosterIds).size !== entityRosterIds.length) {
+    return invalidResult('entity_roster_unique', 'entityRoster.playerId');
+  }
+  const rosterPlayerIds = entityRosterIds.filter((playerId) => PLAYER_ID_VALUES.has(playerId)).sort((left, right) => left - right);
+  if (rosterPlayerIds.length !== sortedPlayerIds.length
+    || rosterPlayerIds.some((playerId, index) => playerId !== sortedPlayerIds[index])) {
+    return invalidResult('entity_roster_players', 'entityRoster.playerId');
+  }
+  const publicSkillNames = new Map(prompt.publicSkills.map((skill) => [skill.playerId, skill.name]));
+  if (prompt.entityRoster.some((entity) => entity.playerId !== CREATURE_ID && publicSkillNames.get(entity.playerId) !== entity.name)) {
+    return invalidResult('entity_roster_names', 'entityRoster.name');
+  }
+  const promptEntityIds = new Set(entityRosterIds);
   if (!Array.isArray(prompt.publicVotes)
     || prompt.publicVotes.length > PROMPT_LIMITS.publicVotesMaxItems
     || !prompt.publicVotes.every((vote) => validPublicVote(vote, promptEntityIds))) {

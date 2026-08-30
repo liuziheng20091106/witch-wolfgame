@@ -216,6 +216,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
   const character = characterById[actor.characterId];
   // 发言来源映射：每条发言必须标注"是谁说的"，否则 AI 只能靠内容猜发言者（曾导致把甲的发言安到乙头上）。
   const nameById = new Map<number, string>(observation.players.map((player) => [player.id, player.name]));
+  const entityRoster = observation.entityRoster ?? observation.players.map((player) => ({ id: player.id, name: player.name }));
   const speechWithAuthor = (event: { displayAuthorPlayerId: number | null; actorPlayerId: number | null; text: string }): string => {
     const authorId = event.displayAuthorPlayerId ?? event.actorPlayerId;
     let authorName = '未知';
@@ -331,6 +332,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     day: observation.day,
     board: observation.board,
     alivePlayers: observation.players.filter((player) => player.alive).map((player) => ({ playerId: player.id, name: player.name })),
+    entityRoster: entityRoster.map((entity) => ({ playerId: entity.id, name: entity.name })),
     legalCandidates,
     allowAbstain: pendingDecision.allowAbstain,
     options: pendingDecision.options,

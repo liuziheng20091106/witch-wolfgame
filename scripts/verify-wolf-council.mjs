@@ -213,7 +213,7 @@ try {
   const finalChannelPayload = JSON.parse(finalChannelPrompt[1].content);
   assert.deepEqual(validateGamePrompt(finalChannelPrompt), { ok: true }, '最终狼队频道事件提示必须通过契约');
   assert.equal(
-    finalChannelPayload.privateEvents.some((text) => text.startsWith('【狼队共享记录】') && text.includes('狼队决定袭击')),
+    finalChannelPayload.privateEvents.some((text) => text.startsWith('【狼队共享记录；受众：') && text.includes('狼队决定袭击')),
     true,
     '最终狼队频道事件必须标记为狼队共享记录',
   );
