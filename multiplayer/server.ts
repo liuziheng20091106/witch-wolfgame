@@ -113,6 +113,7 @@ const connectionGenerationByParticipant = new Map<string, number>();
 const takeoverTimers = new Map<string, NodeJS.Timeout>();
 let connectionCount = 0;
 let persistChain = Promise.resolve();
+let stateLoadError: string | null = null;
 let shuttingDown = false;
 const connectionsByAddress = new Map<string, number>();
 const createRatesByAddress = new Map<string, RateWindow>();
@@ -186,6 +187,7 @@ function broadcast(room: Room): void {
 }
 
 function persistRooms(force = false): Promise<void> {
+  if (stateLoadError !== null) return Promise.resolve();
   if (shuttingDown && !force) return persistChain;
   persistChain = persistChain.catch((error) => {
     console.error(JSON.stringify({ event: 'multiplayer_persist_error', message: error instanceof Error ? error.message : String(error) }));
@@ -208,24 +210,36 @@ async function loadRooms(): Promise<void> {
     raw = JSON.parse(await readFile(STATE_FILE, 'utf8'));
   } catch (error) {
     const code = error instanceof Error && 'code' in error ? String(error.code) : '';
-    if (code !== 'ENOENT') console.error(JSON.stringify({ event: 'multiplayer_state_load_error', message: error instanceof Error ? error.message : String(error) }));
+    if (code === 'ENOENT') return;
+    stateLoadError = error instanceof Error ? error.message : String(error);
+    console.error(JSON.stringify({ event: 'multiplayer_state_load_error', message: stateLoadError }));
     return;
   }
   if (!Array.isArray(raw)) {
-    console.error(JSON.stringify({ event: 'multiplayer_state_load_error', message: '持久化状态必须是房间数组' }));
+    stateLoadError = '持久化状态必须是房间数组';
+    console.error(JSON.stringify({ event: 'multiplayer_state_load_error', message: stateLoadError }));
     return;
   }
   const now = Date.now();
+  const loadedRooms: Room[] = [];
   for (const candidate of raw) {
     const parsed = persistedRoomSchema.safeParse(candidate);
     if (!parsed.success) {
       const roomCode = typeof candidate === 'object' && candidate !== null && 'roomCode' in candidate ? String(candidate.roomCode) : null;
+      stateLoadError = '持久化状态包含无效房间';
       console.error(JSON.stringify({ event: 'multiplayer_room_discarded', roomCode, message: parsed.error.issues[0]?.message ?? '未知结构错误' }));
       continue;
     }
     const room = parsed.data as Room;
     if (now - room.updatedAt > ROOM_IDLE_MS) continue;
     room.participants.forEach((participant) => { participant.connected = false; });
+    loadedRooms.push(room);
+  }
+  if (stateLoadError !== null) {
+    console.error(JSON.stringify({ event: 'multiplayer_state_load_error', message: stateLoadError }));
+    return;
+  }
+  for (const room of loadedRooms) {
     rooms.set(room.roomCode, room);
     if (room.status === 'playing') {
       for (const participant of room.participants) {
@@ -452,8 +466,9 @@ function consumeRateLimit(rates: Map<string, RateWindow>, key: string, limit: nu
 await loadRooms();
 const httpServer = createServer((request, response) => {
   if (request.url === '/healthz') {
-    response.writeHead(200, { 'Content-Type': 'application/json' });
-    response.end(JSON.stringify({ ok: true, rooms: rooms.size, connections: connectionCount }));
+    const healthy = stateLoadError === null;
+    response.writeHead(healthy ? 200 : 503, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ ok: healthy, rooms: rooms.size, connections: connectionCount, ...(healthy ? {} : { error: 'state_load_failed' }) }));
     return;
   }
   response.writeHead(404, { 'Content-Type': 'application/json' });
@@ -461,6 +476,11 @@ const httpServer = createServer((request, response) => {
 });
 const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
 httpServer.on('upgrade', (request, socket, head) => {
+  if (stateLoadError !== null) {
+    socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
+    socket.destroy();
+    return;
+  }
   const origin = request.headers.origin;
   if (typeof origin !== 'string' || !ALLOWED_ORIGINS.has(origin)) {
     socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');

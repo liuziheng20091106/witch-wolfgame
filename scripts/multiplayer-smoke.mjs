@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { request } from 'node:http';
 import { spawn } from 'node:child_process';
 import { WebSocket } from 'ws';
 
@@ -270,11 +271,9 @@ try {
   const endedRoom = structuredClone(validRoom);
   endedRoom.roomCode = 'END234';
   endedRoom.status = 'ended';
-  await writeFile(stateFile, JSON.stringify([validRoom, endedRoom, { roomCode: 'BAD234' }]), 'utf8');
+  await writeFile(stateFile, JSON.stringify([validRoom, endedRoom]), 'utf8');
   const reloadPort = port + 1;
   const reloaded = startServer(reloadPort);
-  let reloadErrors = '';
-  reloaded.stderr.on('data', (chunk) => { reloadErrors += chunk.toString(); });
   await waitReady(reloaded);
   const reconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`, { origin: 'http://127.0.0.1:5173' });
   const reloadMessages = [];
@@ -351,18 +350,40 @@ try {
   await new Promise((resolve) => broken.once('exit', resolve));
   assert.equal(restoredEnded.type, 'welcome');
   assert.equal(restoredEnded.room.status, 'ended');
-  assert.match(reloadErrors, /multiplayer_room_discarded/);
   reconnect.close();
   endedReconnect.close();
   reloaded.kill('SIGTERM');
   await new Promise((resolve) => reloaded.once('exit', resolve));
 
   await writeFile(stateFile, '{ damaged', 'utf8');
+  const damagedBefore = await readFile(stateFile, 'utf8');
   const damaged = startServer(port + 2);
   let damagedErrors = '';
   damaged.stderr.on('data', (chunk) => { damagedErrors += chunk.toString(); });
   await waitReady(damaged);
   assert.match(damagedErrors, /multiplayer_state_load_error/);
+  const healthStatus = await new Promise((resolve, reject) => {
+    const health = request({ hostname: '127.0.0.1', port: port + 2, path: '/healthz' }, (response) => {
+      response.resume();
+      resolve(response.statusCode);
+    });
+    health.once('error', reject);
+    health.end();
+  });
+  assert.equal(healthStatus, 503, '状态加载失败时健康检查必须失败');
+  const blocked = new WebSocket(`ws://127.0.0.1:${port + 2}/multiplayer`, { origin: 'http://127.0.0.1:5173' });
+  blocked.on('error', () => {});
+  const blockedStatus = await new Promise((resolve, reject) => {
+    blocked.once('unexpected-response', (_request, response) => {
+      response.resume();
+      resolve(response.statusCode);
+    });
+    setTimeout(() => reject(new Error('损坏状态下 WebSocket 写入入口未被阻断')), 5000).unref();
+  });
+  assert.equal(blockedStatus, 503, '状态加载失败时必须拒绝 WebSocket 操作');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(await readFile(stateFile, 'utf8'), damagedBefore, '状态加载失败不得覆盖原始损坏文件');
+  assert.equal(damaged.exitCode, null, '状态加载失败不得终止多人服务');
   damaged.kill('SIGTERM');
   await new Promise((resolve) => damaged.once('exit', resolve));
   console.log('PASS 多人房间、隐私、重连、持久化校验与混合驱动验证全部通过');
