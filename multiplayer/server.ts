@@ -25,6 +25,7 @@ import {
 const PORT = Number(process.env.MAJO_MULTIPLAYER_PORT ?? 34024);
 const HOST = process.env.MAJO_MULTIPLAYER_HOST ?? '127.0.0.1';
 const STATE_FILE = resolve(process.env.MAJO_MULTIPLAYER_STATE ?? '.runtime/multiplayer-rooms.json');
+const ALLOWED_ORIGINS = new Set((process.env.MAJO_MULTIPLAYER_ALLOWED_ORIGINS ?? 'http://127.0.0.1:5173,http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean));
 const MAX_ROOMS = 200;
 const MAX_CONNECTIONS = 500;
 const MAX_MESSAGE_BYTES = 32 * 1024;
@@ -430,6 +431,12 @@ const httpServer = createServer((request, response) => {
 });
 const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
 httpServer.on('upgrade', (request, socket, head) => {
+  const origin = request.headers.origin;
+  if (typeof origin !== 'string' || !ALLOWED_ORIGINS.has(origin)) {
+    socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+    socket.destroy();
+    return;
+  }
   const address = request.socket.remoteAddress ?? 'unknown';
   const addressConnections = connectionsByAddress.get(address) ?? 0;
   if (request.url !== '/multiplayer' || connectionCount >= MAX_CONNECTIONS || addressConnections >= MAX_CONNECTIONS_PER_ADDRESS) {

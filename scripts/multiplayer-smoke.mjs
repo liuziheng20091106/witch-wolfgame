@@ -12,7 +12,7 @@ const stateFile = join(temp, 'rooms.json');
 const projectRoot = new URL('..', import.meta.url);
 function startServer(testPort = port, testStateFile = stateFile) {
   return spawn(process.execPath, [join('node_modules', 'tsx', 'dist', 'cli.mjs'), 'multiplayer/server.ts'], {
-    env: { ...process.env, MAJO_MULTIPLAYER_PORT: String(testPort), MAJO_MULTIPLAYER_HOST: '127.0.0.1', MAJO_MULTIPLAYER_STATE: testStateFile, MAJO_MULTIPLAYER_DISCONNECT_GRACE_MS: '150' },
+    env: { ...process.env, MAJO_MULTIPLAYER_PORT: String(testPort), MAJO_MULTIPLAYER_HOST: '127.0.0.1', MAJO_MULTIPLAYER_STATE: testStateFile, MAJO_MULTIPLAYER_DISCONNECT_GRACE_MS: '150', MAJO_MULTIPLAYER_ALLOWED_ORIGINS: 'http://127.0.0.1:5173' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -28,7 +28,7 @@ async function waitReady(process = child) {
 }
 
 function client() {
-  const socket = new WebSocket(`ws://127.0.0.1:${port}/multiplayer`);
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/multiplayer`, { origin: 'http://127.0.0.1:5173' });
   const messages = [];
   const waiters = [];
   socket.on('message', (data) => {
@@ -111,6 +111,16 @@ try {
   const invalidResumeError = await invalidResume.next((message) => message.type === 'error', '无效恢复凭据拒绝');
   assert.equal(invalidResumeError.code, 'resume_invalid');
   invalidResume.socket.close();
+  const denied = new WebSocket(`ws://127.0.0.1:${port}/multiplayer`, { origin: 'https://evil.example' });
+  denied.on('error', () => {});
+  const deniedStatus = await new Promise((resolve, reject) => {
+    denied.once('unexpected-response', (_request, response) => {
+      response.resume();
+      resolve(response.statusCode);
+    });
+    setTimeout(() => reject(new Error('未允许的 WebSocket Origin 未被拒绝')), 5000).unref();
+  });
+  assert.equal(deniedStatus, 403, '未允许的 WebSocket Origin 必须在升级阶段被拒绝');
   const oversized = client();
   oversized.socket.on('error', () => {});
   await oversized.open();
@@ -231,7 +241,7 @@ try {
   let reloadErrors = '';
   reloaded.stderr.on('data', (chunk) => { reloadErrors += chunk.toString(); });
   await waitReady(reloaded);
-  const reconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`);
+  const reconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`, { origin: 'http://127.0.0.1:5173' });
   const reloadMessages = [];
   reconnect.on('message', (data) => { reloadMessages.push(JSON.parse(data.toString())); });
   await new Promise((resolve, reject) => { reconnect.once('open', resolve); reconnect.once('error', reject); });
@@ -251,7 +261,7 @@ try {
   assert.equal(restored.welcome.type, 'welcome');
   assert.equal(restored.takenOver.room.drivers[restartPlayerId].kind, 'ai');
   assert.equal(restored.progressed.type, 'room-state');
-  const endedReconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`);
+  const endedReconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`, { origin: 'http://127.0.0.1:5173' });
   await new Promise((resolve, reject) => { endedReconnect.once('open', resolve); endedReconnect.once('error', reject); });
   endedReconnect.send(JSON.stringify({ type: 'resume-room', roomCode: endedRoom.roomCode, resumeToken: endedRoom.participants[0].resumeToken }));
   const restoredEnded = await new Promise((resolve, reject) => {
