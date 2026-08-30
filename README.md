@@ -61,6 +61,8 @@ npm run test:multiplayer
 
 生产文件输出到 `dist/`。Vite 使用相对资源路径，可部署到静态站点或子路径。公益服务使用独立 API 域名，避免 Cloudflare 静态 Worker 对同域 `POST /api/*` 返回 405；也可在构建时通过 `VITE_MAIN_BACKEND_ENDPOINT` 覆盖完整入口。
 
+构建产物是可安装 PWA：首次在线加载完成后，应用外壳会缓存到本机，可离线打开并继续本地对局。应用没有 URL 路由；从部署范围内的深层地址离线启动时，Service Worker 会回到应用根地址。部署新版本后，Service Worker 在后台下载完整的新应用外壳；页面提示“新版本已下载”后，由用户点击更新并重启，避免进行中的对局被强制刷新。每次发布必须整体替换 `dist/`，并保留 HTTPS（本机开发可使用 `localhost`）；不要把旧版 `sw.js` 设置为不可重新验证的长期缓存。
+
 推送与 `package.json` 版本一致的 `vX.Y.Z` tag 后，GitHub Actions 会创建对应 Release，并上传 `majo-wolf-vX.Y.Z-dist.zip`（静态站点）及 `majo-wolf-vX.Y.Z-backend.zip`（`proxy/`、`shared/`、`server/` 三合一后端源码）。发布包只包含该 tag 已跟踪的后端文件，不包含 `.env`、证书或其他本地文件。
 
 ## 主后端与代理服务
