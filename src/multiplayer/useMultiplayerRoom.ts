@@ -83,7 +83,8 @@ export function useMultiplayerRoom(): MultiplayerController {
     });
     socket.addEventListener('message', handleMessage);
     socket.addEventListener('close', () => {
-      if (socketRef.current === socket) socketRef.current = null;
+      if (socketRef.current !== socket) return;
+      socketRef.current = null;
       setConnected(false);
       setConnecting(false);
     });

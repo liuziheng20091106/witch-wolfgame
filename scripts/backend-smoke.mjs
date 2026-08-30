@@ -294,6 +294,13 @@ try {
   });
   const validCreatureVote = await postMain(mainPort, validCreatureVotePayload, '203.0.113.27');
   assert.equal(validCreatureVote.status, 200);
+  const validHistoricalCreatureVotePayload = validPayload();
+  mutatePrompt(validHistoricalCreatureVotePayload, (prompt) => {
+    prompt.publicVotes = [{ round: 1, voterPlayerId: 99, targetPlayerId: 1 }];
+  });
+  const validHistoricalCreatureVote = await postMain(mainPort, validHistoricalCreatureVotePayload, '203.0.113.28');
+  assert.equal(validHistoricalCreatureVote.status, 200);
+  assert.equal((await validHistoricalCreatureVote.json()).choices[0].message.content, '{"targetPlayerId":1}');
   assert.equal((await validCreatureVote.json()).choices[0].message.content, '{"targetPlayerId":1}');
 
   upstreamMode = 'wolf-council';
@@ -448,9 +455,7 @@ try {
     ['options_shape', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = []; })],
     ['options_size', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = { value: 'x'.repeat(12_001) }; })],
     ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = null; })],
-    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 99, targetPlayerId: 2 }]; })],
     ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 100, targetPlayerId: 2 }]; })],
-    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 99 }]; })],
     ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 100 }]; })],
     ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 3, voterPlayerId: 1, targetPlayerId: 2 }]; })],
     ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 1 }]; })],

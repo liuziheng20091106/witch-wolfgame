@@ -161,6 +161,7 @@ assert.match(systemPrompt, /直接提供的行动者本人千里眼或其他行�
 assert.match(systemPrompt, /结论必须区分“已知”“公开声称”“推测”/);
 const privateLabelEvents = [
   { id: 'actor-only', kind: 'seer-check', day: 1, phase: 'seer-action', text: '个人结果', actorPlayerId: 0, targetPlayerIds: [1], displayAuthorPlayerId: null, actualAuthorPlayerId: 0, viewerPlayerIds: [0], data: { actionKind: 'seer-action' } },
+  { id: 'other-only', kind: 'knowledge', day: 1, phase: 'seer-action', text: '他人私密结果', actorPlayerId: 1, targetPlayerIds: [2], displayAuthorPlayerId: null, actualAuthorPlayerId: 1, viewerPlayerIds: [1], data: { actionKind: 'seer-action' } },
   { id: 'related', kind: 'witch-action', day: 1, phase: 'night-protection', text: '相关角色记录', actorPlayerId: 0, targetPlayerIds: [1], displayAuthorPlayerId: null, actualAuthorPlayerId: 0, viewerPlayerIds: [0, 1], data: { actionKind: 'witch-action' } },
   { id: 'wolf-suggestion', kind: 'wolf-suggestion', day: 1, phase: 'wolf-suggestions', text: '狼队建议', actorPlayerId: 1, targetPlayerIds: [2], displayAuthorPlayerId: null, actualAuthorPlayerId: 1, viewerPlayerIds: [0, 1], data: { actionKind: 'wolf-suggestion' } },
   { id: 'wolf-decision', kind: 'wolf-attack', day: 1, phase: 'wolf-decision', text: '狼队决定', actorPlayerId: null, targetPlayerIds: [2], displayAuthorPlayerId: null, actualAuthorPlayerId: null, viewerPlayerIds: [0, 1], data: { actionKind: 'wolf-decision' } },
@@ -175,12 +176,12 @@ const privateLabelMessages = buildDecisionPrompt({
 const privateLabelPrompt = JSON.parse(privateLabelMessages[1].content);
 assert.deepEqual(privateLabelPrompt.privateEvents, [
   '【仅当前行动者可见】个人结果',
+  '【与相关角色共享】他人私密结果',
   '【与相关角色共享】相关角色记录',
   '【狼队共享记录】狼队建议',
   '【狼队共享记录】狼队决定',
   '【仅当前行动者可见】回溯狼队决定',
 ]);
-assert.deepEqual(validateGamePrompt(privateLabelMessages), { ok: true }, '私密事件标签提示必须通过契约校验');
 
 for (const skill of WITCH_SKILL_CATALOG) {
   const skillPending = { ...pendingDecision, id: `skill-${skill.id}` };

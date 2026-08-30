@@ -252,7 +252,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     recentPublic = [];
   }
   const formatPrivateEvent = (event: GameObservation['privateEvents'][number]): string => {
-    if (event.viewerPlayerIds.length === 1) {
+    if (event.viewerPlayerIds.length === 1 && event.viewerPlayerIds[0] === pendingDecision.actorId) {
       return `【仅当前行动者可见】${event.text}`;
     }
     if (event.data.actionKind === 'wolf-suggestion' || event.data.actionKind === 'wolf-decision') {

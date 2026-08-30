@@ -379,10 +379,10 @@ export function validateGamePrompt(messages) {
     return invalidResult('public_skills_players', 'publicSkills.playerId');
   }
   const promptEntityIds = new Set(prompt.publicSkills.map((skill) => skill.playerId));
-  for (const player of prompt.alivePlayers) {
-    if (player.playerId === CREATURE_ID) {
-      promptEntityIds.add(CREATURE_ID);
-    }
+  const hasCreatureVote = Array.isArray(prompt.publicVotes)
+    && prompt.publicVotes.some((vote) => vote.voterPlayerId === CREATURE_ID || vote.targetPlayerId === CREATURE_ID);
+  if (prompt.alivePlayers.some((player) => player.playerId === CREATURE_ID) || hasCreatureVote) {
+    promptEntityIds.add(CREATURE_ID);
   }
   if (!Array.isArray(prompt.publicVotes)
     || prompt.publicVotes.length > PROMPT_LIMITS.publicVotesMaxItems
