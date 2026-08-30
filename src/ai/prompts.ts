@@ -216,6 +216,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
   const character = characterById[actor.characterId];
   // 发言来源映射：每条发言必须标注"是谁说的"，否则 AI 只能靠内容猜发言者（曾导致把甲的发言安到乙头上）。
   const nameById = new Map<number, string>(observation.players.map((player) => [player.id, player.name]));
+  const entityRoster = observation.entityRoster ?? observation.players.map((player) => ({ id: player.id, name: player.name }));
   const speechWithAuthor = (event: { displayAuthorPlayerId: number | null; actorPlayerId: number | null; text: string }): string => {
     const authorId = event.displayAuthorPlayerId ?? event.actorPlayerId;
     let authorName = '未知';
@@ -251,10 +252,28 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
   if (isPostGame) {
     recentPublic = [];
   }
+  const audienceLabel = (viewerPlayerIds: number[]): string => {
+    const audience = viewerPlayerIds.map((playerId) => {
+      const name = nameById.get(playerId);
+      if (playerId === CREATURE_ID) return name ? `99号造物（${name}）` : '99号造物';
+      return name ? `${playerId + 1}号（${name}）` : `${playerId + 1}号`;
+    });
+    return audience.length > 0 ? audience.join('、') : '未列明';
+  };
+  const formatPrivateEvent = (event: GameObservation['privateEvents'][number]): string => {
+    const audience = audienceLabel(event.viewerPlayerIds);
+    if (event.viewerPlayerIds.length === 1 && event.viewerPlayerIds[0] === pendingDecision.actorId) {
+      return `【仅当前行动者可见；受众：${audience}】${event.text}`;
+    }
+    if (event.data.actionKind === 'wolf-suggestion' || event.data.actionKind === 'wolf-decision') {
+      return `【狼队共享记录；受众：${audience}】${event.text}`;
+    }
+    return `【相关角色共享；受众：${audience}】${event.text}`;
+  };
   let privateEvents = observation.privateEvents
     .filter((event) => event.day !== observation.day || event.data.actionKind !== 'wolf-suggestion')
     .slice(-8)
-    .map((event) => event.text);
+    .map(formatPrivateEvent);
   if (isPostGame) {
     privateEvents = [];
   }
@@ -292,6 +311,11 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     const name = player?.name ?? `${playerId + 1}号`;
     return { playerId, name };
   });
+  const publicVotes = observation.currentVotes.map(({ round, voterPlayerId, targetPlayerId }) => ({
+    round,
+    voterPlayerId,
+    targetPlayerId,
+  }));
   const systemContent = buildGameSystemPrompt(pendingDecision.schemaKey);
 
   const promptPayload: Record<string, unknown> = {
@@ -308,9 +332,11 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     day: observation.day,
     board: observation.board,
     alivePlayers: observation.players.filter((player) => player.alive).map((player) => ({ playerId: player.id, name: player.name })),
+    entityRoster: entityRoster.map((entity) => ({ playerId: entity.id, name: entity.name })),
     legalCandidates,
     allowAbstain: pendingDecision.allowAbstain,
     options: pendingDecision.options,
+    publicVotes,
     currentDaySpeeches,
     historicalSpeeches,
     recentPublic,

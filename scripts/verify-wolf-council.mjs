@@ -206,6 +206,34 @@ try {
   const finalTarget = finalPending.candidates[0];
   assert.notEqual(finalTarget, undefined);
   spectator = submit(spectator, { targetPlayerId: finalTarget });
+  const finalChannelPrompt = buildDecisionPrompt({
+    observation: selectObservation(spectator, { kind: 'player', playerId: finalPending.actorId }),
+    pendingDecision: finalPending,
+  });
+  const finalChannelPayload = JSON.parse(finalChannelPrompt[1].content);
+  assert.deepEqual(validateGamePrompt(finalChannelPrompt), { ok: true }, '最终狼队频道事件提示必须通过契约');
+  assert.equal(
+    finalChannelPayload.privateEvents.some((text) => text.startsWith('【狼队共享记录；受众：') && text.includes('狼队决定袭击')),
+    true,
+    '最终狼队频道事件必须标记为狼队共享记录',
+  );
+  for (const wolfId of spectatorRealWolves) {
+    const wolfPrompt = buildDecisionPrompt({
+      observation: selectObservation(spectator, { kind: 'player', playerId: wolfId }),
+      pendingDecision: finalPending,
+    });
+    const wolfPayload = JSON.parse(wolfPrompt[1].content);
+    assert.equal(wolfPayload.privateEvents.some((text) => text.includes('狼队决定袭击')), true, `狼人 ${wolfId} 应看到最终狼刀记录`);
+  }
+  const nonWolfAfterAttack = getAlivePlayerIds(spectator).find((playerId) => !spectatorRealWolves.includes(playerId));
+  if (nonWolfAfterAttack !== undefined) {
+    const nonWolfPrompt = buildDecisionPrompt({
+      observation: selectObservation(spectator, { kind: 'player', playerId: nonWolfAfterAttack }),
+      pendingDecision: finalPending,
+    });
+    const nonWolfPayload = JSON.parse(nonWolfPrompt[1].content);
+    assert.equal(nonWolfPayload.privateEvents.some((text) => text.includes('狼队决定袭击')), false, '非狼人不得看到最终狼刀记录');
+  }
   const attackEvent = spectator.privateEvents.findLast((event) => event.data.actionKind === 'wolf-decision');
   assert.notEqual(attackEvent, undefined);
   assert.equal(attackEvent.actorPlayerId, null, '最终狼刀事件不得暴露决策狼');

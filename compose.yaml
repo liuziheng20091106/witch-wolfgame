@@ -38,7 +38,9 @@ services:
     environment:
       MAJO_RESTART_SIGNAL: /app/.runtime/restart-token
       MAJO_MAIN_CONFIG: /app/server/main.config.json
+      MAJO_MULTIPLAYER_URL: ${MAJO_MULTIPLAYER_URL:-ws://127.0.0.1:34024/multiplayer}
     volumes:
+      - ./node_modules:/app/node_modules:ro
       - ./server:/app/server:rw
       - ./shared:/app/shared:rw
       - ./certs/ca.crt:/app/certs/ca.crt:ro

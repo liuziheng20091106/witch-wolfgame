@@ -146,6 +146,10 @@ export function selectObservation(
       isSelf: false,
     });
   }
+  const entityRoster = [
+    ...state.players.map((player) => ({ id: player.id, name: characterById[player.characterId].name })),
+    ...state.creatures.map((creature) => ({ id: creature.id, name: formatCreatureName(getName(state, creature.ownerPlayerId)) })),
+  ];
 
   const publicEvents = omniscient
     ? state.publicEvents
@@ -169,6 +173,7 @@ export function selectObservation(
     viewerPlayerId,
     omniscient,
     players,
+    entityRoster,
     publicEvents,
     privateEvents,
     archivedTimelines: omniscient ? state.archivedTimelines : [],

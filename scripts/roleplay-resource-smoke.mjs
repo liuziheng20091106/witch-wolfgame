@@ -344,7 +344,7 @@ const contextPrompt = buildDecisionPrompt({
 }, 'free');
 const contextPayload = JSON.parse(contextPrompt[1].content);
 assert.equal(contextPayload.currentDaySpeeches.length, 2, '当前日发言必须完整保留');
-assert.equal(contextPayload.historicalSpeeches.length, 6, '历史发言只保留最近六条');
+assert.equal(contextPayload.historicalSpeeches.length, 8, '历史发言保留可用的近期社会决策上下文');
 assert.equal(contextPayload.recentPublic.includes('当前公开技能事件'), true, '近期非发言事件必须保留');
 assert.equal(contextPayload.recentPublic.some((entry) => entry.includes('历史发言')), false, 'recentPublic 不得重复携带发言');
 

@@ -8,6 +8,7 @@
 
 - 6–14 人可配置阵容：可随机或手动选择出庭角色，支持全自动 AI 观战及用户加入一个席位
 - 仅狼队可见的夜间文字议事与匿名团队袭击、预言家查验、女巫解药/毒药、公开顺序投票和一次平票重投
+- AI 决策提示携带已揭晓的结构化投票记录 `publicVotes`（含弃权，不含秘密或未揭晓票）；私密事件明确标注「仅当前行动者可见」「狼队共享记录」「与相关角色共享」，模型不得扩大事实受众或混淆已知、公开声称与推测
 - 对局结束后可保留当前参赛角色与玩家席位，确定性重新分配职业并开始下一轮连续审判
 - 14 项完整魔女技：魔女杀手、死亡回溯、洗脑、操控液体、怪力、漂浮、治愈、千里眼、视线诱导、灵魂交换、幻视、点火、声音模仿、魔女因子回收
 - 深度机制：诺亚的液态造物（独立意志/可毒主人）、漂浮隐匿（免疫追溯）、千里眼直播（观看者暴露职业）
@@ -28,16 +29,18 @@ npm install
 npm run dev
 ```
 
-开发服务器默认使用 `http://127.0.0.1:5173/`。开发时可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
+开发服务器默认使用 `http://127.0.0.1:5173/`。开发时 Vite 将 `/multiplayer` 转发到主后端 `http://127.0.0.1:34022/multiplayer`；主后端再转发到多人服务。公益 AI 可用 `VITE_MAIN_BACKEND_ENDPOINT=http://127.0.0.1:34022/api/ai/chat/completions` 指向主后端。用户主动选择的自定义服务仍由浏览器直连。
 
-多人服务默认监听 `127.0.0.1:34024`，开发时 Vite 会代理 `/multiplayer`：
-多人联机支持房主配置 **6–14 席**；房间人数会贯穿协议校验、持久化状态、真人/AI 驱动数组和 `createGame`。未被真人占用的席位由确定性 AI 驱动。
+多人服务默认监听 `127.0.0.1:34024`，主后端通过 `MAJO_MULTIPLAYER_URL=ws://...:34024/multiplayer` 转发 WebSocket：
 
 ```bash
 npm run server:multiplayer
 ```
 
-公网部署应在反向代理上把 `/multiplayer` 升级为 WebSocket，并用 `VITE_MULTIPLAYER_ENDPOINT=wss://example.com/multiplayer` 覆盖前端地址；同时必须设置 `MAJO_MULTIPLAYER_ALLOWED_ORIGINS=https://example.com`，多个来源用逗号分隔，服务只接受白名单中的精确 Origin，不支持通配符。房间状态原子写入 `.runtime/multiplayer-rooms.json`；恢复令牌只保存在参与者浏览器和服务端状态文件中。
+生产环境前端默认将多人连接发送到公益主后端 `wss://freeapi.majowolf.tkcloud.online/multiplayer`；可用 `VITE_MULTIPLAYER_ENDPOINT` 覆盖。主后端必须把 `MAJO_MULTIPLAYER_URL` 配置为其运行环境可访问的多人服务地址。多人服务的 `MAJO_MULTIPLAYER_ALLOWED_ORIGINS` 仍需配置为前端的精确来源。
+多人联机支持房主配置 **6–14 席**；房间人数会贯穿协议校验、持久化状态、真人/AI 驱动数组和 `createGame`。未被真人占用的席位由确定性 AI 驱动。
+
+公网反向代理只需把 `/multiplayer` WebSocket 升级请求转发到主后端；主后端再转发到多人服务。房间状态原子写入 `.runtime/multiplayer-rooms.json`；恢复令牌只保存在参与者浏览器和服务端状态文件中。
 本地 OpenAI 兼容代理默认监听 `127.0.0.1:34025`，并允许 Vite 默认的 `http://127.0.0.1:5173` 与 `http://localhost:5173` 来源。自定义开发端口时，用逗号分隔的 `LOCAL_AI_ALLOWED_ORIGINS` 显式配置允许来源后运行 `npm run server:local-ai`。代理仅从 OMP 配置或环境变量读取上游凭据。
 
 
@@ -67,6 +70,7 @@ npm run test:multiplayer
 
 ## 主后端与代理服务
 
+- 公益请求中的 `messages[1]` 是严格校验的游戏提示词：官方客户端只把已经揭晓的 `{ round, voterPlayerId, targetPlayerId }` 记录放入 `publicVotes`（含弃权，不含秘密或未揭晓票）；后端校验字段、当前提示中的实体、轮次、自指和同轮重复投票者，最多为两轮各实体上限
 主后端接受浏览器公益请求，校验客户端版本、固定游戏提示词协议和 JSON 响应要求，并按客户端 IP 执行滑动窗口与并发限制。代理节点保存服务商、模型和 API Key 池；主后端可配置多个代理节点并在网络错误或 5xx 时切换。代理向服务商发送 `stream: true`，按 SSE 数据块接收并聚合为现有 Chat Completions JSON 后再返回主后端，因此浏览器协议不变。代理节点默认监听 `34023`，主后端与代理之间使用 TLS 1.3 双向证书认证及带时间戳、nonce、请求体摘要的 HMAC-SHA256 连接密码。
 
 本地直接运行：
@@ -80,14 +84,17 @@ npm run server:proxy
 npm run server:main
 ```
 
-Docker 部署使用官方 `node:22-alpine` 镜像，不构建自定义镜像。`server/`、`proxy/` 和 `.runtime/` 以可读写绑定卷挂载到容器，证书目录只读挂载；代码更新后只需重启进程，无需重新构建镜像：
+Docker 部署使用官方 `node:22-alpine` 镜像，不构建自定义镜像。`server/`、`proxy/`、`multiplayer/` 和 `.runtime/` 以绑定卷挂载到容器，证书目录只读挂载；主后端和多人服务依赖 `ws`、`zod`、`tsx`，首次部署或依赖变更后先安装锁定依赖：
 
 ```bash
+npm ci
 copy deploy.main.env.example deploy.main.env
 copy deploy.proxy.env.example deploy.proxy.env
 docker compose up -d
 docker compose ps
 ```
+
+代码更新后只需重启进程，无需重新构建镜像。
 
 `deploy.main.env` 只保存主后端所需的连接密码；`deploy.proxy.env` 额外保存独立的 `MAJO_UPDATE_PASS` 和 `providers.json` 引用的 API Key 环境变量。两个真实文件均被 Git 忽略，且 `MAJO_PROXY_PASSWORD_PRIMARY` 必须一致。主后端和代理容器共享代码卷与 `.runtime/restart-token`：更新事务全部成功后，代理写入重启信号；两个服务都会停止并由 Compose 的 `restart: unless-stopped` 使用原镜像重新启动，从而避免协议模块版本分裂。
 

@@ -8,6 +8,7 @@ interface Window {
 
 interface ImportMetaEnv {
   readonly VITE_MAIN_BACKEND_ENDPOINT?: string;
+  readonly VITE_MULTIPLAYER_ENDPOINT?: string;
 }
 
 interface ImportMeta {

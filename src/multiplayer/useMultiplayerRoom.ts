@@ -31,8 +31,14 @@ export interface MultiplayerController {
 function multiplayerUrl(): string {
   const configured = import.meta.env.VITE_MULTIPLAYER_ENDPOINT?.trim();
   if (configured) return configured;
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/multiplayer`;
+  if (import.meta.env.DEV) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/multiplayer`;
+  }
+  const backendEndpoint = import.meta.env.VITE_MAIN_BACKEND_ENDPOINT?.trim()
+    || 'https://freeapi.majowolf.tkcloud.online/api/ai/chat/completions';
+  const backendUrl = new URL(backendEndpoint, window.location.origin);
+  return `${backendUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${backendUrl.host}/multiplayer`;
 }
 
 export function useMultiplayerRoom(): MultiplayerController {
@@ -83,7 +89,8 @@ export function useMultiplayerRoom(): MultiplayerController {
     });
     socket.addEventListener('message', handleMessage);
     socket.addEventListener('close', () => {
-      if (socketRef.current === socket) socketRef.current = null;
+      if (socketRef.current !== socket) return;
+      socketRef.current = null;
       setConnected(false);
       setConnecting(false);
     });

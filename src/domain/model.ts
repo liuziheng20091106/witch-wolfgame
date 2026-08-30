@@ -297,6 +297,10 @@ export interface ObservedPlayer {
   skillId: WitchSkillId | null;
   isSelf: boolean;
 }
+export interface ObservedEntity {
+  id: PlayerId;
+  name: string;
+}
 
 export interface GameObservation {
   gameId: string;
@@ -313,6 +317,7 @@ export interface GameObservation {
   viewerPlayerId: PlayerId | null;
   omniscient: boolean;
   players: ObservedPlayer[];
+  entityRoster: ObservedEntity[];
   publicEvents: TimelineEvent[];
   privateEvents: PrivateTimelineEvent[];
   archivedTimelines: ArchivedTimeline[];

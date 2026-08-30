@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { resolve } from 'node:path';
+import { WebSocket, WebSocketServer } from 'ws';
 import { INVALID_GAME_REQUEST_MESSAGE } from '../shared/gamePromptContract.js';
 import { validateChatCompletionsResponse, validatePublicPayload } from './gameProtocol.mjs';
 import {
@@ -146,6 +147,106 @@ class ProxyPool {
     }
     throw lastError;
   }
+}
+
+function multiplayerTargetUrl() {
+  const target = process.env.MAJO_MULTIPLAYER_URL ?? 'ws://127.0.0.1:34024/multiplayer';
+  const url = new URL(target);
+  if (!['ws:', 'wss:'].includes(url.protocol) || url.pathname !== '/multiplayer') throw new Error('多人转发地址必须是 ws(s)://.../multiplayer');
+  return url;
+}
+
+function rejectUpgrade(socket, status, message) {
+  socket.write(`HTTP/1.1 ${status} ${message}\r\nConnection: close\r\n\r\n`);
+  socket.destroy();
+}
+
+function attachMultiplayerProxy(server, allowedOrigins) {
+  const target = multiplayerTargetUrl();
+  const connectTimeoutMs = Number(process.env.MAJO_MULTIPLAYER_CONNECT_TIMEOUT_MS ?? 10_000);
+  if (!Number.isFinite(connectTimeoutMs) || connectTimeoutMs <= 0) throw new Error('多人上游连接超时必须是正数');
+  const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 });
+  webSocketServer.on('connection', (client, request) => {
+    const origin = request.headers.origin;
+    const upstream = new WebSocket(target, origin ? { headers: { origin } } : undefined);
+    const queued = [];
+    let settled = false;
+    let timeout;
+    const clearConnectionTimeout = () => clearTimeout(timeout);
+    const fail = (message) => {
+      if (settled) return;
+      settled = true;
+      clearConnectionTimeout();
+      queued.length = 0;
+      if (client.readyState !== WebSocket.CLOSED) client.terminate();
+      if (upstream.readyState === WebSocket.CONNECTING || upstream.readyState === WebSocket.OPEN) upstream.terminate();
+      logEvent('warn', 'multiplayer_proxy_closed', { message });
+    };
+    timeout = setTimeout(() => fail('多人服务连接超时'), connectTimeoutMs);
+    client.on('error', (error) => {
+      if (settled) return;
+      logEvent('warn', 'multiplayer_proxy_client_error', { message: error.message });
+      fail('多人客户端连接异常');
+    });
+    upstream.on('error', (error) => {
+      if (settled) return;
+      logEvent('warn', 'multiplayer_proxy_upstream_error', { message: error.message });
+      fail('多人服务不可用');
+    });
+    const forwardToUpstream = (data, isBinary) => {
+      if (settled) return;
+      if (upstream.readyState !== WebSocket.OPEN) {
+        if (queued.length < 64) queued.push({ data, isBinary });
+        else fail('多人服务响应超时');
+        return;
+      }
+      try {
+        upstream.send(data, { binary: isBinary }, (error) => {
+          if (error) fail('多人服务发送失败');
+        });
+      } catch {
+        fail('多人服务发送失败');
+      }
+    };
+    client.on('message', forwardToUpstream);
+
+    upstream.on('open', () => {
+      if (settled) return;
+      clearConnectionTimeout();
+      const pending = queued.splice(0);
+      for (const message of pending) forwardToUpstream(message.data, message.isBinary);
+    });
+    upstream.on('message', (data, isBinary) => {
+      if (settled || client.readyState !== WebSocket.OPEN) return;
+      try {
+        client.send(data, { binary: isBinary }, (error) => {
+          if (error) fail('多人客户端发送失败');
+        });
+      } catch {
+        fail('多人客户端发送失败');
+      }
+    });
+    upstream.on('close', (code, reason) => {
+      clearConnectionTimeout();
+      queued.length = 0;
+      if (!settled && client.readyState === WebSocket.OPEN) client.close(code, reason);
+      settled = true;
+    });
+    client.on('close', () => {
+      settled = true;
+      clearConnectionTimeout();
+      queued.length = 0;
+      if (upstream.readyState === WebSocket.OPEN) upstream.close();
+      else if (upstream.readyState === WebSocket.CONNECTING) upstream.terminate();
+    });
+  });
+  server.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url ?? '/', 'http://localhost');
+    if (url.pathname !== '/multiplayer') return rejectUpgrade(socket, 404, 'Not Found');
+    const origin = request.headers.origin;
+    if (typeof origin !== 'string' || !allowedOrigins.has(origin)) return rejectUpgrade(socket, 403, 'Forbidden');
+    webSocketServer.handleUpgrade(request, socket, head, (client) => webSocketServer.emit('connection', client, request));
+  });
 }
 
 
@@ -298,6 +399,7 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
       limiter.release(ip);
     }
   });
+  attachMultiplayerProxy(server, allowedOrigins);
   await new Promise((resolvePromise, reject) => {
     server.once('error', reject);
     server.listen(config.listen.port, config.listen.host, resolvePromise);

@@ -5,14 +5,18 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import net from 'node:net';
 import {
   BOARD_DESCRIPTION,
   buildGameSystemPrompt,
   CHARACTER_CATALOG,
   FREE_CLIENT_PROTOCOL,
+  formatCreatureName,
   formatPublicSkill,
   INVALID_GAME_REQUEST_MESSAGE,
+  PROMPT_LIMITS,
 } from '../shared/gamePromptContract.js';
+import { WebSocket, WebSocketServer } from 'ws';
 import { startMainServer } from '../server/main.mjs';
 import { buildUpstreamPayload, startProxyServer } from '../proxy/server.mjs';
 import { generateCertificates } from './generate-certs.mjs';
@@ -34,8 +38,22 @@ function listen(server) {
 function close(server) {
   return new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }
+function closeWebSocketServer(server) {
+  return new Promise((resolvePromise) => server.close(() => resolvePromise()));
+}
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function closeClient(client) {
+  if (!client) return;
+  if (client.readyState === WebSocket.OPEN) {
+    await new Promise((resolvePromise) => {
+      client.once('close', resolvePromise);
+      client.close();
+    });
+  } else if (client.readyState === WebSocket.CONNECTING) {
+    client.terminate();
+  }
 }
 
 function sseChunk(content, finishReason = null) {
@@ -72,9 +90,11 @@ function validPayload() {
           day: 0,
           board: BOARD_DESCRIPTION,
           alivePlayers: players,
+          entityRoster: players,
           legalCandidates: [players[1]],
           allowAbstain: false,
           options: {},
+          publicVotes: [],
           currentDaySpeeches: [],
           historicalSpeeches: [],
           recentPublic: [],
@@ -171,6 +191,12 @@ const work = await mkdtemp(join(tmpdir(), 'majo-backend-smoke-'));
 const certs = join(work, 'certs');
 let upstream;
 let proxy;
+let multiplayerUpstream;
+let multiplayerClient;
+let timeoutMain;
+let hangingMultiplayer;
+const hangingSockets = new Set();
+let timeoutClient;
 let fallbackProxy;
 let main;
 const capturedLogs = [];
@@ -258,17 +284,63 @@ try {
   await writeFile(mainConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 }, cors: { allowedOrigins: [origin] },
     proxies: [{ name: '水梦梦的服务器', url: `https://127.0.0.1:${proxyPort}/internal/v1/chat/completions`, ca: join(certs, 'ca.crt'), clientCert: join(certs, 'main-client.crt'), clientKey: join(certs, 'main-client.key'), serverName: 'proxy.internal', connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', timeoutMs: 5000 }],
-    rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 }, acceptedClientVersions: ['2.4.0'],
+    rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 },
+    acceptedClientVersions: ['2.4.0'],
   }));
+  multiplayerUpstream = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+  multiplayerUpstream.on('connection', (socket, request) => {
+    assert.equal(request.headers.origin, origin);
+    socket.on('message', (data) => socket.send(data));
+  });
+  await new Promise((resolvePromise, reject) => {
+    multiplayerUpstream.once('listening', resolvePromise);
+    multiplayerUpstream.once('error', reject);
+  });
+  const multiplayerPort = multiplayerUpstream.address().port;
+  process.env.MAJO_MULTIPLAYER_URL = `ws://127.0.0.1:${multiplayerPort}/multiplayer`;
   main = await startMainServer(mainConfig);
   const mainPort = main.address().port;
+  multiplayerClient = new WebSocket(`ws://127.0.0.1:${mainPort}/multiplayer`, { origin });
+  await new Promise((resolvePromise, reject) => {
+    multiplayerClient.once('open', resolvePromise);
+    multiplayerClient.once('error', reject);
+  });
+  const forwardedMessage = new Promise((resolvePromise) => multiplayerClient.once('message', (data) => resolvePromise(data.toString())));
+  multiplayerClient.send('forwarded-through-main');
+  assert.equal(await forwardedMessage, 'forwarded-through-main');
+  hangingMultiplayer = net.createServer((socket) => {
+    hangingSockets.add(socket);
+    socket.on('close', () => hangingSockets.delete(socket));
+  });
+  const hangingPort = await listen(hangingMultiplayer);
+  process.env.MAJO_MULTIPLAYER_URL = `ws://127.0.0.1:${hangingPort}/multiplayer`;
+  process.env.MAJO_MULTIPLAYER_CONNECT_TIMEOUT_MS = '100';
+  timeoutMain = await startMainServer(mainConfig);
+  const timeoutMainPort = timeoutMain.address().port;
+  timeoutClient = new WebSocket(`ws://127.0.0.1:${timeoutMainPort}/multiplayer`, { origin });
+  timeoutClient.on('error', () => {});
+  const timeoutCloseCode = await new Promise((resolvePromise, reject) => {
+    const timer = setTimeout(() => reject(new Error('多人上游连接超时未关闭客户端')), 2000);
+    timeoutClient.once('close', (code) => {
+      clearTimeout(timer);
+      resolvePromise(code);
+    });
+  });
+  await close(timeoutMain);
+  timeoutMain = null;
+  for (const socket of hangingSockets) socket.destroy();
+  await close(hangingMultiplayer);
+  hangingMultiplayer = null;
+  delete process.env.MAJO_MULTIPLAYER_CONNECT_TIMEOUT_MS;
+  delete process.env.MAJO_MULTIPLAYER_URL;
 
   await expectMtlsRejection(proxyPort, ca);
   const internalBody = Buffer.from(JSON.stringify(validPayload()));
   const wrongSignature = createSignedHeaders('wrong-password', 'POST', '/internal/v1/chat/completions', internalBody);
   assert.equal((await postProxy(proxyPort, ca, clientCert, clientKey, internalBody, wrongSignature)).status, 401);
   const replayedSignature = createSignedHeaders('backend-smoke-long-random-password', 'POST', '/internal/v1/chat/completions', internalBody);
-  assert.equal((await postProxy(proxyPort, ca, clientCert, clientKey, internalBody, replayedSignature)).status, 200);
+  const replayedResponse = await postProxy(proxyPort, ca, clientCert, clientKey, internalBody, replayedSignature);
+  assert.equal(replayedResponse.status, 200);
   assert.equal((await postProxy(proxyPort, ca, clientCert, clientKey, internalBody, replayedSignature)).status, 401);
   assert.equal(upstreamRequests.length, 1);
   const valid = await postMain(mainPort, validPayload(), '203.0.113.9');
@@ -284,7 +356,14 @@ try {
 
   const targetSkill = await postMain(mainPort, targetSkillPayload(), '203.0.113.24');
   assert.equal(targetSkill.status, 200);
-  assert.equal((await targetSkill.json()).choices[0].message.content, '{"targetPlayerId":1}');
+  const validCreatureVotePayload = validPayload();
+  mutatePrompt(validCreatureVotePayload, (prompt) => {
+    prompt.entityRoster.push({ playerId: 99, name: formatCreatureName(CHARACTER_CATALOG[3].name) });
+    prompt.publicVotes = [{ round: 1, voterPlayerId: 99, targetPlayerId: 1 }];
+  });
+  const validCreatureVote = await postMain(mainPort, validCreatureVotePayload, '203.0.113.27');
+  assert.equal(validCreatureVote.status, 200);
+  assert.equal((await validCreatureVote.json()).choices[0].message.content, '{"targetPlayerId":1}');
 
   upstreamMode = 'wolf-council';
   const wolfCouncil = await postMain(mainPort, wolfCouncilPayload(), '203.0.113.25');
@@ -434,14 +513,25 @@ try {
     ['alive_players_unique', 'alivePlayers.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.alivePlayers[1].playerId = 0; })],
     ['legal_candidates_shape', 'legalCandidates', (payload) => mutatePrompt(payload, (prompt) => { prompt.legalCandidates = null; })],
     ['legal_candidates_unique', 'legalCandidates.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.legalCandidates = [prompt.alivePlayers[1], prompt.alivePlayers[1]]; })],
+    ['entity_roster_shape', 'entityRoster', (payload) => mutatePrompt(payload, (prompt) => { prompt.entityRoster = null; })],
+    ['entity_roster_unique', 'entityRoster.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.entityRoster[1].playerId = 0; })],
+    ['entity_roster_players', 'entityRoster.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.entityRoster[0].playerId = 13; })],
+    ['entity_roster_names', 'entityRoster.name', (payload) => mutatePrompt(payload, (prompt) => { prompt.entityRoster[1].name = CHARACTER_CATALOG[0].name; })],
     ['allow_abstain', 'allowAbstain', (payload) => mutatePrompt(payload, (prompt) => { prompt.allowAbstain = SENSITIVE_MARKER; })],
     ['options_shape', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = []; })],
-    ['options_size', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = { value: 'x'.repeat(8_001) }; })],
+    ['options_size', 'options', (payload) => mutatePrompt(payload, (prompt) => { prompt.options = { value: 'x'.repeat(12_001) }; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 99, targetPlayerId: 2 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 99 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 3, voterPlayerId: 1, targetPlayerId: 2 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 1 }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 2, voterPlayerId: 1, targetPlayerId: null }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = [{ round: 1, voterPlayerId: 1, targetPlayerId: 2 }, { round: 1, voterPlayerId: 1, targetPlayerId: null }]; })],
+    ['public_votes', 'publicVotes', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicVotes = Array.from({ length: PROMPT_LIMITS.publicVotesMaxItems + 1 }, (_, index) => ({ round: index % 2 + 1, voterPlayerId: index % 14, targetPlayerId: null })); })],
     ['current_day_speeches', 'currentDaySpeeches', (payload) => mutatePrompt(payload, (prompt) => { prompt.currentDaySpeeches = ['x'.repeat(2_001)]; })],
     ['historical_speeches', 'historicalSpeeches', (payload) => mutatePrompt(payload, (prompt) => { prompt.historicalSpeeches = ['x'.repeat(2_001)]; })],
     ['recent_public', 'recentPublic', (payload) => mutatePrompt(payload, (prompt) => { prompt.recentPublic = ['x'.repeat(2_001)]; })],
     ['private_events', 'privateEvents', (payload) => mutatePrompt(payload, (prompt) => { prompt.privateEvents = ['x'.repeat(2_001)]; })],
-    ['private_knowledge_shape', 'privateKnowledge', (payload) => mutatePrompt(payload, (prompt) => { prompt.privateKnowledge = Array.from({ length: 65 }, () => ({ subjectPlayerId: 0, kind: 'role', value: 'wolf', observedDay: 0 })); })],
+    ['private_knowledge_shape', 'privateKnowledge', (payload) => mutatePrompt(payload, (prompt) => { prompt.privateKnowledge = Array.from({ length: 197 }, () => ({ subjectPlayerId: 0, kind: 'role', value: 'wolf', observedDay: 0 })); })],
     ['private_knowledge_entry', 'privateKnowledge', (payload) => mutatePrompt(payload, (prompt) => { prompt.privateKnowledge = [{ subjectPlayerId: 0, kind: 'role', value: SENSITIVE_MARKER, observedDay: 0 }]; })],
     ['public_skills_shape', 'publicSkills', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicSkills.pop(); })],
     ['public_skills_unique_player', 'publicSkills.playerId', (payload) => mutatePrompt(payload, (prompt) => { prompt.publicSkills[1].playerId = 0; })],
@@ -559,10 +649,18 @@ try {
 
   console.log('后端烟测通过：固定 provider fallback 顺序、上游 SSE 聚合、非流式回退、首字节/总超时、重试、时间日志、mTLS、HMAC 与限流均已验证。');
 } finally {
+  await closeClient(multiplayerClient);
+  await closeClient(timeoutClient);
+  for (const socket of hangingSockets) socket.destroy();
   if (fallbackProxy) await close(fallbackProxy);
+  if (timeoutMain) await close(timeoutMain);
   if (main) await close(main);
+  if (multiplayerUpstream) await closeWebSocketServer(multiplayerUpstream);
+  if (hangingMultiplayer) await close(hangingMultiplayer);
   if (proxy) await close(proxy);
   if (upstream) await close(upstream);
+  delete process.env.MAJO_MULTIPLAYER_CONNECT_TIMEOUT_MS;
+  delete process.env.MAJO_MULTIPLAYER_URL;
   for (const [method, implementation] of Object.entries(originalConsole)) console[method] = implementation;
   await rm(work, { recursive: true, force: true });
 }

@@ -41,10 +41,12 @@ const ACTION_KEYS = new Set(PROMPT_FIELD_KEYS.action);
 const ACTOR_KEYS = new Set(PROMPT_FIELD_KEYS.actor);
 const DECISION_TRAIT_KEYS = new Set(PROMPT_FIELD_KEYS.decisionTraits);
 const OBSERVED_PLAYER_KEYS = new Set(PROMPT_FIELD_KEYS.observedPlayer);
+const ENTITY_ROSTER_KEYS = new Set(PROMPT_FIELD_KEYS.entityRoster);
 const PRIVATE_KNOWLEDGE_KEYS = new Set(PROMPT_FIELD_KEYS.privateKnowledge);
 const PUBLIC_SKILL_KEYS = new Set(PROMPT_FIELD_KEYS.publicSkill);
 const FINAL_ROLE_KEYS = new Set(PROMPT_FIELD_KEYS.finalRole);
 const WOLF_COUNCIL_MESSAGE_KEYS = new Set(PROMPT_FIELD_KEYS.wolfCouncilMessage);
+const PUBLIC_VOTE_KEYS = new Set(PROMPT_FIELD_KEYS.publicVote);
 
 function validResult() {
   return { ok: true };
@@ -81,6 +83,12 @@ function validObservedPlayer(value) {
     && validEntityId(value.playerId)
     && validEntityName(value.playerId, value.name);
 }
+function validEntityRosterEntry(value) {
+  return isObject(value)
+    && hasOnlyKeys(value, ENTITY_ROSTER_KEYS)
+    && validEntityId(value.playerId)
+    && validEntityName(value.playerId, value.name);
+}
 
 function validPotionChoice(value) {
   return isObject(value)
@@ -105,6 +113,17 @@ function validFinalRole(value) {
     && typeof value.roleName === 'string'
     && ROLE_NAMES_BY_ID.get(value.roleId) === value.roleName;
 }
+function validPublicVote(value, entityIds) {
+  return isObject(value)
+    && Object.keys(value).length === PUBLIC_VOTE_KEYS.size
+    && hasOnlyKeys(value, PUBLIC_VOTE_KEYS)
+    && (value.round === 1 || value.round === 2)
+    && entityIds.has(value.voterPlayerId)
+    && (value.targetPlayerId === null || entityIds.has(value.targetPlayerId))
+    && (value.round === 1 || value.targetPlayerId !== null)
+    && value.voterPlayerId !== value.targetPlayerId;
+}
+
 
 function validateWolfCouncilOptions(prompt) {
   const actionKind = prompt.action.kind;
@@ -295,6 +314,7 @@ export function validateGamePrompt(messages) {
     return wolfCouncilValidation;
   }
 
+
   const activePlayerIds = Array.isArray(prompt.publicSkills)
     ? prompt.publicSkills.map((skill) => skill?.playerId)
     : [];
@@ -364,6 +384,39 @@ export function validateGamePrompt(messages) {
     || sortedPlayerIds.length > MAX_PLAYERS
     || sortedPlayerIds.some((playerId, index) => playerId !== index)) {
     return invalidResult('public_skills_players', 'publicSkills.playerId');
+  }
+  if (!Array.isArray(prompt.entityRoster)
+    || prompt.entityRoster.length < PROMPT_LIMITS.entityRosterMinItems
+    || prompt.entityRoster.length > PROMPT_LIMITS.entityRosterMaxItems
+    || !prompt.entityRoster.every(validEntityRosterEntry)) {
+    return invalidResult('entity_roster_shape', 'entityRoster');
+  }
+  const entityRosterIds = prompt.entityRoster.map((entity) => entity.playerId);
+  if (new Set(entityRosterIds).size !== entityRosterIds.length) {
+    return invalidResult('entity_roster_unique', 'entityRoster.playerId');
+  }
+  const rosterPlayerIds = entityRosterIds.filter((playerId) => PLAYER_ID_VALUES.has(playerId)).sort((left, right) => left - right);
+  if (rosterPlayerIds.length !== sortedPlayerIds.length
+    || rosterPlayerIds.some((playerId, index) => playerId !== sortedPlayerIds[index])) {
+    return invalidResult('entity_roster_players', 'entityRoster.playerId');
+  }
+  const publicSkillNames = new Map(prompt.publicSkills.map((skill) => [skill.playerId, skill.name]));
+  if (prompt.entityRoster.some((entity) => entity.playerId !== CREATURE_ID && publicSkillNames.get(entity.playerId) !== entity.name)) {
+    return invalidResult('entity_roster_names', 'entityRoster.name');
+  }
+  const promptEntityIds = new Set(entityRosterIds);
+  if (!Array.isArray(prompt.publicVotes)
+    || prompt.publicVotes.length > PROMPT_LIMITS.publicVotesMaxItems
+    || !prompt.publicVotes.every((vote) => validPublicVote(vote, promptEntityIds))) {
+    return invalidResult('public_votes', 'publicVotes');
+  }
+  const publicVoteKeys = new Set();
+  for (const vote of prompt.publicVotes) {
+    const key = `${vote.round}:${vote.voterPlayerId}`;
+    if (publicVoteKeys.has(key)) {
+      return invalidResult('public_votes', 'publicVotes');
+    }
+    publicVoteKeys.add(key);
   }
   const boardMatch = /^(\d+)人局：/.exec(prompt.board);
   if (!boardMatch || Number(boardMatch[1]) !== sortedPlayerIds.length) {
