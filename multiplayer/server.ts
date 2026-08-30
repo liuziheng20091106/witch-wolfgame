@@ -389,6 +389,20 @@ function scheduleDisconnectTakeover(room: Room, participant: Participant, genera
 
 
 function leaveRoom(room: Room, participant: Participant): void {
+  if (room.status === 'playing') {
+    participant.connected = false;
+    room.drivers[participant.playerId] = { kind: 'ai' };
+    socketsByParticipant.delete(participant.participantId);
+    if (room.hostParticipantId === participant.participantId) {
+      const nextHost = room.participants.find((candidate) => candidate.connected && candidate.participantId !== participant.participantId);
+      if (nextHost) room.hostParticipantId = nextHost.participantId;
+    }
+    room.updatedAt = Date.now();
+    broadcast(room);
+    void persistRooms();
+    scheduleGame(room);
+    return;
+  }
   room.participants = room.participants.filter((entry) => entry.participantId !== participant.participantId);
   room.drivers[participant.playerId] = { kind: 'ai' };
   socketsByParticipant.delete(participant.participantId);

@@ -215,20 +215,33 @@ try {
   assert.notEqual(progressed, undefined, `混合真人与 AI 驱动必须推进到白天：${JSON.stringify({ host: hostState.room.observation?.pendingDecision, guest: guestState.room.observation?.pendingDecision, errors: host.messages.filter((message) => message.type === 'error').slice(-5) })}`);
 
   returnedGuest.send({ type: 'leave-room' });
-  const converted = await host.next((message) => message.type === 'room-state' && message.room.drivers[1].kind === 'ai', '离开后转 AI');
-  assert.equal(converted.room.participants.some((participant) => participant.playerId === 1), false);
+  const converted = await host.next((message) => message.type === 'room-state' && message.room.status === 'playing' && message.room.participants.find((participant) => participant.playerId === 1)?.connected === false && message.room.drivers[1].kind === 'ai', '离开后转 AI');
+  const leftParticipant = converted.room.participants.find((participant) => participant.playerId === 1);
+  assert.notEqual(leftParticipant, undefined, '进行中离开必须保留原真人席位');
+  assert.equal(leftParticipant.connected, false, '进行中离开必须标记席位断线');
+  assert.equal(converted.room.observation?.players.some((player) => player.id === 1), true, '进行中离开不得从游戏观察删除席位');
+  assert.equal(converted.room.drivers[1].kind, 'ai');
+  const rejoinedGuest = client();
+  await rejoinedGuest.open();
+  rejoinedGuest.send({ type: 'resume-room', roomCode: hostWelcome.room.roomCode, resumeToken });
+  const rejoinedWelcome = await rejoinedGuest.next((message) => message.type === 'welcome', '进行中离开后恢复席位');
+  assert.equal(rejoinedWelcome.room.selfPlayerId, 1);
+  assert.equal(rejoinedWelcome.room.participants.find((participant) => participant.playerId === 1)?.connected, true);
+  assert.equal(rejoinedWelcome.room.drivers[1].kind, 'human');
   host.socket.close();
   returnedGuest.socket.close();
   child.kill('SIGTERM');
   await new Promise((resolve) => child.once('exit', resolve));
+  rejoinedGuest.socket.close();
   const persisted = JSON.parse(await readFile(stateFile, 'utf8'));
   assert.equal(Array.isArray(persisted), true);
 
   const validRoom = persisted[0];
   assert.notEqual(validRoom, undefined);
   assert.notEqual(validRoom.game, null, '终局恢复样本必须包含合法游戏状态');
-  const restartPlayerId = validRoom.participants[1]?.playerId;
-  assert.notEqual(restartPlayerId, undefined, '重启样本必须包含第二个真人席位');
+  const restartParticipant = validRoom.participants.find((participant) => validRoom.drivers[participant.playerId].kind === 'human');
+  const restartPlayerId = restartParticipant?.playerId;
+  assert.notEqual(restartPlayerId, undefined, '重启样本必须保留真人驱动席位');
   validRoom.game.pendingDecision = { id: 'restart-human-pending', kind: 'speech', schemaKey: 'speech', actorId: restartPlayerId, title: '重启真人发言', description: '', candidates: [], allowAbstain: true, skillInstanceId: null, options: {} };
   assert.equal(validRoom.drivers[restartPlayerId].kind, 'human', '重启样本必须保留真人驱动');
   const restartDecisionId = validRoom.game.pendingDecision.id;
