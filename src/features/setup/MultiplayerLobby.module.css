@@ -67,6 +67,16 @@
 .participants small { color: var(--muted); font-size: 11px; }
 .error { margin: 12px 0 0; color: var(--verdict-dark); font-weight: 800; }
 
+@media (max-width: 1099px) {
+  .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .participants {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 719px) {
   .join, .lobby { padding: 20px 16px; box-shadow: 4px 4px 0 var(--paper-shadow); }
   .join::after, .lobby::after { display: none; }

@@ -4,5 +4,4 @@
 .controls button svg { width: 18px; }
 .controls .primary { border-color: var(--ink-surface); background: var(--ink-surface); color: var(--ink-on-surface); box-shadow: inset 0 -4px rgb(255 255 255 / 9%), 2px 2px 0 var(--paper-shadow); }
 .controls>button span { display: none; }
-@media (max-width: 1099px) { .controls { grid-template-columns: 1fr repeat(3, minmax(54px, .6fr)); } }
-@media (max-width: 719px) { .controls { position: sticky; top: 0; z-index: 5; grid-template-columns: 80px repeat(3, 46px); padding: 7px 10px; } .controls button { min-height: 46px; } }
+@media (max-width: 1099px) { .controls { position: sticky; top: 0; z-index: 5; grid-template-columns: minmax(80px, 1fr) repeat(3, minmax(46px, 64px)); padding: 7px 10px; } .controls button { min-height: 46px; } }
