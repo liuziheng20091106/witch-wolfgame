@@ -321,6 +321,7 @@ try {
   const restartParticipant = validRoom.participants.find((participant) => validRoom.drivers[participant.playerId].kind === 'human');
   const restartPlayerId = restartParticipant?.playerId;
   assert.notEqual(restartPlayerId, undefined, '重启样本必须保留真人驱动席位');
+  validRoom.participants.forEach((participant) => { participant.connected = true; });
   validRoom.game.pendingDecision = { id: 'restart-human-pending', kind: 'speech', schemaKey: 'speech', actorId: restartPlayerId, title: '重启真人发言', description: '', candidates: [], allowAbstain: true, skillInstanceId: null, options: {} };
   assert.equal(validRoom.drivers[restartPlayerId].kind, 'human', '重启样本必须保留真人驱动');
   const restartDecisionId = validRoom.game.pendingDecision.id;

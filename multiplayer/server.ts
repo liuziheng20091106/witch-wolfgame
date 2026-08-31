@@ -452,8 +452,12 @@ function attachParticipant(socket: WebSocket, room: Room, participant: Participa
   broadcast(room);
   void persistRooms();
   if (room.status === 'playing') {
-    if (recoveredRooms.has(room)) takeOverDisconnectedParticipants(room);
-    else scheduleDisconnectedParticipants(room);
+    if (recoveredRooms.has(room)) {
+      takeOverDisconnectedParticipants(room);
+      recoveredRooms.delete(room);
+    } else {
+      scheduleDisconnectedParticipants(room);
+    }
     scheduleGame(room);
   }
   return generation;
@@ -461,20 +465,21 @@ function attachParticipant(socket: WebSocket, room: Room, participant: Participa
 function scheduleDisconnectedParticipants(room: Room): void {
   if (room.status !== 'playing' || connectedParticipantCount(room) === 0) return;
   for (const participant of room.participants) {
-    if (!participant.connected && room.drivers[participant.playerId]?.kind === 'human') scheduleDisconnectTakeover(room, participant);
+    if (socketsByParticipant.has(participant.participantId) || room.drivers[participant.playerId]?.kind !== 'human') continue;
+    scheduleDisconnectTakeover(room, participant);
   }
 }
 
 function takeOverDisconnectedParticipants(room: Room): void {
   let changed = false;
   for (const participant of room.participants) {
-    if (participant.connected || room.drivers[participant.playerId]?.kind !== 'human') continue;
+    if (socketsByParticipant.has(participant.participantId) || room.drivers[participant.playerId]?.kind !== 'human') continue;
     room.drivers[participant.playerId] = { kind: 'ai' };
     changed = true;
   }
   const host = participantById(room, room.hostParticipantId);
-  if (host && !host.connected) {
-    const nextHost = room.participants.find((participant) => participant.connected);
+  if (host && !socketsByParticipant.has(host.participantId)) {
+    const nextHost = room.participants.find((participant) => socketsByParticipant.has(participant.participantId));
     if (nextHost) {
       room.hostParticipantId = nextHost.participantId;
       changed = true;
@@ -499,7 +504,7 @@ function scheduleDisconnectTakeover(room: Room, participant: Participant, genera
   const expectedGeneration = generation ?? connectionGenerationByParticipant.get(participant.participantId) ?? 0;
   let timer: NodeJS.Timeout;
   timer = windowlessSetTimeout(() => {
-    if (rooms.get(room.roomCode) !== room || (room.status !== 'playing' && room.status !== 'lobby') || (connectionGenerationByParticipant.get(participant.participantId) ?? 0) !== expectedGeneration || socketsByParticipant.has(participant.participantId) || participant.connected || participantById(room, participant.participantId) === null) return;
+    if (rooms.get(room.roomCode) !== room || (room.status !== 'playing' && room.status !== 'lobby') || (connectionGenerationByParticipant.get(participant.participantId) ?? 0) !== expectedGeneration || socketsByParticipant.has(participant.participantId) || participantById(room, participant.participantId) === null) return;
     if (connectedParticipantCount(room) === 0) {
       scheduleRoomCleanup(room);
       return;
@@ -508,7 +513,7 @@ function scheduleDisconnectTakeover(room: Room, participant: Participant, genera
     if (driver?.kind !== 'human' || driver.participantId !== participant.participantId) return;
     room.drivers[participant.playerId] = { kind: 'ai' };
     if (room.hostParticipantId === participant.participantId) {
-      const nextHost = room.participants.find((candidate) => candidate.connected && candidate.participantId !== participant.participantId);
+      const nextHost = room.participants.find((candidate) => socketsByParticipant.has(candidate.participantId) && candidate.participantId !== participant.participantId);
       if (nextHost) room.hostParticipantId = nextHost.participantId;
     }
     room.updatedAt = Date.now();
