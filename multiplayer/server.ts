@@ -5,12 +5,14 @@ import { dirname, resolve } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
 import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS, PLAYER_IDS } from '../shared/gamePromptContract.js';
+import { requestDecision } from '../src/ai/client.js';
+import { FREE_PROVIDER_ENDPOINT } from '../src/ai/types.js';
 import { fallbackDecision } from '../src/ai/fallback.js';
 import { createGame } from '../src/domain/engine/createGame.js';
 import { reduceGame } from '../src/domain/engine/reducer.js';
 import { selectObservation } from '../src/domain/engine/selectors.js';
 import { gameStateSchema, playerIdSchema } from '../src/storage/gameStateSchema.js';
-import type { CharacterId, GameState, PendingDecision, PlayerId, SubmittedDecision } from '../src/domain/model.js';
+import type { CharacterId, GameObservation, GameState, PlayerId, SubmittedDecision } from '../src/domain/model.js';
 import {
   encodeMultiplayerMessage,
   multiplayerClientMessageSchema,
@@ -38,6 +40,9 @@ const DISCONNECT_GRACE_MS = Number(process.env.MAJO_MULTIPLAYER_DISCONNECT_GRACE
 const ROOM_IDLE_MS = 24 * 60 * 60 * 1000;
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TICK_DELAY_MS = 80;
+const MULTIPLAYER_AI_ENDPOINT = process.env.MAJO_MULTIPLAYER_AI_ENDPOINT?.trim() || FREE_PROVIDER_ENDPOINT;
+const MULTIPLAYER_AI_RETRY_COUNT = Math.min(5, Math.max(0, Math.trunc(Number(process.env.MAJO_MULTIPLAYER_AI_RETRY_COUNT ?? 2))));
+const MULTIPLAYER_AI_CONFIG = { provider: 'free' as const, retryCount: MULTIPLAYER_AI_RETRY_COUNT, endpoint: MULTIPLAYER_AI_ENDPOINT };
 interface RateWindow { startedAt: number; count: number }
 
 interface Participant {
@@ -108,9 +113,13 @@ const persistedRoomSchema = z.strictObject({
 });
 
 const rooms = new Map<string, Room>();
+const recoveredRooms = new WeakSet<Room>();
 const socketsByParticipant = new Map<string, WebSocket>();
 const connectionGenerationByParticipant = new Map<string, number>();
 const takeoverTimers = new Map<string, NodeJS.Timeout>();
+const roomCleanupTimers = new Map<string, NodeJS.Timeout>();
+const gameTimers = new Map<string, NodeJS.Timeout>();
+const aiRequests = new Map<string, { pendingDecisionId: string; controller: AbortController }>();
 let connectionCount = 0;
 let persistChain = Promise.resolve();
 let stateLoadError: string | null = null;
@@ -151,11 +160,16 @@ function send(socket: WebSocket, message: MultiplayerServerMessage): void {
 function participantById(room: Room, participantId: string): Participant | null {
   return room.participants.find((participant) => participant.participantId === participantId) ?? null;
 }
+function playerObservationForServer(game: GameState, playerId: PlayerId): GameObservation {
+  const observation = selectObservation(game, { kind: 'player', playerId });
+  return {
+    ...observation,
+    players: observation.players.map((player) => ({ ...player, avatarUrl: '' })),
+  };
+}
 
 function roomView(room: Room, participant: Participant): MultiplayerRoomView {
-  const observation = room.game === null
-    ? null
-    : { ...selectObservation(room.game, { kind: 'player', playerId: participant.playerId }), mode: 'player' as const };
+  const observation = room.game === null ? null : playerObservationForServer(room.game, participant.playerId);
   const participants: MultiplayerParticipantView[] = room.participants.map((entry) => ({
     participantId: entry.participantId,
     playerId: entry.playerId,
@@ -241,34 +255,50 @@ async function loadRooms(): Promise<void> {
   }
   for (const room of loadedRooms) {
     rooms.set(room.roomCode, room);
-    if (room.status === 'playing') {
-      for (const participant of room.participants) {
-        const driver = room.drivers[participant.playerId];
-        if (driver?.kind === 'human' && driver.participantId === participant.participantId) scheduleDisconnectTakeover(room, participant);
-      }
-      scheduleGame(room);
-    }
+    recoveredRooms.add(room);
+    scheduleRoomCleanup(room, ROOM_IDLE_MS);
   }
+}
+function connectedParticipantCount(room: Room): number {
+  return room.participants.filter((participant) => participant.connected && socketsByParticipant.has(participant.participantId)).length;
 }
 
-function emergencyDecision(pending: PendingDecision): SubmittedDecision {
-  const targetPlayerId = pending.candidates[0] ?? null;
-  if (pending.schemaKey === 'speech') return { speech: '' };
-  if (pending.schemaKey === 'wolf-council') {
-    if (targetPlayerId === null) throw new Error('狼议没有合法候选目标');
-    return { message: '本地应急策略选择首个合法目标。', recommendedTargetPlayerId: targetPlayerId };
-  }
-  if (pending.schemaKey === 'target') {
-    if (targetPlayerId === null && !pending.allowAbstain) throw new Error('强制目标决策没有合法候选');
-    return { targetPlayerId };
-  }
-  if (pending.schemaKey === 'witch') return { save: false, poisonTargetPlayerId: null };
-  if (pending.schemaKey === 'optional-target') return { use: false, targetPlayerId: null };
-  if (pending.schemaKey === 'liquid-control') return { use: false, mode: null, targetPlayerId: null, factId: null };
-  if (pending.schemaKey === 'levitation') return { use: false, mode: null, targetPlayerId: null };
-  if (pending.schemaKey === 'voice-mimic') return { use: false, targetPlayerId: null, forgedSpeech: null };
-  return { use: false };
+function clearRoomCleanup(roomCode: string): void {
+  const timer = roomCleanupTimers.get(roomCode);
+  if (timer === undefined) return;
+  clearTimeout(timer);
+  roomCleanupTimers.delete(roomCode);
 }
+
+function cancelRoomWork(room: Room): void {
+  const timer = gameTimers.get(room.roomCode);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    gameTimers.delete(room.roomCode);
+  }
+  const request = aiRequests.get(room.roomCode);
+  if (request !== undefined) {
+    request.controller.abort();
+    aiRequests.delete(room.roomCode);
+  }
+  for (const participant of room.participants) clearDisconnectTakeover(participant.participantId);
+}
+
+function scheduleRoomCleanup(room: Room, delayMs = DISCONNECT_GRACE_MS): void {
+  if (rooms.get(room.roomCode) !== room || connectedParticipantCount(room) > 0 || roomCleanupTimers.has(room.roomCode)) return;
+  cancelRoomWork(room);
+  let timer: NodeJS.Timeout;
+  timer = windowlessSetTimeout(() => {
+    if (roomCleanupTimers.get(room.roomCode) !== timer) return;
+    roomCleanupTimers.delete(room.roomCode);
+    if (rooms.get(room.roomCode) !== room || connectedParticipantCount(room) > 0) return;
+    cancelRoomWork(room);
+    rooms.delete(room.roomCode);
+    void persistRooms();
+  }, delayMs);
+  roomCleanupTimers.set(room.roomCode, timer);
+}
+
 
 function failRoom(room: Room, error: unknown): void {
   const pendingDecisionId = room.game?.pendingDecision?.id ?? null;
@@ -288,11 +318,13 @@ function recoverAiDecision(room: Room, error: unknown): boolean {
   if (!game || !pending || room.drivers[pending.actorId]?.kind === 'human') return false;
   try {
     let recovered = reduceGame(game, { type: 'mark-ai-failure', failure: { kind: 'multiplayer-recovered', message: error instanceof Error ? error.message : String(error), pendingDecisionId: pending.id, actorId: pending.actorId } });
+    const fallback = fallbackDecision(recovered, pending);
+    recovered = reduceGame(recovered, { type: 'set-rng-state', rngState: fallback.rngState });
     recovered = reduceGame(recovered, {
       type: 'submit-decision',
       pendingDecisionId: pending.id,
       actorId: pending.actorId,
-      decision: emergencyDecision(pending),
+      decision: fallback.decision,
     });
     room.game = recovered;
     room.updatedAt = Date.now();
@@ -308,13 +340,17 @@ function recoverAiDecision(room: Room, error: unknown): boolean {
 }
 
 function scheduleGame(room: Room): void {
-  windowlessSetTimeout(() => {
-    try {
-      driveGame(room);
-    } catch (error) {
+  if (room.status !== 'playing' || room.game === null || connectedParticipantCount(room) === 0 || gameTimers.has(room.roomCode) || aiRequests.has(room.roomCode)) return;
+  let timer: NodeJS.Timeout;
+  timer = windowlessSetTimeout(() => {
+    if (gameTimers.get(room.roomCode) !== timer) return;
+    gameTimers.delete(room.roomCode);
+    void driveGame(room).catch((error: unknown) => {
+      if (rooms.get(room.roomCode) !== room || room.status !== 'playing' || connectedParticipantCount(room) === 0) return;
       if (!recoverAiDecision(room, error)) failRoom(room, error);
-    }
+    });
   }, TICK_DELAY_MS);
+  gameTimers.set(room.roomCode, timer);
 }
 
 function windowlessSetTimeout(callback: () => void, delay: number): NodeJS.Timeout {
@@ -323,12 +359,13 @@ function windowlessSetTimeout(callback: () => void, delay: number): NodeJS.Timeo
   return timer;
 }
 
-function driveGame(room: Room): void {
-  if (room.status !== 'playing' || room.game === null) return;
+async function driveGame(room: Room): Promise<void> {
+  if (rooms.get(room.roomCode) !== room || room.status !== 'playing' || room.game === null || connectedParticipantCount(room) === 0) return;
   let game = room.game;
   let guard = 0;
   while (guard < 100) {
     guard += 1;
+    if (rooms.get(room.roomCode) !== room || connectedParticipantCount(room) === 0) return;
     if (game.phase === 'ended' || (game.phase === 'post-game' && game.pendingDecision === null)) {
       room.status = 'ended';
       room.game = game;
@@ -351,16 +388,39 @@ function driveGame(room: Room): void {
       void persistRooms();
       return;
     }
+    const activeRequest = aiRequests.get(room.roomCode);
+    if (activeRequest) return;
     room.game = game;
-    const fallback = fallbackDecision(game, pending);
-    game = reduceGame(game, { type: 'set-rng-state', rngState: fallback.rngState });
-    room.game = game;
-    game = reduceGame(game, {
-      type: 'submit-decision',
-      pendingDecisionId: pending.id,
-      actorId: pending.actorId,
-      decision: fallback.decision,
-    });
+    const controller = new AbortController();
+    aiRequests.set(room.roomCode, { pendingDecisionId: pending.id, controller });
+    let decision: SubmittedDecision;
+    try {
+      const observation = playerObservationForServer(game, pending.actorId);
+      const sessionId = `multiplayer-${room.roomCode}-${pending.id.replaceAll(/[^A-Za-z0-9_-]/g, '_').slice(0, 96)}`;
+      decision = await requestDecision(
+        { observation, pendingDecision: pending, sessionId },
+        MULTIPLAYER_AI_CONFIG,
+        controller.signal,
+        (candidate) => { reduceGame(game, { type: 'submit-decision', pendingDecisionId: pending.id, actorId: pending.actorId, decision: candidate }); },
+      );
+    } catch (error) {
+      const request = aiRequests.get(room.roomCode);
+      aiRequests.delete(room.roomCode);
+      if (request?.controller !== controller || rooms.get(room.roomCode) !== room || room.status !== 'playing' || connectedParticipantCount(room) === 0 || room.game?.pendingDecision?.id !== pending.id || room.drivers[pending.actorId]?.kind === 'human') return;
+      if (!recoverAiDecision(room, error)) failRoom(room, error);
+      return;
+    }
+    const request = aiRequests.get(room.roomCode);
+    aiRequests.delete(room.roomCode);
+    if (request?.controller !== controller || rooms.get(room.roomCode) !== room || room.status !== 'playing' || connectedParticipantCount(room) === 0 || room.game?.pendingDecision?.id !== pending.id || room.drivers[pending.actorId]?.kind === 'human') return;
+    let next = reduceGame(game, { type: 'mark-free-provider-used' });
+    next = reduceGame(next, { type: 'submit-decision', pendingDecisionId: pending.id, actorId: pending.actorId, decision });
+    room.game = next;
+    room.updatedAt = Date.now();
+    broadcast(room);
+    void persistRooms();
+    scheduleGame(room);
+    return;
   }
   room.game = game;
   room.updatedAt = Date.now();
@@ -370,7 +430,13 @@ function driveGame(room: Room): void {
 }
 
 function attachParticipant(socket: WebSocket, room: Room, participant: Participant, welcome: boolean): number {
-  clearDisconnectTakeover(participant.participantId);
+  clearRoomCleanup(room.roomCode);
+  const pending = room.game?.pendingDecision;
+  const request = aiRequests.get(room.roomCode);
+  if (pending?.actorId === participant.playerId && request?.pendingDecisionId === pending.id) {
+    request.controller.abort();
+    aiRequests.delete(room.roomCode);
+  }
   const generation = (connectionGenerationByParticipant.get(participant.participantId) ?? 0) + 1;
   connectionGenerationByParticipant.set(participant.participantId, generation);
   const previousSocket = socketsByParticipant.get(participant.participantId);
@@ -385,8 +451,47 @@ function attachParticipant(socket: WebSocket, room: Room, participant: Participa
   send(socket, message);
   broadcast(room);
   void persistRooms();
+  if (room.status === 'playing') {
+    if (recoveredRooms.has(room)) {
+      takeOverDisconnectedParticipants(room);
+      recoveredRooms.delete(room);
+    } else {
+      scheduleDisconnectedParticipants(room);
+    }
+    scheduleGame(room);
+  }
   return generation;
 }
+function scheduleDisconnectedParticipants(room: Room): void {
+  if (room.status !== 'playing' || connectedParticipantCount(room) === 0) return;
+  for (const participant of room.participants) {
+    if (socketsByParticipant.has(participant.participantId) || room.drivers[participant.playerId]?.kind !== 'human') continue;
+    scheduleDisconnectTakeover(room, participant);
+  }
+}
+
+function takeOverDisconnectedParticipants(room: Room): void {
+  let changed = false;
+  for (const participant of room.participants) {
+    if (socketsByParticipant.has(participant.participantId) || room.drivers[participant.playerId]?.kind !== 'human') continue;
+    room.drivers[participant.playerId] = { kind: 'ai' };
+    changed = true;
+  }
+  const host = participantById(room, room.hostParticipantId);
+  if (host && !socketsByParticipant.has(host.participantId)) {
+    const nextHost = room.participants.find((participant) => socketsByParticipant.has(participant.participantId));
+    if (nextHost) {
+      room.hostParticipantId = nextHost.participantId;
+      changed = true;
+    }
+  }
+  if (changed) {
+    room.updatedAt = Date.now();
+    broadcast(room);
+    void persistRooms();
+  }
+}
+
 function clearDisconnectTakeover(participantId: string): void {
   const timer = takeoverTimers.get(participantId);
   if (timer === undefined) return;
@@ -400,12 +505,16 @@ function scheduleDisconnectTakeover(room: Room, participant: Participant, genera
   let timer: NodeJS.Timeout;
   timer = windowlessSetTimeout(() => {
     if (takeoverTimers.get(participant.participantId) === timer) takeoverTimers.delete(participant.participantId);
-    if ((connectionGenerationByParticipant.get(participant.participantId) ?? 0) !== expectedGeneration || socketsByParticipant.has(participant.participantId) || participant.connected || participantById(room, participant.participantId) === null) return;
+    if (rooms.get(room.roomCode) !== room || (room.status !== 'playing' && room.status !== 'lobby') || (connectionGenerationByParticipant.get(participant.participantId) ?? 0) !== expectedGeneration || socketsByParticipant.has(participant.participantId) || participantById(room, participant.participantId) === null) return;
+    if (connectedParticipantCount(room) === 0) {
+      scheduleRoomCleanup(room);
+      return;
+    }
     const driver = room.drivers[participant.playerId];
     if (driver?.kind !== 'human' || driver.participantId !== participant.participantId) return;
     room.drivers[participant.playerId] = { kind: 'ai' };
     if (room.hostParticipantId === participant.participantId) {
-      const nextHost = room.participants.find((candidate) => candidate.connected && candidate.participantId !== participant.participantId);
+      const nextHost = room.participants.find((candidate) => socketsByParticipant.has(candidate.participantId) && candidate.participantId !== participant.participantId);
       if (nextHost) room.hostParticipantId = nextHost.participantId;
     }
     room.updatedAt = Date.now();
@@ -416,13 +525,12 @@ function scheduleDisconnectTakeover(room: Room, participant: Participant, genera
   takeoverTimers.set(participant.participantId, timer);
 }
 
-
 function leaveRoom(room: Room, participant: Participant): void {
   clearDisconnectTakeover(participant.participantId);
+  socketsByParticipant.delete(participant.participantId);
   if (room.status === 'playing') {
     participant.connected = false;
     room.drivers[participant.playerId] = { kind: 'ai' };
-    socketsByParticipant.delete(participant.participantId);
     if (room.hostParticipantId === participant.participantId) {
       const nextHost = room.participants.find((candidate) => candidate.connected && candidate.participantId !== participant.participantId);
       if (nextHost) room.hostParticipantId = nextHost.participantId;
@@ -430,12 +538,12 @@ function leaveRoom(room: Room, participant: Participant): void {
     room.updatedAt = Date.now();
     broadcast(room);
     void persistRooms();
-    scheduleGame(room);
+    if (connectedParticipantCount(room) === 0) scheduleRoomCleanup(room);
+    else scheduleGame(room);
     return;
   }
   room.participants = room.participants.filter((entry) => entry.participantId !== participant.participantId);
   room.drivers[participant.playerId] = { kind: 'ai' };
-  socketsByParticipant.delete(participant.participantId);
   if (room.participants.length === 0) {
     rooms.delete(room.roomCode);
     void persistRooms();
@@ -602,7 +710,6 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
         const currentGeneration = connectionGenerationByParticipant.get(participantId) ?? activeGeneration ?? 0;
         connectionGenerationByParticipant.set(participantId, currentGeneration + 1);
         leaveRoom(activeRoom, activeParticipant);
-        socketsByParticipant.delete(participantId);
         activeRoom = null;
         activeParticipant = null;
         activeGeneration = null;
@@ -678,7 +785,8 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
         activeRoom.updatedAt = Date.now();
         broadcast(activeRoom);
         void persistRooms();
-        scheduleDisconnectTakeover(activeRoom, activeParticipant, activeGeneration);
+        if (connectedParticipantCount(activeRoom) === 0) scheduleRoomCleanup(activeRoom);
+        else if (activeRoom.status === 'playing' || activeRoom.status === 'lobby') scheduleDisconnectTakeover(activeRoom, activeParticipant, activeGeneration);
       }
     }
   });

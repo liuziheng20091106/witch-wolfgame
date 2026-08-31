@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CharacterId, SubmittedDecision } from '../domain/model';
+import { characterById } from '../domain/catalog/characters';
+import type { CharacterId, GameObservation, SubmittedDecision } from '../domain/model';
 import {
   encodeMultiplayerMessage,
   type MultiplayerClientMessage,
   type MultiplayerRoomView,
   type MultiplayerServerMessage,
 } from './protocol';
+
+function restoreLocalAvatars(room: MultiplayerRoomView): MultiplayerRoomView {
+  if (room.observation === null) return room;
+  const observation: GameObservation = {
+    ...room.observation,
+    players: room.observation.players.map((player) => ({
+      ...player,
+      avatarUrl: characterById[player.characterId]?.avatarUrl ?? '',
+    })),
+  };
+  return { ...room, observation };
+}
 
 const RESUME_KEY = 'majo-wolf.multiplayer.resume.v1';
 
@@ -63,11 +76,12 @@ export function useMultiplayerRoom(): MultiplayerController {
       setError(message.message);
       return;
     }
+    const nextRoom = restoreLocalAvatars(message.room);
     if (message.type === 'welcome') {
-      localStorage.setItem(RESUME_KEY, JSON.stringify({ roomCode: message.room.roomCode, resumeToken: message.resumeToken } satisfies ResumeRecord));
+      localStorage.setItem(RESUME_KEY, JSON.stringify({ roomCode: nextRoom.roomCode, resumeToken: message.resumeToken } satisfies ResumeRecord));
     }
-    roomRef.current = message.room;
-    setRoom(message.room);
+    roomRef.current = nextRoom;
+    setRoom(nextRoom);
     setError(null);
   }, []);
 

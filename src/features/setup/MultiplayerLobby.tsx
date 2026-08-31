@@ -1,7 +1,7 @@
 import { Copy, LogIn, Play, Radio, UserRound, Users, Wifi, WifiOff } from 'lucide-react';
 import { useState } from 'react';
 import type { MultiplayerController } from '../../multiplayer/useMultiplayerRoom';
-import { characters } from '../../domain/catalog/characters';
+import { characterById, characters } from '../../domain/catalog/characters';
 import type { CharacterId } from '../../domain/model';
 import { copyTextToClipboard } from '../../app/clipboard';
 import styles from './MultiplayerLobby.module.css';
@@ -28,11 +28,14 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
       <header><Radio /><div><span>ONLINE ROOM · {room.playerCount} SEATS</span><h2 id="multiplayer-lobby-title">房间 {room.roomCode}</h2></div><button type="button" className={styles.copy} onClick={() => { void copyTextToClipboard(room.roomCode).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }); }}><Copy />{copied ? '已复制' : '复制房间号'}</button></header>
       <div className={styles.status}><span>{multiplayer.connected ? <Wifi /> : <WifiOff />}{multiplayer.connected ? '已连接' : '连接中断'}</span><strong>{room.status === 'lobby' ? '等待准备' : room.status === 'playing' ? '审判进行中' : room.status === 'failed' ? '审判异常终止' : '审判已结束'}</strong></div>
       <div className={styles.participants}>
-        {room.participants.map((participant) => <article key={participant.participantId} className={participant.participantId === room.selfParticipantId ? styles.self : ''}>
-          <img src={characters.find((character) => character.id === participant.characterId)?.avatarUrl} alt="" />
-          <div><strong>{participant.playerName}{participant.host ? ' · 房主' : ''}</strong><span>{characters.find((character) => character.id === participant.characterId)?.name} · {participant.playerId + 1}号席</span></div>
-          <small>{room.drivers[participant.playerId]?.kind === 'ai' ? participant.connected ? 'AI 驱动' : 'AI 驱动 · 等待重连' : participant.connected ? participant.ready ? '已准备' : '未准备' : '等待重连'}</small>
-        </article>)}
+        {room.participants.map((participant) => {
+          const character = characterById[participant.characterId];
+          return <article key={participant.participantId} className={participant.participantId === room.selfParticipantId ? styles.self : ''}>
+            <img src={character.avatarUrl} alt="" />
+            <div><strong>{participant.playerName}{participant.host ? ' · 房主' : ''}</strong><span>{character.name} · {participant.playerId + 1}号席</span></div>
+            <small>{room.drivers[participant.playerId]?.kind === 'ai' ? participant.connected ? 'AI 驱动' : 'AI 驱动 · 等待重连' : participant.connected ? participant.ready ? '已准备' : '未准备' : '等待重连'}</small>
+          </article>;
+        })}
         {room.drivers.map((driver, index) => driver.kind === 'ai' && !participantPlayerIds.has(index) && <article key={`ai-${index}`} className={styles.aiSeat}><UserRound /><div><strong>AI 驱动</strong><span>{index + 1}号席</span></div><small>自动</small></article>)}
       </div>
       {room.failureMessage && <p className={styles.error} role="alert">{room.failureMessage}。房间已停止推进，请离开房间重新创建。</p>}

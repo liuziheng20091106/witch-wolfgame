@@ -454,6 +454,7 @@
 
 .savedRun {
   display: grid;
+  box-sizing: border-box;
   grid-template-columns: auto auto 44px;
   grid-template-rows: auto auto;
   align-items: center;

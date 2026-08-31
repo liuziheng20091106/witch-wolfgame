@@ -8,6 +8,7 @@ export type AiProviderKind = 'free' | 'custom';
 export interface FreeAiProviderConfig {
   provider: 'free';
   retryCount: number;
+  endpoint?: string;
 }
 
 export type AiProfileKind = 'default' | 'fast' | 'deep';
@@ -75,7 +76,7 @@ export function resolveAiProfile(config: CustomAiProviderConfig, pending: Pendin
   };
 }
 
-export const FREE_PROVIDER_ENDPOINT = import.meta.env.VITE_MAIN_BACKEND_ENDPOINT?.trim() || 'https://freeapi.majowolf.tkcloud.online/api/ai/chat/completions';
+export const FREE_PROVIDER_ENDPOINT = import.meta.env?.VITE_MAIN_BACKEND_ENDPOINT?.trim() || 'https://freeapi.majowolf.tkcloud.online/api/ai/chat/completions';
 
 export interface AiDecisionRequest<T extends SubmittedDecision = SubmittedDecision> {
   observation: GameObservation;
