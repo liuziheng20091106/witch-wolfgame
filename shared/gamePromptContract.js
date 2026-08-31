@@ -204,16 +204,18 @@ export const PROMPT_LIMITS = freeze(/** @type {const} */({
  currentDaySpeechesMaxItems: MAX_PLAYERS,
  historicalSpeechesMaxItems: 28,
  recentPublicMaxItems: 32,
-  privateEventsMaxItems: 20,
-  speechMaxLength: 2_000,
-  wolfCouncilMessagesMaxItems: 4,
-  wolfCouncilMessageMaxLength: WOLF_COUNCIL_MESSAGE_MAX_LENGTH,
- publicSkillsMinItems: MIN_PLAYERS,
+ privateEventsMaxItems: 20,
+ speechMaxLength: 2_000,
+ wolfCouncilMessagesMaxItems: 4,
+ wolfCouncilMessageMaxLength: WOLF_COUNCIL_MESSAGE_MAX_LENGTH,
+ privateKnowledgeMaxItems: MAX_PLAYERS * MAX_PLAYERS,
  publicSkillsMaxItems: MAX_PLAYERS,
  publicVotesMaxItems: 2 * (MAX_PLAYERS + 1),
 }));
 
+if (!Number.isInteger(PROMPT_LIMITS.privateKnowledgeMaxItems) || PROMPT_LIMITS.privateKnowledgeMaxItems < MAX_PLAYERS) throw new Error('私有知识数量限制契约未同步');
 if (PROMPT_LIMITS.wolfCouncilMessageMaxLength !== WOLF_COUNCIL_MESSAGE_MAX_LENGTH) throw new Error('狼人议事消息限制契约未同步');
+export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成的合法游戏请求';
 
 /**
  * @param {keyof typeof DECISION_EXAMPLES} schemaKey
