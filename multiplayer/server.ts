@@ -504,6 +504,7 @@ function scheduleDisconnectTakeover(room: Room, participant: Participant, genera
   const expectedGeneration = generation ?? connectionGenerationByParticipant.get(participant.participantId) ?? 0;
   let timer: NodeJS.Timeout;
   timer = windowlessSetTimeout(() => {
+    if (takeoverTimers.get(participant.participantId) === timer) takeoverTimers.delete(participant.participantId);
     if (rooms.get(room.roomCode) !== room || (room.status !== 'playing' && room.status !== 'lobby') || (connectionGenerationByParticipant.get(participant.participantId) ?? 0) !== expectedGeneration || socketsByParticipant.has(participant.participantId) || participantById(room, participant.participantId) === null) return;
     if (connectedParticipantCount(room) === 0) {
       scheduleRoomCleanup(room);
