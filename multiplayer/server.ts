@@ -256,7 +256,7 @@ async function loadRooms(): Promise<void> {
   for (const room of loadedRooms) {
     rooms.set(room.roomCode, room);
     recoveredRooms.add(room);
-    scheduleRoomCleanup(room);
+    scheduleRoomCleanup(room, ROOM_IDLE_MS);
   }
 }
 function connectedParticipantCount(room: Room): number {
@@ -284,7 +284,7 @@ function cancelRoomWork(room: Room): void {
   for (const participant of room.participants) clearDisconnectTakeover(participant.participantId);
 }
 
-function scheduleRoomCleanup(room: Room): void {
+function scheduleRoomCleanup(room: Room, delayMs = DISCONNECT_GRACE_MS): void {
   if (rooms.get(room.roomCode) !== room || connectedParticipantCount(room) > 0 || roomCleanupTimers.has(room.roomCode)) return;
   cancelRoomWork(room);
   let timer: NodeJS.Timeout;
@@ -295,7 +295,7 @@ function scheduleRoomCleanup(room: Room): void {
     cancelRoomWork(room);
     rooms.delete(room.roomCode);
     void persistRooms();
-  }, DISCONNECT_GRACE_MS);
+  }, delayMs);
   roomCleanupTimers.set(room.roomCode, timer);
 }
 
@@ -529,6 +529,7 @@ function leaveRoom(room: Room, participant: Participant): void {
   clearDisconnectTakeover(participant.participantId);
   if (room.status === 'playing') {
     participant.connected = false;
+    socketsByParticipant.delete(participant.participantId);
     room.drivers[participant.playerId] = { kind: 'ai' };
     if (room.hostParticipantId === participant.participantId) {
       const nextHost = room.participants.find((candidate) => candidate.connected && candidate.participantId !== participant.participantId);
@@ -710,7 +711,6 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
         const currentGeneration = connectionGenerationByParticipant.get(participantId) ?? activeGeneration ?? 0;
         connectionGenerationByParticipant.set(participantId, currentGeneration + 1);
         leaveRoom(activeRoom, activeParticipant);
-        socketsByParticipant.delete(participantId);
         activeRoom = null;
         activeParticipant = null;
         activeGeneration = null;

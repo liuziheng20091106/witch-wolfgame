@@ -211,6 +211,13 @@ try {
   transferGuest.send({ type: 'start-game' });
   await transferGuest.next((message) => message.type === 'room-state' && message.room.status === 'playing', '继任房主开始游戏');
   transferGuest.send({ type: 'leave-room' });
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  const cleanedRoomProbe = client();
+  await cleanedRoomProbe.open();
+  cleanedRoomProbe.send({ type: 'resume-room', roomCode: transferHostWelcome.room.roomCode, resumeToken: transferGuestWelcome.resumeToken });
+  const cleanedRoomError = await cleanedRoomProbe.next((message) => message.type === 'error', '所有参与者离开后清理房间');
+  assert.equal(cleanedRoomError.code, 'resume_invalid');
+  cleanedRoomProbe.socket.close();
   transferGuest.socket.close();
 
   host.send({ type: 'set-ready', ready: true });
@@ -352,6 +359,7 @@ try {
   assert.equal(restored.welcome.type, 'welcome');
   assert.equal(restored.takenOver.room.drivers[restartPlayerId].kind, 'ai');
   assert.equal(restored.progressed.type, 'room-state');
+  await new Promise((resolve) => setTimeout(resolve, 220));
   const endedReconnect = new WebSocket(`ws://127.0.0.1:${reloadPort}/multiplayer`, { origin: 'http://127.0.0.1:5173' });
   await new Promise((resolve, reject) => { endedReconnect.once('open', resolve); endedReconnect.once('error', reject); });
   endedReconnect.send(JSON.stringify({ type: 'resume-room', roomCode: endedRoom.roomCode, resumeToken: endedRoom.participants[0].resumeToken }));
