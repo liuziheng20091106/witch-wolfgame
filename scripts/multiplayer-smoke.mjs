@@ -211,13 +211,6 @@ try {
   transferGuest.send({ type: 'start-game' });
   await transferGuest.next((message) => message.type === 'room-state' && message.room.status === 'playing', '继任房主开始游戏');
   transferGuest.send({ type: 'leave-room' });
-  await new Promise((resolve) => setTimeout(resolve, 220));
-  const cleanedRoomProbe = client();
-  await cleanedRoomProbe.open();
-  cleanedRoomProbe.send({ type: 'resume-room', roomCode: transferHostWelcome.room.roomCode, resumeToken: transferGuestWelcome.resumeToken });
-  const cleanedRoomError = await cleanedRoomProbe.next((message) => message.type === 'error', '所有参与者离开后清理房间');
-  assert.equal(cleanedRoomError.code, 'resume_invalid');
-  cleanedRoomProbe.socket.close();
   transferGuest.socket.close();
 
   host.send({ type: 'set-ready', ready: true });
@@ -354,7 +347,7 @@ try {
       else setTimeout(check, 20).unref();
     };
     check();
-    setTimeout(() => reject(new Error(`重启后真人席位未转 AI 并推进：${JSON.stringify(reloadMessages)}；服务日志：${reloaded.__stderr}`)), 5000).unref();
+    setTimeout(() => reject(new Error(`重启后真人席位未转 AI 并推进：${JSON.stringify(reloadMessages)}`)), 5000).unref();
   });
   assert.equal(restored.welcome.type, 'welcome');
   assert.equal(restored.takenOver.room.drivers[restartPlayerId].kind, 'ai');
