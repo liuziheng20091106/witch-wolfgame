@@ -7,6 +7,13 @@ on:
       - "server/**"
       - "proxy/**"
       - "shared/**"
+      - "multiplayer/**"
+      - "src/ai/**"
+      - "src/config/version.ts"
+      - "src/data/**"
+      - "src/domain/**"
+      - "src/multiplayer/**"
+      - "src/storage/gameStateSchema.ts"
   workflow_dispatch:
 
 jobs:
@@ -24,7 +31,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "changed=all" >> "$GITHUB_OUTPUT"
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(server|proxy|shared)/' || true)
+            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(server|proxy|shared|multiplayer)/|^src/(ai|data|domain|multiplayer)/|^src/config/version\.ts$|^src/storage/gameStateSchema\.ts$' || true)
             if [ -z "$CHANGED" ]; then
               echo "changed=" >> "$GITHUB_OUTPUT"
             else

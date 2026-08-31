@@ -73,18 +73,20 @@ async function loadProxyNode(configFile, proxy) {
 async function loadUpdateNode(configFile, entry) {
   if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string' || !entry.name.trim()) throw new Error('更新节点缺少名称');
   const url = new URL(entry.url);
-  if (url.protocol !== 'https:') throw new Error(`更新节点 ${entry.name} 必须使用 HTTPS`);
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error(`更新节点 ${entry.name} 必须使用 HTTP(S)`);
   let updatePassEnv = '';
   if (typeof entry.updatePassEnv === 'string') updatePassEnv = entry.updatePassEnv;
   let updatePass = null;
   if (updatePassEnv) updatePass = process.env[updatePassEnv] ?? null;
   if (!updatePass) throw new Error(`更新节点 ${entry.name} 缺少 updatePassEnv 对应环境变量`);
   let ca = null;
-  if (entry.ca) ca = await readFile(configPath(configFile, entry.ca));
   let cert = null;
-  if (entry.clientCert) cert = await readFile(configPath(configFile, entry.clientCert));
   let key = null;
-  if (entry.clientKey) key = await readFile(configPath(configFile, entry.clientKey));
+  if (url.protocol === 'https:') {
+    if (entry.ca) ca = await readFile(configPath(configFile, entry.ca));
+    if (entry.clientCert) cert = await readFile(configPath(configFile, entry.clientCert));
+    if (entry.clientKey) key = await readFile(configPath(configFile, entry.clientKey));
+  }
   let updateTimeoutMs = 60_000;
   if (Number.isFinite(entry.updateTimeoutMs) && entry.updateTimeoutMs > 0) {
     updateTimeoutMs = entry.updateTimeoutMs;
@@ -101,6 +103,45 @@ async function loadUpdateNode(configFile, entry) {
     ca, cert, key,
     serverName,
   };
+}
+
+
+async function updateRemoteNodes(nodes, eventName) {
+  const results = [];
+  let allOk = true;
+  for (const node of nodes) {
+    const entry = { name: node.name };
+    try {
+      const result = await requestNodeUpdate(node);
+      entry.status = result.statusCode;
+      const applied = result.statusCode >= 200 && result.statusCode < 300
+        && result.parsed && result.parsed.ok === true;
+      if (applied) {
+        const confirmation = await confirmNodeUpdate(node, { timeoutMs: node.updateTimeoutMs });
+        entry.applied = true;
+        entry.confirmed = confirmation.confirmed;
+        if (!confirmation.confirmed) {
+          allOk = false;
+          entry.message = confirmation.message;
+        }
+        logEvent('info', `${eventName}_request`, { node: node.name, status: result.statusCode, confirmed: confirmation.confirmed });
+      } else {
+        allOk = false;
+        entry.applied = false;
+        entry.confirmed = false;
+        entry.body = result.parsed ?? result.body.slice(0, 200);
+        logEvent('warn', `${eventName}_failed`, { node: node.name, status: result.statusCode });
+      }
+    } catch (error) {
+      allOk = false;
+      entry.applied = false;
+      entry.confirmed = false;
+      entry.error = error.message;
+      logEvent('warn', `${eventName}_error`, { node: node.name, message: error.message });
+    }
+    results.push(entry);
+  }
+  return { ok: allOk, results };
 }
 
 function callProxy(node, body, sessionId) {
@@ -257,6 +298,9 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
   const updateNodes = Array.isArray(config.updateNodes) && config.updateNodes.length > 0
     ? await Promise.all(config.updateNodes.map((entry) => loadUpdateNode(configFile, entry)))
     : [];
+  const multiplayerUpdateNodes = Array.isArray(config.multiplayerUpdateNodes) && config.multiplayerUpdateNodes.length > 0
+    ? await Promise.all(config.multiplayerUpdateNodes.map((entry) => loadUpdateNode(configFile, entry)))
+    : [];
   const allowedOrigins = new Set(config.cors.allowedOrigins);
   const acceptedVersions = new Set(config.acceptedClientVersions);
   if (acceptedVersions.size === 0) throw new Error('acceptedClientVersions 不能为空');
@@ -271,7 +315,7 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
     if (url.pathname === '/healthz') return sendJson(response, 200, { ok: true, service: 'majo-main' });
-    // 更新路由：自更新 + 命令所有代理更新（独立认证，不走 CORS/限流）
+    // 更新路由：代理更新、多人服务更新与主服务自更新（独立认证，不走 CORS/限流）
     if (url.pathname === '/update') {
       if (request.method !== 'POST') return sendJson(response, 405, { error: 'method_not_allowed' });
       const provided = getBearerToken(request);
@@ -283,48 +327,16 @@ export async function startMainServer(configFile = process.env.MAJO_MAIN_CONFIG 
       if (typeof config.proxyUpdatePassEnv === 'string') {
         proxyUpdatePass = process.env[config.proxyUpdatePassEnv] ?? null;
       }
-      // 命令所有代理更新（使用独立管理密钥）
       if (proxyUpdatePass && safeEqual(provided, proxyUpdatePass) && updateNodes.length > 0) {
-        const results = [];
-        let allOk = true;
-        for (const node of updateNodes) {
-          const entry = { name: node.name };
-          try {
-            const result = await requestNodeUpdate(node);
-            entry.status = result.statusCode;
-            const applied = result.statusCode >= 200 && result.statusCode < 300
-              && result.parsed && result.parsed.ok === true;
-            if (applied) {
-              const confirmation = await confirmNodeUpdate(node, { timeoutMs: node.updateTimeoutMs });
-              entry.applied = true;
-              entry.confirmed = confirmation.confirmed;
-              if (!confirmation.confirmed) {
-                allOk = false;
-                entry.message = confirmation.message;
-              }
-              logEvent('info', 'proxy_update_request', { proxy: node.name, status: result.statusCode, confirmed: confirmation.confirmed });
-            } else {
-              allOk = false;
-              entry.applied = false;
-              entry.confirmed = false;
-              entry.body = result.parsed ?? result.body.slice(0, 200);
-              logEvent('warn', 'proxy_update_failed', { proxy: node.name, status: result.statusCode });
-            }
-          } catch (error) {
-            allOk = false;
-            entry.applied = false;
-            entry.confirmed = false;
-            entry.error = error.message;
-            logEvent('warn', 'proxy_update_error', { proxy: node.name, message: error.message });
-          }
-          results.push(entry);
-        }
-        let responseStatus = 200;
-        if (!allOk) responseStatus = 502;
-        return sendJson(response, responseStatus, { ok: allOk, results });
+        const result = await updateRemoteNodes(updateNodes, 'proxy_update');
+        return sendJson(response, result.ok ? 200 : 502, result);
       }
-      // main 自更新（使用自身 update pass）
+      // main 自更新前先更新由主后端管理的多人服务。
       if (mainUpdatePass && safeEqual(provided, mainUpdatePass)) {
+        if (multiplayerUpdateNodes.length > 0) {
+          const result = await updateRemoteNodes(multiplayerUpdateNodes, 'multiplayer_update');
+          if (!result.ok) return sendJson(response, 502, result);
+        }
         if (updateHandler) {
           return updateHandler(request, response, url);
         }

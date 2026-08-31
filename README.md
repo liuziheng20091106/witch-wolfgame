@@ -96,9 +96,9 @@ docker compose ps
 
 代码更新后只需重启进程，无需重新构建镜像。
 
-`deploy.main.env` 只保存主后端所需的连接密码；`deploy.proxy.env` 额外保存独立的 `MAJO_UPDATE_PASS` 和 `providers.json` 引用的 API Key 环境变量。两个真实文件均被 Git 忽略，且 `MAJO_PROXY_PASSWORD_PRIMARY` 必须一致。主后端和代理容器共享代码卷与 `.runtime/restart-token`：更新事务全部成功后，代理写入重启信号；两个服务都会停止并由 Compose 的 `restart: unless-stopped` 使用原镜像重新启动，从而避免协议模块版本分裂。
-
-代理自动更新接口仍受 mTLS 保护，并额外要求请求头 `Authorization: Bearer <MAJO_UPDATE_PASS>`；密钥不接受查询字符串。下载允许最多 5 次 HTTPS 重定向，网络错误、HTTP 408/425/429 和 5xx 默认自动重试 3 次，并在流式读取超过 8MB 时立即中止。更新文件先完整暂存，任一下载或替换失败都会清理临时文件并回滚已替换文件。同一时刻只允许一个更新事务。
+`deploy.main.env` 保存主后端连接密码及 `MAJO_MAIN_UPDATE_PASS`；主后端和多人服务共用后者，不新增多人更新密钥。`deploy.proxy.env` 额外保存独立的代理更新密钥和 `providers.json` 引用的 API Key 环境变量。两个真实文件均被 Git 忽略，且 `MAJO_PROXY_PASSWORD_PRIMARY` 必须一致。
+主后端收到 `MAJO_MAIN_UPDATE_PASS` 后，先调用 `multiplayerUpdateNodes` 更新多人服务并确认其 `/healthz` 恢复，再执行主后端自身更新；代理仍由现有独立流程更新。多人服务更新完成后由 Compose 自动重启，代码更新无需重建镜像。
+代理自动更新接口仍受 mTLS 保护，并额外要求请求头 `Authorization: Bearer <MAJO_UPDATE_PASS>`；密钥不接受查询字符串。下载允许最多 5 次 HTTPS 重定向，网络错误、HTTP 408/425/429 和 5xx 默认自动重试 3 次，并在流式读取超过 8MB 时立即中止。更新文件先完整暂存，任一下载或替换失败都会清理临时文件并回滚已替换文件。同一时刻只允许一个更新事务；多人服务复用同一更新逻辑。
 主后端保持 HTTP 监听，由外部 Cloudflare/反向代理负责公网 HTTPS 终止；不要给主后端配置或暴露独立 HTTPS 端口。代理节点内部继续使用 TLS 1.3 mTLS。
 
 快速更新工具：

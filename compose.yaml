@@ -54,6 +54,8 @@ services:
     <<: *node-service
     container_name: majowolf-multiplayer
     command: ["node", "node_modules/tsx/dist/cli.mjs", "multiplayer/server.ts"]
+    env_file:
+      - ./deploy.main.env
     environment:
       MAJO_MULTIPLAYER_HOST: 0.0.0.0
       MAJO_MULTIPLAYER_PORT: 34024
@@ -63,5 +65,6 @@ services:
       - ./multiplayer:/app/multiplayer:ro
       - ./src:/app/src:ro
       - ./shared:/app/shared:ro
+      - ./server:/app/server:ro
       - ./node_modules:/app/node_modules:ro
       - ./.runtime:/app/.runtime:rw

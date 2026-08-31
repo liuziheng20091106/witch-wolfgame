@@ -415,16 +415,25 @@ export async function confirmNodeUpdate(node, options = {}) {
 }
 
 export function requestNodeUpdate(node) {
+  const transport = node.url.protocol === 'https:' ? https : http;
+  const headers = {
+    'Content-Type': 'application/json',
+    'Content-Length': 0,
+    Authorization: `Bearer ${node.updatePass}`,
+  };
+  const options = { method: 'POST', headers, timeout: node.updateTimeoutMs ?? 60_000 };
+  if (node.url.protocol === 'https:') {
+    Object.assign(options, {
+      ca: node.ca,
+      cert: node.cert,
+      key: node.key,
+      servername: node.serverName,
+      minVersion: 'TLSv1.3',
+      rejectUnauthorized: true,
+    });
+  }
   return new Promise((resolvePromise, reject) => {
-    const headers = {
-      'Content-Type': 'application/json',
-      'Content-Length': 0,
-      Authorization: `Bearer ${node.updatePass}`,
-    };
-    const request = https.request(node.url, {
-      method: 'POST', headers, ca: node.ca, cert: node.cert, key: node.key,
-      servername: node.serverName, minVersion: 'TLSv1.3', rejectUnauthorized: true, timeout: node.updateTimeoutMs ?? 60_000,
-    }, async (response) => {
+    const request = transport.request(node.url, options, async (response) => {
       try {
         const bodyText = await readBody(response);
         let parsed = null;

@@ -42,6 +42,72 @@ const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TICK_DELAY_MS = 80;
 const MULTIPLAYER_AI_ENDPOINT = process.env.MAJO_MULTIPLAYER_AI_ENDPOINT?.trim() || FREE_PROVIDER_ENDPOINT;
 const MULTIPLAYER_AI_RETRY_COUNT = Math.min(5, Math.max(0, Math.trunc(Number(process.env.MAJO_MULTIPLAYER_AI_RETRY_COUNT ?? 2))));
+const MULTIPLAYER_UPDATE_FILES = [
+  'multiplayer/server.ts',
+  'server/shared.mjs',
+  'server/update-core.mjs',
+  'shared/gamePromptContract.js',
+  'src/ai/client.ts',
+  'src/ai/debugReport.ts',
+  'src/ai/fallback.ts',
+  'src/ai/postGameLore.ts',
+  'src/ai/prompts.ts',
+  'src/ai/roleplayLore.ts',
+  'src/ai/schemas.ts',
+  'src/ai/types.ts',
+  'src/config/version.ts',
+  'src/data/characters/0.json',
+  'src/data/characters/1.json',
+  'src/data/characters/2.json',
+  'src/data/characters/3.json',
+  'src/data/characters/4.json',
+  'src/data/characters/5.json',
+  'src/data/characters/6.json',
+  'src/data/characters/7.json',
+  'src/data/characters/8.json',
+  'src/data/characters/9.json',
+  'src/data/characters/10.json',
+  'src/data/characters/11.json',
+  'src/data/characters/12.json',
+  'src/data/characters/13.json',
+  'src/data/roleplay-retrieval.ts',
+  'src/data/roleplay-static.ts',
+  'src/domain/catalog/characters.ts',
+  'src/domain/catalog/roles.ts',
+  'src/domain/catalog/witchSkills.ts',
+  'src/domain/engine/createGame.ts',
+  'src/domain/engine/events.ts',
+  'src/domain/engine/night.ts',
+  'src/domain/engine/random.ts',
+  'src/domain/engine/reducer.ts',
+  'src/domain/engine/selectors.ts',
+  'src/domain/engine/vote.ts',
+  'src/domain/engine/win.ts',
+  'src/domain/model.ts',
+  'src/domain/skills/decisionGuidance.ts',
+  'src/domain/skills/lastWords.ts',
+  'src/domain/skills/nightSkills.ts',
+  'src/domain/skills/postGame.ts',
+  'src/domain/skills/registry.ts',
+  'src/domain/skills/speechSkills.ts',
+  'src/domain/skills/types.ts',
+  'src/domain/skills/voteSkills.ts',
+  'src/multiplayer/protocol.ts',
+  'src/storage/gameStateSchema.ts',
+];
+
+const MULTIPLAYER_UPDATE_CONFIG = {
+  passEnv: 'MAJO_MAIN_UPDATE_PASS',
+  source: 'https://raw.githubusercontent.com/liuziheng20091106/witch-wolfgame/main/{file}',
+  files: MULTIPLAYER_UPDATE_FILES,
+  projectRoot: '.',
+  downloadTimeoutMs: 30_000,
+  downloadAttempts: 3,
+  retryDelayMs: 500,
+  maxRedirects: 5,
+  backupKeepCount: 5,
+  restartOnSuccess: 'code0',
+};
 const MULTIPLAYER_AI_CONFIG = { provider: 'free' as const, retryCount: MULTIPLAYER_AI_RETRY_COUNT, endpoint: MULTIPLAYER_AI_ENDPOINT };
 interface RateWindow { startedAt: number; count: number }
 
@@ -571,8 +637,26 @@ function consumeRateLimit(rates: Map<string, RateWindow>, key: string, limit: nu
   return current.count <= limit;
 }
 
+// The existing updater is JavaScript with checkJs-incompatible legacy annotations; load it at runtime to keep this TypeScript module strict.
+const updateCoreModule = await import(/* @vite-ignore */ ['..', 'server', 'update-core.mjs'].join('/'));
+const updateHandler = updateCoreModule.createUpdateHandler(MULTIPLAYER_UPDATE_CONFIG, process.cwd(), (message: string) => console.info(JSON.stringify({ event: 'multiplayer_update_log', message })));
+if (updateHandler) {
+  const recovery = await updateCoreModule.recoverInterruptedUpdate(MULTIPLAYER_UPDATE_CONFIG, process.cwd(), (message: string) => console.info(JSON.stringify({ event: 'multiplayer_update_log', message })));
+  if (recovery.restored > 0 || recovery.removedTemp > 0) {
+    console.warn(JSON.stringify({ event: 'multiplayer_update_recovery', restored: recovery.restored, removedTemp: recovery.removedTemp }));
+  }
+}
+
 await loadRooms();
 const httpServer = createServer((request, response) => {
+  if (request.url === '/update') {
+    if (!updateHandler) {
+      response.writeHead(503, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'update_not_configured' }));
+      return;
+    }
+    return updateHandler(request, response);
+  }
   if (request.url === '/healthz') {
     const healthy = stateLoadError === null;
     response.writeHead(healthy ? 200 : 503, { 'Content-Type': 'application/json' });
