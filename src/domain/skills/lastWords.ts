@@ -6,6 +6,7 @@ import type {
   SubmittedDecision,
   TimelineEvent,
 } from '../model';
+import { SPEECH_MAX_LENGTH, SPEECH_PROMPT_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
 import { addPublicEvent } from '../engine/events';
 import { getName } from '../engine/selectors';
 import { exhaustSkill } from './types';
@@ -46,7 +47,7 @@ function canGiveLastWords(state: GameState, playerId: PlayerId, death: TimelineE
   return state.day === 0;
 }
 
-/** 构造遗言决策：复用 speech schema（{speech: ≤100 字}），options.lastWords 标记区分。 */
+/** 构造遗言决策：复用 speech schema（{speech: ≤160 字}），options.lastWords 标记区分。 */
 function makeLastWordsDecision(state: GameState, actorId: PlayerId): PendingDecision {
   const pending: PendingDecision = {
     id: `${state.gameId}-decision-${state.day}-last-words-${actorId}`,
@@ -54,7 +55,7 @@ function makeLastWordsDecision(state: GameState, actorId: PlayerId): PendingDeci
     schemaKey: 'speech',
     actorId,
     title: '遗言',
-    description: '你已死亡，这是你最后的遗言（不超过 100 字）。遗言将公开展示给所有玩家。',
+    description: `你已死亡，这是你最后的遗言（建议不超过 ${SPEECH_PROMPT_MAX_LENGTH} 字，实际最多 ${SPEECH_MAX_LENGTH} 字）。遗言将公开展示给所有玩家。`,
     candidates: [],
     allowAbstain: true,
     skillInstanceId: null,
@@ -122,12 +123,10 @@ function maybeLockBrainwashInLastWords(state: GameState, actorId: PlayerId, spee
   brainwash.data.lastWordsBrainwash = true;
   exhaustSkill(brainwash);
 }
-
-/** 发布遗言：写入公开事件（所有人可见），并联动遗言洗脑。 */
 export function applyLastWords(state: GameState, pending: PendingDecision, decision: SubmittedDecision): void {
   const speech = (decision as SpeechDecision).speech.trim();
-  if (speech.length > 100) {
-    throw new Error('遗言不能超过 100 字');
+  if (speech.length > SPEECH_MAX_LENGTH) {
+    throw new Error(`遗言不能超过 ${SPEECH_MAX_LENGTH} 字`);
   }
   let text: string;
   if (speech.length > 0) {

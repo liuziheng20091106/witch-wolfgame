@@ -1,4 +1,4 @@
-import { CREATURE_ID, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
+import { CREATURE_ID, SPEECH_MAX_LENGTH, SPEECH_PROMPT_MAX_LENGTH, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
 import { roleNames } from '../catalog/roles';
 import type {
   GameEvent,
@@ -50,7 +50,7 @@ import { applyLastWords, getNextLastWordsDecision } from '../skills/lastWords';
 import { applyPostGameSpeech, getNextPostGameDecision } from '../skills/postGame';
 import { withFactionStrategyGuidance } from '../skills/decisionGuidance';
 
-const DAY_SPEECH_DESCRIPTION = '公开发言不超过 100 字。系统规则只作为内部决策边界，不得当作默认发言素材。先检查本日已有发言；不得换一种说法重复已有共识。至少贡献一项新的观察、质疑、矛盾、回应或后续验证建议；确无新增时可简短保留判断，但不要复述规则。';
+const DAY_SPEECH_DESCRIPTION = `公开发言建议不超过 ${SPEECH_PROMPT_MAX_LENGTH} 字，实际最多 ${SPEECH_MAX_LENGTH} 字。系统规则只作为内部决策边界，不得当作默认发言素材。先检查本日已有发言；不得换一种说法重复已有共识。至少贡献一项新的观察、质疑、矛盾、回应或后续验证建议；确无新增时可简短保留判断，但不要复述规则。`;
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return getName(state, playerId);

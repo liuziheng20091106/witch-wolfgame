@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../shared/gamePromptContract.js';
+import { SPEECH_MAX_LENGTH, VOICE_MIMIC_MAX_LENGTH, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../shared/gamePromptContract.js';
 import type { PendingDecision, PlayerId, SpeechDecision, SubmittedDecision, WitchDecision } from '../domain/model';
 import { AiCommandError } from './types';
 
@@ -7,7 +7,6 @@ import { AiCommandError } from './types';
 // 模型常自创多余顶层字段（如把思考内容里的 skill/target 塞进 JSON），strictObject 会因此整单失败；
 // z.object 会在解析时自动剥离未知键（且不修改输入对象），schema 本身即是唯一的字段白名单，
 // 避免手写白名单与 schema 双重定义导致的漂移。必填缺失/类型错误仍会被拦截。
-const SPEECH_MAX_LENGTH = 100;
 export const speechDecisionSchema = z.object({ speech: z.string().max(SPEECH_MAX_LENGTH) });
 export const targetDecisionSchema = z.object({ targetPlayerId: z.number().int().min(0).max(99).nullable() });
 export const wolfCouncilDecisionSchema = z.object({
@@ -54,7 +53,7 @@ export const levitationDecisionSchema = z.object({
 export const voiceMimicDecisionSchema = z.object({
   use: z.boolean(),
   targetPlayerId: z.number().int().min(0).max(99).nullable(),
-  forgedSpeech: z.string().min(1).max(50).nullable(),
+  forgedSpeech: z.string().min(1).max(VOICE_MIMIC_MAX_LENGTH).nullable(),
 }).superRefine((value, context) => {
   const valid = value.use
     ? value.targetPlayerId !== null && value.forgedSpeech !== null

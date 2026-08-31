@@ -6,7 +6,13 @@ export const PLAYER_IDS = freeze(/** @type {const} */([0, 1, 2, 3, 4, 5, 6, 7, 8
 
 export const CREATURE_ID = 99;
 export const GAME_ENTITY_IDS = freeze([...PLAYER_IDS, CREATURE_ID]);
-export const WOLF_COUNCIL_MESSAGE_MAX_LENGTH = 120;
+export const SPEECH_PROMPT_MAX_LENGTH = 80;
+export const SPEECH_MAX_LENGTH = 160;
+export const VOICE_MIMIC_PROMPT_MAX_LENGTH = 80;
+export const VOICE_MIMIC_MAX_LENGTH = 160;
+export const WOLF_COUNCIL_PROMPT_MAX_LENGTH = 80;
+export const WOLF_COUNCIL_MESSAGE_MAX_LENGTH = 160;
+export const COMBINED_SPEECH_MAX_LENGTH = SPEECH_MAX_LENGTH + VOICE_MIMIC_MAX_LENGTH + 1;
 
 export const POTION_CHOICE_CATALOG = freeze([
  freeze(/** @type {const} */({ playerId: 0, name: '解药' })),
@@ -201,7 +207,6 @@ export const PROMPT_LIMITS = freeze(/** @type {const} */({
  privateEventsMaxItems: 20,
  speechMaxLength: 2_000,
  wolfCouncilMessagesMaxItems: 4,
- wolfCouncilMessageMaxLength: WOLF_COUNCIL_MESSAGE_MAX_LENGTH,
  privateKnowledgeMaxItems: MAX_PLAYERS * MAX_PLAYERS,
  publicSkillsMinItems: MIN_PLAYERS,
  publicSkillsMaxItems: MAX_PLAYERS,
@@ -223,10 +228,10 @@ export function buildGameSystemPrompt(schemaKey) {
   promptHint += ' 该决策只需回答是否使用（true 或 false），无需选择任何目标。';
  }
  if (schemaKey === 'wolf-council') {
-  promptHint += ' 这是仅狼人可见的内部议事。message 应简洁说明目标收益、公开依据或暴露风险；recommendedTargetPlayerId 是你的明确推荐目标，必须来自 legalCandidates。options.wolfCouncilMessages 是本夜先前狼人留下的议事记录，可以回应但不得虚构额外队友发言。';
+  promptHint += ` 这是仅狼人可见的内部议事。message 应简洁说明目标收益、公开依据或暴露风险，且不超过 ${WOLF_COUNCIL_PROMPT_MAX_LENGTH} 字；recommendedTargetPlayerId 是你的明确推荐目标，必须来自 legalCandidates。options.wolfCouncilMessages 是本夜先前狼人留下的议事记录，可以回应但不得虚构额外队友发言。`;
  }
  if (schemaKey === 'speech') {
-  promptHint += ' 发言必须先处理 currentDaySpeeches 中与自己直接相关的质疑、查杀、对跳或明确问题，再提出一项能由后续发言、私密情报或票型验证的具体判断。不得把 publicSkills 的公开技能当成基础职业证据，不得照抄已有共识或复述系统规则。若声称查验、幻视等私密结果，只能使用 privateKnowledge 或 privateEvents 明确提供的事实，并准确说明它能证明与不能证明什么。';
+  promptHint += ` speech 只能是字符串，且不超过 ${SPEECH_PROMPT_MAX_LENGTH} 字。必须先处理 currentDaySpeeches 中与自己直接相关的质疑、查杀、对跳或明确问题，再提出一项能由后续发言、私密情报或票型验证的具体判断。不得把 publicSkills 的公开技能当成基础职业证据，不得照抄已有共识或复述系统规则。若声称查验、幻视等私密结果，只能使用 privateKnowledge 或 privateEvents 明确提供的事实，并准确说明它能证明与不能证明什么。`;
  }
  if (schemaKey === 'witch') {
   promptHint += ' 女巫决策应优先保留稀缺药水，除非已知狼刀目标值得救、当前局面临近胜负点，或已有足够可靠的毒杀依据；不得仅凭 publicSkills 使用毒药。若没有可靠毒杀依据，poisonTargetPlayerId 应为 null。';
