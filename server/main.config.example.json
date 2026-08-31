@@ -41,6 +41,14 @@
       "updateTimeoutMs": 60000
     }
   ],
+  "multiplayerUpdateNodes": [
+    {
+      "name": "multiplayer",
+      "url": "http://127.0.0.1:34024/update",
+      "updatePassEnv": "MAJO_MAIN_UPDATE_PASS",
+      "updateTimeoutMs": 90000
+    }
+  ],
   "update": {
     "passEnv": "MAJO_MAIN_UPDATE_PASS",
     "source": "https://raw.githubusercontent.com/liuziheng20091106/witch-wolfgame/main/{file}",

@@ -191,6 +191,8 @@ const work = await mkdtemp(join(tmpdir(), 'majo-backend-smoke-'));
 const certs = join(work, 'certs');
 let upstream;
 let proxy;
+let managedUpdater;
+let managedUpdateRequests;
 let multiplayerUpstream;
 let multiplayerClient;
 let timeoutMain;
@@ -281,11 +283,31 @@ try {
   process.env.SMOKE_API_KEYS = 'key-one,key-two';
   proxy = await startProxyServer(proxyConfig);
   const proxyPort = proxy.address().port;
+  managedUpdateRequests = [];
+  managedUpdater = http.createServer((request, response) => {
+    if (request.url === '/update') {
+      managedUpdateRequests.push(request.headers.authorization);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ ok: true, next: 'restarting' }));
+      return;
+    }
+    if (request.url === '/healthz') {
+      response.writeHead(200);
+      response.end('ok');
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  const managedUpdaterPort = await listen(managedUpdater);
+  process.env.MAJO_MAIN_UPDATE_PASS = 'backend-main-update-smoke';
   await writeFile(mainConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 }, cors: { allowedOrigins: [origin] },
     proxies: [{ name: '水梦梦的服务器', url: `https://127.0.0.1:${proxyPort}/internal/v1/chat/completions`, ca: join(certs, 'ca.crt'), clientCert: join(certs, 'main-client.crt'), clientKey: join(certs, 'main-client.key'), serverName: 'proxy.internal', connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', timeoutMs: 5000 }],
+    multiplayerUpdateNodes: [{ name: 'multiplayer', url: `http://127.0.0.1:${managedUpdaterPort}/update`, updatePassEnv: 'MAJO_MAIN_UPDATE_PASS', updateTimeoutMs: 5000 }],
     rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 },
     acceptedClientVersions: ['2.4.0'],
+    update: { passEnv: 'MAJO_MAIN_UPDATE_PASS', source: 'https://raw.githubusercontent.com/liuziheng20091106/witch-wolfgame/main/{file}', files: [] },
   }));
   multiplayerUpstream = new WebSocketServer({ port: 0, host: '127.0.0.1' });
   multiplayerUpstream.on('connection', (socket, request) => {
@@ -300,6 +322,9 @@ try {
   process.env.MAJO_MULTIPLAYER_URL = `ws://127.0.0.1:${multiplayerPort}/multiplayer`;
   main = await startMainServer(mainConfig);
   const mainPort = main.address().port;
+  const managedUpdateResponse = await fetch(`http://127.0.0.1:${mainPort}/update`, { method: 'POST', headers: { Authorization: 'Bearer backend-main-update-smoke' } });
+  assert.equal(managedUpdateResponse.status, 503, '主后端应在多人更新后报告自身未配置更新');
+  assert.deepEqual(managedUpdateRequests, ['Bearer backend-main-update-smoke']);
   multiplayerClient = new WebSocket(`ws://127.0.0.1:${mainPort}/multiplayer`, { origin });
   await new Promise((resolvePromise, reject) => {
     multiplayerClient.once('open', resolvePromise);
@@ -626,7 +651,7 @@ try {
   const structuredLogs = capturedLogs.flatMap((line) => {
     try { return [JSON.parse(line)]; } catch { return []; }
   });
-  for (const event of ['ai_request', 'ai_success', 'proxy_request', 'proxy_success', 'provider_attempt', 'provider_success', 'provider_failure']) {
+  for (const event of ['ai_request', 'ai_success', 'proxy_request', 'proxy_success', 'provider_attempt', 'provider_success', 'provider_failure', 'multiplayer_update_request']) {
     const entry = structuredLogs.find((candidate) => candidate.event === event);
     assert.ok(entry, `缺少 ${event} 日志`);
     assert.ok(Number.isFinite(Date.parse(entry.time)), `${event} 日志缺少 ISO 时间`);
@@ -655,12 +680,14 @@ try {
   if (fallbackProxy) await close(fallbackProxy);
   if (timeoutMain) await close(timeoutMain);
   if (main) await close(main);
+  if (managedUpdater) await close(managedUpdater);
   if (multiplayerUpstream) await closeWebSocketServer(multiplayerUpstream);
   if (hangingMultiplayer) await close(hangingMultiplayer);
   if (proxy) await close(proxy);
   if (upstream) await close(upstream);
   delete process.env.MAJO_MULTIPLAYER_CONNECT_TIMEOUT_MS;
   delete process.env.MAJO_MULTIPLAYER_URL;
+  delete process.env.MAJO_MAIN_UPDATE_PASS;
   for (const [method, implementation] of Object.entries(originalConsole)) console[method] = implementation;
   await rm(work, { recursive: true, force: true });
 }
