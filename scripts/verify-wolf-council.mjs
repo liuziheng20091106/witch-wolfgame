@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { createServer } from 'vite';
 import { validateGamePrompt } from '../server/gameProtocol.mjs';
+import { PROMPT_LIMITS, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../shared/gamePromptContract.js';
 
 const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
