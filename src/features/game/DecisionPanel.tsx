@@ -1,4 +1,4 @@
-import { POTION_CHOICE_CATALOG, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
+import { POTION_CHOICE_CATALOG, SPEECH_MAX_LENGTH, VOICE_MIMIC_MAX_LENGTH, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
 import { AlertTriangle, Clipboard, Download, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { aiDebugReportFilename, formatAiDebugReport } from '../../ai/debugReport';
@@ -174,13 +174,13 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   </fieldset>;
 
   let valid = true;
-  if (pending.schemaKey === 'speech') valid = speech.length <= 100 && mentionsRequired(speech);
+  if (pending.schemaKey === 'speech') valid = speech.length <= SPEECH_MAX_LENGTH && mentionsRequired(speech);
   if (pending.schemaKey === 'wolf-council') valid = speech.trim().length > 0 && speech.length <= WOLF_COUNCIL_MESSAGE_MAX_LENGTH && target !== '';
   if (pending.schemaKey === 'target') valid = pending.allowAbstain || target !== '';
   if (pending.schemaKey === 'optional-target') valid = !useSkill || target !== '';
   if (pending.schemaKey === 'liquid-control') valid = !useSkill || (mode === 'extract' ? target !== '' : mode === 'spread' && factId !== '');
   if (pending.schemaKey === 'levitation') valid = !useSkill || mode === 'tie-break' || ((mode === 'move-first' || mode === 'move-last') && target !== '');
-  if (pending.schemaKey === 'voice-mimic') valid = !useSkill || (target !== '' && forgedSpeech.length > 0 && forgedSpeech.length <= 50 && mentionsRequired(forgedSpeech));
+  if (pending.schemaKey === 'voice-mimic') valid = !useSkill || (target !== '' && forgedSpeech.length > 0 && forgedSpeech.length <= VOICE_MIMIC_MAX_LENGTH && mentionsRequired(forgedSpeech));
 
   const submit = () => {
     let decision: SubmittedDecision;
@@ -221,7 +221,7 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
           <span>建议袭击 {candidateLabel(entry.recommendedTargetPlayerId)}</span>
         </div>)}
       </section>}
-      {pending.schemaKey === 'speech' && <label className={styles.textarea}>{speechLabel}<textarea maxLength={100} value={speech} onChange={(event) => setSpeech(event.target.value)} placeholder={speechPlaceholder} /><span>{speech.length}/100</span></label>}
+      {pending.schemaKey === 'speech' && <label className={styles.textarea}>{speechLabel}<textarea maxLength={SPEECH_MAX_LENGTH} value={speech} onChange={(event) => setSpeech(event.target.value)} placeholder={speechPlaceholder} /><span>{speech.length}/{SPEECH_MAX_LENGTH}</span></label>}
       {pending.schemaKey === 'wolf-council' && <><label className={styles.textarea}>{speechLabel}<textarea maxLength={WOLF_COUNCIL_MESSAGE_MAX_LENGTH} value={speech} onChange={(event) => setSpeech(event.target.value)} placeholder={speechPlaceholder} /><span>{speech.length}/{WOLF_COUNCIL_MESSAGE_MAX_LENGTH}</span></label>{targetControl(false)}</>}
       {pending.schemaKey === 'target' && targetControl(pending.allowAbstain)}
       {(pending.schemaKey === 'optional-target' || pending.schemaKey === 'liquid-control' || pending.schemaKey === 'levitation' || pending.schemaKey === 'voice-mimic' || pending.schemaKey === 'ignition') && <label className={styles.toggle}><input type="checkbox" checked={useSkill} onChange={(event) => setUseSkill(event.target.checked)} /><span>本次使用技能</span></label>}
@@ -229,7 +229,7 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
       {pending.schemaKey === 'witch' && <><label className={styles.toggle}><input type="checkbox" checked={save} disabled={pending.options.canSave !== true} onChange={(event) => setSave(event.target.checked)} /><span>使用解药救下狼刀目标</span></label><label className={styles.select}>毒药目标<select value={poison} onChange={(event) => setPoison(event.target.value)}><option value="">不用毒</option>{pending.candidates.map((id) => <option key={id} value={id}>{candidateLabel(id)}</option>)}</select></label></>}
       {pending.schemaKey === 'liquid-control' && useSkill && <><div className={styles.segment}><button type="button" className={mode === 'extract' ? styles.selected : ''} onClick={() => setMode('extract')}>抽取职业</button><button type="button" className={mode === 'spread' ? styles.selected : ''} onClick={() => setMode('spread')}>传播事实</button></div>{mode === 'extract' && targetControl(false)}{mode === 'spread' && <label className={styles.select}>已知事实<select value={factId} onChange={(event) => setFactId(event.target.value)}><option value="">请选择</option>{Array.isArray(pending.options.factIds) && pending.options.factIds.map((id, index) => typeof id === 'string' && <option key={id} value={id}>事实 {index + 1}</option>)}</select></label>}</>}
       {pending.schemaKey === 'levitation' && useSkill && <><div className={styles.segment}><button type="button" className={mode === 'move-first' ? styles.selected : ''} onClick={() => setMode('move-first')}>移到首位</button><button type="button" className={mode === 'move-last' ? styles.selected : ''} onClick={() => setMode('move-last')}>移到末位</button><button type="button" className={mode === 'tie-break' ? styles.selected : ''} onClick={() => setMode('tie-break')}>平票裁决</button></div>{mode !== 'tie-break' && mode !== '' && targetControl(false)}</>}
-      {pending.schemaKey === 'voice-mimic' && useSkill && <>{targetControl(false)}<label className={styles.textarea}>伪造片段<textarea maxLength={50} value={forgedSpeech} onChange={(event) => setForgedSpeech(event.target.value)} /><span>{forgedSpeech.length}/50</span></label></>}
+      {pending.schemaKey === 'voice-mimic' && useSkill && <>{targetControl(false)}<label className={styles.textarea}>伪造片段<textarea maxLength={VOICE_MIMIC_MAX_LENGTH} value={forgedSpeech} onChange={(event) => setForgedSpeech(event.target.value)} /><span>{forgedSpeech.length}/{VOICE_MIMIC_MAX_LENGTH}</span></label></>}
       {requiredMention && !mentionsRequired(pending.schemaKey === 'voice-mimic' ? forgedSpeech : speech) && <p className={styles.requirement}>必须提及“{requiredMention}”或“{requiredSeatLabel}”。</p>}
       {decisionError && <p className={styles.decisionError} role="alert">{decisionError}</p>}
     </div>

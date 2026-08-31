@@ -8,6 +8,7 @@ import type {
   SubmittedDecision,
   TimelineEvent,
 } from '../model';
+import { SPEECH_MAX_LENGTH, SPEECH_PROMPT_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
 import { addPublicEvent } from '../engine/events';
 import { getName } from '../engine/selectors';
 
@@ -29,7 +30,7 @@ function makePostGameDecision(state: GameState, actorId: PlayerId): PendingDecis
     schemaKey: 'speech',
     actorId,
     title: '赛后复盘',
-    description: '对局已经结束，真相已经揭晓。请以你真实的身份与视角，复盘这一局的经过，说说你的判断、遗憾或感想（不超过 100 字）。',
+    description: `对局已经结束，真相已经揭晓。请以你真实的身份与视角，复盘这一局的经过，说说你的判断、遗憾或感想（建议不超过 ${SPEECH_PROMPT_MAX_LENGTH} 字，实际最多 ${SPEECH_MAX_LENGTH} 字）。`,
     candidates: [],
     allowAbstain: true,
     skillInstanceId: null,
@@ -74,8 +75,8 @@ export function applyPostGameSpeech(state: GameState, pending: PendingDecision, 
 
   // 标准化文本：trim，并把 CRLF 统一为 LF
   const speech = speechRaw.trim().replace(/\r\n?/g, '\n');
-  if (speech.length > 100) {
-    throw new Error('赛后发言不能超过 100 字');
+  if (speech.length > SPEECH_MAX_LENGTH) {
+    throw new Error(`赛后发言不能超过 ${SPEECH_MAX_LENGTH} 字`);
   }
 
   // 文本只保留发言内容：UI 已通过 displayAuthorPlayerId 渲染头像与名字，无需在文本中重复。

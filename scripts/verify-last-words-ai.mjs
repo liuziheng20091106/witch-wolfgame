@@ -111,8 +111,8 @@ try {
   check('parseDecision 接受合法遗言', false, message);
 }
 try {
-  parseDecision(pending, { speech: 'x'.repeat(101) });
-  check('parseDecision 拒绝超长遗言', false, '101 字应被拒绝');
+  parseDecision(pending, { speech: 'x'.repeat(161) });
+  check('parseDecision 拒绝超长遗言', false, '161 字应被拒绝');
 } catch {
   check('parseDecision 拒绝超长遗言', true);
 }

@@ -170,7 +170,7 @@ console.log('=== 4. 契约与 AI 提示词 ===');
   };
   const fallbackContext = buildPostGameContext(fallbackObservation);
   check('缺失玩家资料时仍按一基座位号显示', fallbackContext.includes('发言（1号）'), fallbackContext);
-  check('明确的非座位 ID 保留原始编号', fallbackContext.includes('遗言（99号）'), fallbackContext);
+  check('明确的非座位 ID 保留原始编号', fallbackContext.includes('遗言（造物号）'), fallbackContext);
   const forgedSpeechObservation = {
     ...observation,
     publicEvents: [{

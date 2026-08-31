@@ -153,8 +153,8 @@ function soulExchangePending() {
   const normalized = parseDecision(speechPending, { speech: '我会继续观察其他人的发言。' });
   assert.equal(normalized.speech, '我会继续观察其他人的发言。 莲见蕾雅');
 
-  const normalizedAtLimit = parseDecision(speechPending, { speech: '很'.repeat(100) });
-  assert.equal(normalizedAtLimit.speech.length, 100);
+  const normalizedAtLimit = parseDecision(speechPending, { speech: '很'.repeat(160) });
+  assert.equal(normalizedAtLimit.speech.length, 160);
   assert.ok(normalizedAtLimit.speech.endsWith(' 莲见蕾雅'));
 
   const mentionIncluded = parseDecision(speechPending, { speech: '我会继续观察莲见蕾雅的发言。' });
@@ -164,12 +164,12 @@ function soulExchangePending() {
   assert.equal(seatIncluded.speech, '我会继续观察6号的发言。');
 
   const maximumMentionPending = structuredClone(speechPending);
-  maximumMentionPending.options.requiredMention = '满'.repeat(100);
+  maximumMentionPending.options.requiredMention = '满'.repeat(160);
   const maximumMention = parseDecision(maximumMentionPending, { speech: '测试发言。' });
-  assert.equal(maximumMention.speech, '满'.repeat(100));
+  assert.equal(maximumMention.speech, '满'.repeat(160));
 
   const oversizedMentionPending = structuredClone(speechPending);
-  oversizedMentionPending.options.requiredMention = '长'.repeat(101);
+  oversizedMentionPending.options.requiredMention = '长'.repeat(161);
   assert.throws(
     () => parseDecision(oversizedMentionPending, { speech: '测试发言。' }),
     (caught) => {

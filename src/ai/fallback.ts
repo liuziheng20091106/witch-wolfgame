@@ -1,3 +1,4 @@
+import { SPEECH_MAX_LENGTH, VOICE_MIMIC_MAX_LENGTH } from '../../shared/gamePromptContract.js';
 import { characterById } from '../domain/catalog/characters';
 import type { GameState, PendingDecision, PlayerId, SubmittedDecision } from '../domain/model';
 import { chooseWithState } from '../domain/engine/random';
@@ -18,13 +19,13 @@ function guidedSpeech(state: GameState, actorId: PlayerId, source: string): stri
   // 视线诱导为主动技：仅被诱导者的发言必须提及诱导对象（复用引擎侧的同一判定）
   const mention = gazeRequiredMention(state, actorId);
   if (!mention) {
-    return source.slice(0, 100);
+    return source.slice(0, SPEECH_MAX_LENGTH);
   }
   const suffix = `${mention.requiredMention}值得继续关注。`;
   if (source.includes(mention.requiredMention) || source.includes(mention.requiredSeatLabel)) {
-    return source.slice(0, 100);
+    return source.slice(0, SPEECH_MAX_LENGTH);
   }
-  return `${source.slice(0, Math.max(0, 100 - suffix.length))}${suffix}`;
+  return `${source.slice(0, Math.max(0, SPEECH_MAX_LENGTH - suffix.length))}${suffix}`;
 }
 
 function fallbackSpeech(state: GameState, speakerId: PlayerId, pending: PendingDecision, rngState: number): { speech: string; rngState: number } {
@@ -32,7 +33,7 @@ function fallbackSpeech(state: GameState, speakerId: PlayerId, pending: PendingD
   const selected = chooseWithState(character.examplePhrases, rngState);
   // 遗言不受视线诱导约束（死者没有视线），直接截断使用例句
   if (pending.options.lastWords === true) {
-    return { speech: selected.item.slice(0, 100), rngState: selected.state };
+    return { speech: selected.item.slice(0, SPEECH_MAX_LENGTH), rngState: selected.state };
   }
   // 赛后复盘：本地策略给出简短复盘总结（不套用视线诱导）
   if (pending.options.postGame === true) {
@@ -110,9 +111,9 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
     return { decision: { use: true, mode: 'move-last', targetPlayerId: selected.playerId }, rngState: selected.rngState };
   }
   if (pending.schemaKey === 'voice-mimic') {
-    // 伪造发言必须使用"被模仿者"的例句，而不是模仿者自己的；且 ≤50 字（契约限制）
+    // 伪造发言使用被模仿者例句，并限制在契约上限内。
     const generated = fallbackSpeech(state, selected.playerId, pending, selected.rngState);
-    const forgedSpeech = generated.speech.slice(0, 50);
+    const forgedSpeech = generated.speech.slice(0, VOICE_MIMIC_MAX_LENGTH);
     return {
       decision: { use: true, targetPlayerId: selected.playerId, forgedSpeech },
       rngState: generated.rngState,

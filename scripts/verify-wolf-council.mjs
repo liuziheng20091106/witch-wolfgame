@@ -104,7 +104,7 @@ try {
   assert.deepEqual(firstPending.options.wolfCouncilMessages, []);
   assert.throws(
     () => parseDecision(firstPending, {
-      message: '长'.repeat(121),
+      message: '长'.repeat(161),
       recommendedTargetPlayerId: firstPending.candidates[0],
     }),
     /wolf-council 契约/,
