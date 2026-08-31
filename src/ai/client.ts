@@ -79,7 +79,7 @@ async function requestContent(
   if (signal.aborted) throw new AiCommandError('cancelled', 'AI 请求已取消');
   if (config.provider === 'custom') validateCustomConfig(config);
   const timeoutController = new AbortController();
-  const timeout = window.setTimeout(() => timeoutController.abort(), 60_000);
+  const timeout = globalThis.setTimeout(() => timeoutController.abort(), 60_000);
   const abort = () => timeoutController.abort();
   signal.addEventListener('abort', abort, { once: true });
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Majo-Wolf-Session': sessionId };
@@ -89,7 +89,8 @@ async function requestContent(
   } else {
     headers.Authorization = `Bearer ${config.apiKey}`;
   }
-  const endpoint = config.provider === 'free' ? FREE_PROVIDER_ENDPOINT : config.endpoint;
+  const endpoint = config.provider === 'free' ? config.endpoint?.trim() || FREE_PROVIDER_ENDPOINT : config.endpoint;
+  validateAiEndpoint(endpoint);
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -125,7 +126,7 @@ async function requestContent(
     if (timeoutController.signal.aborted) throw new AiCommandError('timeout', 'AI 请求超过 60 秒');
     throw new AiCommandError('network', error instanceof Error ? `AI 网络请求失败：${error.message}` : 'AI 网络请求失败，可能被 CORS 阻止');
   } finally {
-    window.clearTimeout(timeout);
+    globalThis.clearTimeout(timeout);
     signal.removeEventListener('abort', abort);
   }
 }

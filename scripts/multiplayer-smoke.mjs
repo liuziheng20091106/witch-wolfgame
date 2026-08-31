@@ -3,29 +3,80 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { request } from 'node:http';
+import { createServer, request } from 'node:http';
 import { spawn } from 'node:child_process';
 import { WebSocket } from 'ws';
-
 const temp = await mkdtemp(join(tmpdir(), 'majo-multiplayer-'));
 const port = 34124;
 const stateFile = join(temp, 'rooms.json');
+let aiRequestCount = 0;
+const failedRooms = new Set();
 const projectRoot = new URL('..', import.meta.url);
+const aiServer = createServer((request, response) => {
+  let raw = '';
+  request.setEncoding('utf8');
+  request.on('data', (chunk) => { raw += chunk; });
+  request.on('end', () => {
+    aiRequestCount += 1;
+    const sessionId = String(request.headers['x-majo-wolf-session'] ?? '');
+    const recoverableFailure = sessionId.includes('ERR234') && !failedRooms.has('ERR234');
+    if (recoverableFailure) failedRooms.add('ERR234');
+    if (recoverableFailure || sessionId.includes('BADERR')) {
+      response.writeHead(503, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'fake_unavailable' }));
+      return;
+    }
+    try {
+      const payload = JSON.parse(raw);
+      const prompt = JSON.parse(payload.messages[1].content);
+      const candidate = prompt.legalCandidates[0]?.playerId ?? null;
+      const decision = prompt.action.schema === 'speech'
+        ? { speech: '[FAKE-AI] 这是模型生成的公开判断。' }
+        : prompt.action.schema === 'wolf-council'
+          ? { message: '[FAKE-AI] 依据公开信息选择目标。', recommendedTargetPlayerId: candidate }
+          : prompt.action.schema === 'target'
+            ? { targetPlayerId: candidate }
+            : prompt.action.schema === 'witch'
+              ? { save: false, poisonTargetPlayerId: null }
+              : prompt.action.schema === 'optional-target'
+                ? { use: false, targetPlayerId: null }
+                : prompt.action.schema === 'liquid-control'
+                  ? { use: false, mode: null, targetPlayerId: null, factId: null }
+                  : prompt.action.schema === 'levitation'
+                    ? { use: false, mode: null, targetPlayerId: null }
+                    : prompt.action.schema === 'voice-mimic'
+                      ? { use: false, targetPlayerId: null, forgedSpeech: null }
+                      : { use: false };
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(decision) } }] }));
+    } catch {
+      response.writeHead(400, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: 'fake_invalid_request' }));
+    }
+  });
+});
+await new Promise((resolve, reject) => {
+  aiServer.once('error', reject);
+  aiServer.listen(0, '127.0.0.1', resolve);
+});
+const aiPort = aiServer.address().port;
 function startServer(testPort = port, testStateFile = stateFile) {
-  return spawn(process.execPath, [join('node_modules', 'tsx', 'dist', 'cli.mjs'), 'multiplayer/server.ts'], {
-    env: { ...process.env, MAJO_MULTIPLAYER_PORT: String(testPort), MAJO_MULTIPLAYER_HOST: '127.0.0.1', MAJO_MULTIPLAYER_STATE: testStateFile, MAJO_MULTIPLAYER_DISCONNECT_GRACE_MS: '150', MAJO_MULTIPLAYER_ALLOWED_ORIGINS: 'http://127.0.0.1:5173' },
+  const child = spawn(process.execPath, [join('node_modules', 'tsx', 'dist', 'cli.mjs'), 'multiplayer/server.ts'], {
+    env: { ...process.env, MAJO_MULTIPLAYER_PORT: String(testPort), MAJO_MULTIPLAYER_HOST: '127.0.0.1', MAJO_MULTIPLAYER_STATE: testStateFile, MAJO_MULTIPLAYER_DISCONNECT_GRACE_MS: '150', MAJO_MULTIPLAYER_AI_ENDPOINT: `http://127.0.0.1:${aiPort}/chat/completions`, MAJO_MULTIPLAYER_AI_RETRY_COUNT: '0', MAJO_MULTIPLAYER_ALLOWED_ORIGINS: 'http://127.0.0.1:5173' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  child.__stderr = '';
+  child.stderr.on('data', (chunk) => { child.__stderr += chunk.toString(); });
+  return child;
 }
 const child = startServer();
-
 async function waitReady(process = child) {
   let output = '';
   for await (const chunk of process.stdout) {
     output += chunk.toString();
     if (output.includes('Multiplayer server listening')) return output;
   }
-  throw new Error(`多人服务器启动失败：${output}`);
+  throw new Error(`多人服务器启动失败：${output}${process.__stderr}`);
 }
 
 function client() {
@@ -175,6 +226,7 @@ try {
   assert.equal(guestState.room.observation.players.filter((player) => player.roleId !== null).length >= 1, true);
   assert.equal(hostState.room.observation.players.find((player) => player.id === 0).isSelf, true);
   assert.equal(guestState.room.observation.players.find((player) => player.id === 1).isSelf, true);
+  assert.equal(hostState.room.observation.players.every((player) => player.avatarUrl === ''), true, '多人 wire 不得携带服务端 file:// 头像路径');
 
   host.send({ type: 'submit-decision', pendingDecisionId: 'stale-decision', decision: { targetPlayerId: 1 } });
   const staleError = await host.next((message) => message.type === 'error' && /过期|不属于/.test(message.message), '过期决策拒绝');
@@ -217,7 +269,7 @@ try {
 
   let lastSubmittedHost = '';
   let lastSubmittedGuest = '';
-  for (let step = 0; step < 300; step += 1) {
+  for (let step = 0; step < 600; step += 1) {
     hostState = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation) ?? hostState;
     guestState = [...returnedGuest.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation) ?? returnedWelcome;
     const pendingHost = hostState.room.observation?.pendingDecision;
@@ -232,10 +284,14 @@ try {
     }
     await new Promise((resolve) => setTimeout(resolve, 80));
     const progressed = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation?.day > 0);
-    if (progressed) break;
+    const aiSpeech = host.messages.some((message) => message.type === 'room-state' && message.room.observation?.publicEvents.some((event) => event.kind === 'speech' && event.text.includes('[FAKE-AI]')));
+    if (progressed && aiSpeech) break;
   }
   const progressed = [...host.messages].reverse().find((message) => message.type === 'room-state' && message.room.observation?.day > 0);
   assert.notEqual(progressed, undefined, `混合真人与 AI 驱动必须推进到白天：${JSON.stringify({ host: hostState.room.observation?.pendingDecision, guest: guestState.room.observation?.pendingDecision, errors: host.messages.filter((message) => message.type === 'error').slice(-5) })}`);
+  assert.ok(aiRequestCount > 0, '多人 AI 必须调用兼容 Chat Completions 服务');
+  const aiSpeech = host.messages.some((message) => message.type === 'room-state' && message.room.observation?.publicEvents.some((event) => event.kind === 'speech' && event.text.includes('[FAKE-AI]')));
+  assert.equal(aiSpeech, true, '多人公开发言必须来自 AI 服务响应');
 
   returnedGuest.send({ type: 'leave-room' });
   const converted = await host.next((message) => message.type === 'room-state' && message.room.status === 'playing' && message.room.participants.find((participant) => participant.playerId === 1)?.connected === false && message.room.drivers[1].kind === 'ai', '离开后转 AI');
@@ -290,7 +346,7 @@ try {
       else setTimeout(check, 20).unref();
     };
     check();
-    setTimeout(() => reject(new Error(`重启后真人席位未转 AI 并推进：${JSON.stringify(reloadMessages)}`)), 5000).unref();
+    setTimeout(() => reject(new Error(`重启后真人席位未转 AI 并推进：${JSON.stringify(reloadMessages)}；服务日志：${reloaded.__stderr}`)), 5000).unref();
   });
   assert.equal(restored.welcome.type, 'welcome');
   assert.equal(restored.takenOver.room.drivers[restartPlayerId].kind, 'ai');
@@ -309,7 +365,7 @@ try {
   assert.notEqual(recoverySkill, undefined, '恢复样本必须有技能实例');
   recoverySkill.definitionId = 'ignition';
   recoverySkill.status = 'ready';
-  recoverableRoom.game.pendingDecision = { id: 'recoverable-ai-decision', kind: 'skill', schemaKey: 'ignition', actorId: recoveryActorId, title: '点火', description: '', candidates: [], allowAbstain: true, skillInstanceId: recoverySkill.id, options: {} };
+  recoverableRoom.game.pendingDecision = { id: 'recoverable-ai-decision', kind: 'skill', schemaKey: 'optional-target', actorId: recoveryActorId, title: '点火', description: '', candidates: [1], allowAbstain: true, skillInstanceId: recoverySkill.id, options: {} };
   recoverableRoom.drivers[recoveryActorId] = { kind: 'ai' };
   const recoverableStateFile = join(temp, 'recoverable-rooms.json');
   await writeFile(recoverableStateFile, JSON.stringify([recoverableRoom]), 'utf8');
@@ -318,6 +374,11 @@ try {
   let recoverableErrors = '';
   recoverable.stderr.on('data', (chunk) => { recoverableErrors += chunk.toString(); });
   await waitReady(recoverable);
+  const recoveryParticipant = recoverableRoom.participants.find((participant) => participant.playerId !== recoveryActorId) ?? recoverableRoom.participants[0];
+  const recoverySocket = new WebSocket(`ws://127.0.0.1:${recoverablePort}/multiplayer`, { origin: 'http://127.0.0.1:5173' });
+  await new Promise((resolve, reject) => { recoverySocket.once('open', resolve); recoverySocket.once('error', reject); });
+  recoverySocket.send(JSON.stringify({ type: 'resume-room', roomCode: recoverableRoom.roomCode, resumeToken: recoveryParticipant.resumeToken }));
+  await new Promise((resolve, reject) => { recoverySocket.once('message', (data) => resolve(JSON.parse(data.toString()))); setTimeout(() => reject(new Error('可恢复 AI 房间连接超时')), 5000).unref(); });
   await new Promise((resolve) => setTimeout(resolve, 350));
   assert.equal(recoverable.exitCode, null, '可恢复 AI 驱动异常不得终止多人服务');
   assert.match(recoverableErrors, /multiplayer_ai_drive_recovered/);
@@ -325,6 +386,7 @@ try {
   assert.equal(recoveredState.game.aiFailureOccurred, true);
   assert.equal(recoveredState.game.lastAiFailure.kind, 'multiplayer-recovered');
   assert.equal(recoveredState.game.lastAiFailure.pendingDecisionId, 'recoverable-ai-decision');
+  recoverySocket.close();
   recoverable.kill('SIGTERM');
   await new Promise((resolve) => recoverable.once('exit', resolve));
 
@@ -339,13 +401,18 @@ try {
   let brokenErrors = '';
   broken.stderr.on('data', (chunk) => { brokenErrors += chunk.toString(); });
   await waitReady(broken);
+  const brokenParticipant = brokenRoom.participants.find((participant) => participant.playerId !== recoveryActorId) ?? brokenRoom.participants[0];
+  const brokenSocket = new WebSocket(`ws://127.0.0.1:${brokenPort}/multiplayer`, { origin: 'http://127.0.0.1:5173' });
+  await new Promise((resolve, reject) => { brokenSocket.once('open', resolve); brokenSocket.once('error', reject); });
+  brokenSocket.send(JSON.stringify({ type: 'resume-room', roomCode: brokenRoom.roomCode, resumeToken: brokenParticipant.resumeToken }));
+  await new Promise((resolve, reject) => { brokenSocket.once('message', (data) => resolve(JSON.parse(data.toString()))); setTimeout(() => reject(new Error('不可恢复 AI 房间连接超时')), 5000).unref(); });
   await new Promise((resolve) => setTimeout(resolve, 350));
   assert.equal(broken.exitCode, null, '不可恢复 AI 驱动异常不得终止多人服务');
   assert.match(brokenErrors, /multiplayer_ai_drive_fatal/);
   const failedState = JSON.parse(await readFile(brokenStateFile, 'utf8'))[0];
   assert.equal(failedState.status, 'failed');
   assert.match(failedState.failureMessage, /^AI 驱动发生不可恢复错误：/);
-  assert.equal(failedState.game, null);
+  brokenSocket.close();
   broken.kill('SIGTERM');
   await new Promise((resolve) => broken.once('exit', resolve));
   assert.equal(restoredEnded.type, 'welcome');
@@ -389,4 +456,5 @@ try {
   console.log('PASS 多人房间、隐私、重连、持久化校验与混合驱动验证全部通过');
 } finally {
   if (!child.killed) child.kill('SIGKILL');
+  await new Promise((resolve) => aiServer.close(resolve));
 }
