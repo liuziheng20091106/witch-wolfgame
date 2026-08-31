@@ -134,16 +134,16 @@ export function GameView(props: GameViewProps) {
   useLayoutEffect(() => {
     const game = gameRef.current;
     const sidePane = sidePaneRef.current;
-    if (!decisionPanelVisible || !game || !sidePane) return;
+    if (!game || !sidePane || !decisionPanelVisible) return;
     const updateHeight = () => {
-      game.style.setProperty('--mobile-action-overlay-height', `${Math.ceil(sidePane.getBoundingClientRect().height)}px`);
+      game.style.setProperty('--mobile-side-pane-height', `${Math.ceil(sidePane.getBoundingClientRect().height)}px`);
     };
     updateHeight();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateHeight);
     observer?.observe(sidePane);
     return () => {
       observer?.disconnect();
-      game.style.removeProperty('--mobile-action-overlay-height');
+      game.style.removeProperty('--mobile-side-pane-height');
     };
   }, [decisionPanelVisible]);
   const handleTouchStart = (event: React.TouchEvent<HTMLElement>) => { touchStartYRef.current = event.touches[0]?.clientY ?? null; };

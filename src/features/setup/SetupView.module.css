@@ -550,13 +550,18 @@
   z-index: 90;
   display: grid;
   place-items: center;
-  padding: 18px;
+  box-sizing: border-box;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  overflow-y: auto;
   background: rgb(23 22 26 / 70%);
 }
 
 .confirmDialog {
   width: min(440px, 100%);
+  max-height: 100%;
+  box-sizing: border-box;
   padding: 28px;
+  overflow-y: auto;
   border-top: 6px solid var(--verdict);
   background: var(--paper-bright);
   box-shadow: 0 22px 60px rgb(0 0 0 / 36%);
@@ -653,16 +658,57 @@
 }
 
 @media (max-width: 1099px) {
-  .characterGrid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+  .masthead { grid-template-columns: minmax(220px, 1fr) auto; }
+  .masthead>p { display: none; }
 
   .commandBand {
-    grid-template-columns: 1fr 1.3fr;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 1.2fr);
+    gap: 22px 26px;
   }
 
+  .countField,
   .seedField {
-    grid-column: 2;
+    grid-column: auto;
+  }
+
+  .characterGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .characterToggle img {
+    aspect-ratio: 4 / 4.5;
+  }
+
+  .launchBand {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .launchActions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 839px) {
+  .commandBand {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .intro,
+  .modeSwitch {
+    grid-column: 1 / -1;
+  }
+
+  .sectionHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sectionHeading p {
+    text-align: left;
+  }
+
+  .characterGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .launchBand {
@@ -672,11 +718,7 @@
   .launchActions {
     justify-content: flex-end;
   }
-
-  .masthead { grid-template-columns: minmax(220px, 1fr) auto; }
-  .masthead>p { display: none; }
 }
-
 @media (max-width: 719px) {
   .masthead {
     min-height: 82px;

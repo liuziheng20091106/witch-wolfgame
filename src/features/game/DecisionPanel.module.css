@@ -328,9 +328,10 @@
   }
 }
 
-@media (max-width: 719px) {
+@media (max-width: 1099px) {
   .panel {
-    max-height: min(38vh, 300px);
+    max-height: min(42dvh, 340px);
+    box-sizing: border-box;
     padding: 9px 12px calc(8px + env(safe-area-inset-bottom));
     border-top-width: 2px;
     box-shadow: 0 -8px 22px rgb(0 0 0 / 14%);
@@ -346,7 +347,7 @@
   }
 
   .body {
-    max-height: 190px;
+    max-height: 210px;
     margin-top: 6px;
     gap: 8px;
   }
