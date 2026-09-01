@@ -66,7 +66,7 @@ npm run test:multiplayer
 
 构建产物是可安装 PWA：首次在线加载完成后，应用外壳会缓存到本机，可离线打开并继续本地对局。应用没有 URL 路由；从部署范围内的深层地址离线启动时，Service Worker 会回到应用根地址。部署新版本后，Service Worker 在后台下载完整的新应用外壳；页面提示“新版本已下载”后，由用户点击更新并重启，避免进行中的对局被强制刷新。每次发布必须整体替换 `dist/`，并保留 HTTPS（本机开发可使用 `localhost`）；不要把旧版 `sw.js` 设置为不可重新验证的长期缓存。
 
-推送与 `package.json` 版本一致的 `vX.Y.Z` tag 后，GitHub Actions 会创建对应 Release，并上传 `majo-wolf-vX.Y.Z-dist.zip`（静态站点）及 `majo-wolf-vX.Y.Z-backend.zip`（`proxy/`、`shared/`、`server/` 三合一后端源码）。发布包只包含该 tag 已跟踪的后端文件，不包含 `.env`、证书或其他本地文件。
+推送与 `package.json` 版本一致的 `vX.Y.Z` tag 后，GitHub Actions 会创建对应 Release，并上传 `majo-wolf-vX.Y.Z-dist.zip`（静态站点）及 `majo-wolf-vX.Y.Z-backend.zip`（`proxy/`、`shared/`、`server/`、`multiplayer/`、多人运行所需的 `src/` 子目录及依赖清单）。发布包是源码覆盖包，不包含 `.env`、证书、Compose 文件或其他本地部署配置。
 
 ## 主后端与代理服务
 
@@ -84,6 +84,8 @@ npm run server:proxy
 npm run server:main
 ```
 
+主后端配置分两份：`server/main.config.example.json` 与宿主机默认的 `server/main.config.json` 面向本地直接运行（主后端监听 `127.0.0.1:34022`，代理与多人服务使用 `127.0.0.1` 地址）；集成 Compose 使用 `server/main.config.compose.json`（容器内以 `proxy` 和 `multiplayer` 为服务名，主后端监听 `0.0.0.0`，仅映射到宿主机 `127.0.0.1`），由 `compose.yaml` 的 `MAJO_MAIN_CONFIG` 指定。
+
 Docker 部署使用官方 `node:22-alpine` 镜像，不构建自定义镜像。`server/`、`proxy/`、`multiplayer/` 和 `.runtime/` 以绑定卷挂载到容器，证书目录只读挂载；主后端和多人服务依赖 `ws`、`zod`、`tsx`，首次部署或依赖变更后先安装锁定依赖：
 
 ```bash
@@ -94,20 +96,16 @@ docker compose up -d
 docker compose ps
 ```
 
-代码更新后只需重启进程，无需重新构建镜像。
+集成 `compose.yaml` 使用 bridge 网络；只有主后端将 `34022` 绑定到宿主机 `127.0.0.1`，代理和多人服务只通过 Compose 内部服务名访问，不直接发布 `34023` 或 `34024`。
 
-`deploy.main.env` 保存主后端连接密码及 `MAJO_MAIN_UPDATE_PASS`；主后端和多人服务共用后者，不新增多人更新密钥。`deploy.proxy.env` 额外保存独立的代理更新密钥和 `providers.json` 引用的 API Key 环境变量。两个真实文件均被 Git 忽略，且 `MAJO_PROXY_PASSWORD_PRIMARY` 必须一致。
-主后端收到 `MAJO_MAIN_UPDATE_PASS` 后，先调用 `multiplayerUpdateNodes` 更新多人服务并确认其 `/healthz` 恢复，再执行主后端自身更新；代理仍由现有独立流程更新。多人服务更新完成后由 Compose 自动重启，代码更新无需重建镜像。
+普通代码更新后只需重启进程，无需重新构建镜像；如果 `package.json` 或 `package-lock.json` 发生变化，Actions 仍会触发并识别该变更，但会在远程更新前安全失败，因为当前更新器不会在容器内执行 `npm ci`。请先在部署机同步依赖并执行 `npm ci`，再通过 `workflow_dispatch` 重新运行部署，并勾选 `dependencies_installed` 确认项。自动与手动触发都按实际提交判断：仅当本次变更真的涉及依赖文件时，才需要勾选该确认项。推送触发按整次 push 的完整提交范围（`before..sha`）判断，即使一次 push 中某个中间提交改了依赖文件也会被识别。
+
+`deploy.main.env` 保存主后端连接密码、`MAJO_PROXY_UPDATE_PASS` 和 `MAJO_MAIN_UPDATE_PASS`；其中 `MAJO_PROXY_UPDATE_PASS` 必须与 `deploy.proxy.env` 中的 `MAJO_UPDATE_PASS` 保持一致，`MAJO_MAIN_UPDATE_PASS` 由主后端和多人服务共用。`deploy.proxy.env` 还保存 `providers.json` 引用的 API Key 环境变量。两个真实文件均被 Git 忽略，且 `MAJO_PROXY_PASSWORD_PRIMARY` 必须一致。
+主后端收到 `MAJO_MAIN_UPDATE_PASS` 后，先调用 `multiplayerUpdateNodes` 更新多人服务并确认其 `/healthz` 恢复，再执行主后端自身更新；代理更新使用独立的 `MAJO_PROXY_UPDATE_PASS`。多人服务更新完成后由 Compose 自动重启，代码更新无需重建镜像。
 代理自动更新接口仍受 mTLS 保护，并额外要求请求头 `Authorization: Bearer <MAJO_UPDATE_PASS>`；密钥不接受查询字符串。下载允许最多 5 次 HTTPS 重定向，网络错误、HTTP 408/425/429 和 5xx 默认自动重试 3 次，并在流式读取超过 8MB 时立即中止。更新文件先完整暂存，任一下载或替换失败都会清理临时文件并回滚已替换文件。同一时刻只允许一个更新事务；多人服务复用同一更新逻辑。
 主后端保持 HTTP 监听，由外部 Cloudflare/反向代理负责公网 HTTPS 终止；不要给主后端配置或暴露独立 HTTPS 端口。代理节点内部继续使用 TLS 1.3 mTLS。
 
-快速更新工具：
-
-```bash
-py scripts\quick_update.py
-```
-
-工具通过 SSH 隧道连接代理的 mTLS `/update` 接口，读取本地 `certs/update-client.crt`、`certs/update-client.key`、`certs/ca.crt` 和 `certs/update-pass.txt`，先暂存主后端文件，再更新代理，最后重启并检查两个服务。执行前会要求确认生产更新；密钥不会写入日志。
+自动更新以 `.github/workflows/auto-update.yml` 为准。仓库不再提供旧版 `scripts/quick_update.py` 和 `certs/update-pass.txt` 流程，请勿按旧文档创建这些文件或执行该命令。
 
 
 把 `server/.env.example` 与 `proxy/.env.example` 中对应的 `MAJO_PROXY_PASSWORD_PRIMARY` 设置为同一个高熵随机值。`providers.json` 的 `apiKeysEnv` 指向逗号分隔的密钥环境变量。每个 provider 必须配置 `enabled`、`totalTimeoutMs`、`firstByteTimeoutMs` 和 `retryCount`：`enabled: false` 时完全跳过且不读取其 API Key；`retryCount` 只计算初次请求之后的额外重试。provider 按配置文件顺序组成固定 fallback 链，每次新请求都从第一个已启用 provider 开始；当前 provider 的重试预算耗尽后才尝试下一个，成功后立即停止。每次尝试轮换 API Key，首字节或总请求超时会中止当前上游连接。每个代理节点可使用独立密码变量、证书和服务商池；在主后端 `proxies` 中分别配置。主后端和代理的结构化日志均含 ISO `time`，成功请求分别记录 `ai_success`、`proxy_success` 和 `provider_success`。
@@ -117,7 +115,7 @@ py scripts\quick_update.py
 - 代理节点只放置 `ca.crt`、`proxy-server.crt`、`proxy-server.key`。
 - 主后端只放置 `ca.crt`、`main-client.crt`、`main-client.key`。
 
-主后端默认绑定 `127.0.0.1:34022`。公网必须只能通过你的 Cloudflare/反向代理访问该端口；反向代理必须覆盖客户端提交的同名头并写入可信的 `CF-Connecting-IP`。主后端按你的要求直接信任此头，不校验请求是否来自 Cloudflare，因此不要把主后端监听端口直接暴露公网。代理节点应通过防火墙只允许主后端来源访问 `34023`，mTLS 与 HMAC 是额外防线。
+直接在宿主机运行时主后端默认绑定 `127.0.0.1:34022`（`server/main.config.json`）；集成 Compose 中容器监听 `0.0.0.0:34022`（`server/main.config.compose.json`），但只映射到宿主机 `127.0.0.1:34022`。公网必须只能通过你的 Cloudflare/反向代理访问该端口；反向代理必须覆盖客户端提交的同名头并写入可信的 `CF-Connecting-IP`。主后端按你的要求直接信任此头，不校验请求是否来自 Cloudflare，因此不要把主后端监听端口直接暴露公网。代理节点和多人服务只应通过 Compose 内部网络访问，mTLS 与 HMAC 是代理额外防线。
 
 更新烟测：
 

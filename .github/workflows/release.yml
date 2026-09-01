@@ -62,7 +62,7 @@ jobs:
             "$GITHUB_SHA" \
             proxy shared server multiplayer \
             package.json package-lock.json \
-            src/ai/fallback.ts src/data src/domain src/multiplayer src/storage/gameStateSchema.ts
+            src/ai src/config/version.ts src/data src/domain src/multiplayer src/storage/gameStateSchema.ts
 
           echo "dist_archive=$dist_archive" >> "$GITHUB_OUTPUT"
           echo "backend_archive=$backend_archive" >> "$GITHUB_OUTPUT"

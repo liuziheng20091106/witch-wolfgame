@@ -8,6 +8,8 @@ on:
       - "proxy/**"
       - "shared/**"
       - "multiplayer/**"
+      - "package.json"
+      - "package-lock.json"
       - "src/ai/**"
       - "src/config/version.ts"
       - "src/data/**"
@@ -15,6 +17,12 @@ on:
       - "src/multiplayer/**"
       - "src/storage/gameStateSchema.ts"
   workflow_dispatch:
+    inputs:
+      dependencies_installed:
+        description: "依赖文件变化时，是否已在部署机执行 npm ci"
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   deploy:
@@ -23,26 +31,50 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Compute changed paths
         id: changes
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dependencies_installed }}" = "true" ]; then
             echo "changed=all" >> "$GITHUB_OUTPUT"
+            echo "dependency_changed=false" >> "$GITHUB_OUTPUT"
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(server|proxy|shared|multiplayer)/|^src/(ai|data|domain|multiplayer)/|^src/config/version\.ts$|^src/storage/gameStateSchema\.ts$' || true)
-            if [ -z "$CHANGED" ]; then
-              echo "changed=" >> "$GITHUB_OUTPUT"
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              DIFF_RANGE="HEAD~1 HEAD"
+            elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+              DIFF_RANGE="HEAD~1 HEAD"
             else
-              echo "changed<<EOF" >> "$GITHUB_OUTPUT"
-              echo "$CHANGED" >> "$GITHUB_OUTPUT"
-              echo "EOF" >> "$GITHUB_OUTPUT"
+              DIFF_RANGE="${{ github.event.before }} ${{ github.sha }}"
+            fi
+            if git diff --name-only $DIFF_RANGE | grep -qE '^package(-lock)?\.json$'; then
+              echo "dependency_changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "dependency_changed=false" >> "$GITHUB_OUTPUT"
+            fi
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "changed=all" >> "$GITHUB_OUTPUT"
+            else
+              CHANGED=$(git diff --name-only $DIFF_RANGE | grep -E '^(server|proxy|shared|multiplayer)/|^src/(ai|data|domain|multiplayer)/|^src/config/version\.ts$|^src/storage/gameStateSchema\.ts$|^package(-lock)?\.json$' || true)
+              if [ -z "$CHANGED" ]; then
+                echo "changed=" >> "$GITHUB_OUTPUT"
+              else
+                echo "changed<<EOF" >> "$GITHUB_OUTPUT"
+                echo "$CHANGED" >> "$GITHUB_OUTPUT"
+                echo "EOF" >> "$GITHUB_OUTPUT"
+              fi
             fi
           fi
 
+      - name: Stop for dependency installation
+        if: ${{ steps.changes.outputs.dependency_changed == 'true' }}
+        run: |
+          echo "::error::package.json 或 package-lock.json 发生变化，自动更新器不会执行 npm ci，已停止远程重启"
+          echo "::error::请在部署机同步依赖并执行 npm ci，然后通过 workflow_dispatch 重新运行部署"
+          exit 1
+
       - name: Trigger backend update
-        if: ${{ steps.changes.outputs.changed != '' }}
+        if: ${{ steps.changes.outputs.changed != '' && steps.changes.outputs.dependency_changed != 'true' }}
         env:
           MAIN_UPDATE_URL: ${{ secrets.MAIN_UPDATE_URL }}
           MAIN_UPDATE_PASS: ${{ secrets.MAIN_UPDATE_PASS }}
