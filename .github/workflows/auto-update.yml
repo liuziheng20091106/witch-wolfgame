@@ -23,6 +23,10 @@ on:
         required: true
         type: boolean
         default: false
+      deploy_baseline:
+        description: "当前部署机已运行的提交 SHA（上次部署基线），用于计算自上次部署以来的完整变更范围；请在部署机执行 git rev-parse HEAD 获取（拉取新代码之前的值）。首次部署请先手动部署一次再获取基线"
+        required: true
+        type: string
 
 jobs:
   deploy:
@@ -41,11 +45,20 @@ jobs:
             echo "dependency_changed=false" >> "$GITHUB_OUTPUT"
           else
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-              if git rev-parse --verify -q HEAD~1 >/dev/null 2>&1; then
-                BASE="HEAD~1"
-              else
-                BASE=""
+              BASELINE="${{ inputs.deploy_baseline }}"
+              if [ -z "$BASELINE" ]; then
+                echo "::error::手动触发必须提供 deploy_baseline（当前部署机已运行的 commit SHA），无法判断依赖变更范围"
+                exit 1
               fi
+              if ! git rev-parse --verify -q "$BASELINE^{commit}" >/dev/null 2>&1; then
+                echo "::error::deploy_baseline 不是有效提交：$BASELINE"
+                exit 1
+              fi
+              if ! git merge-base --is-ancestor "$BASELINE" HEAD; then
+                echo "::error::deploy_baseline 不是 HEAD 的祖先提交，无法计算自上次部署以来的变更范围：$BASELINE"
+                exit 1
+              fi
+              BASE="$BASELINE"
             elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
               BASE=""
             else
