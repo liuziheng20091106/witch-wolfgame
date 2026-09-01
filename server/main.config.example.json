@@ -57,7 +57,7 @@
       "server/gameProtocol.mjs",
       "server/main.mjs",
       "server/shared.mjs",
-      "server/update-core.mjs",
+      "server/update-core.mjs"
       "server/main.config.json"
     ],
     "projectRoot": ".",
