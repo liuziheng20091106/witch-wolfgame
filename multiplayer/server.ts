@@ -6,7 +6,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
 import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS, PLAYER_IDS } from '../shared/gamePromptContract.js';
 import { requestDecision } from '../src/ai/client.js';
-import { FREE_PROVIDER_ENDPOINT } from '../src/ai/types.js';
+import { FREE_PROVIDER_ENDPOINT, type FreeAiProviderConfig } from '../src/ai/types.js';
 import { fallbackDecision } from '../src/ai/fallback.js';
 import { createGame } from '../src/domain/engine/createGame.js';
 import { reduceGame } from '../src/domain/engine/reducer.js';
@@ -41,6 +41,7 @@ const ROOM_IDLE_MS = 24 * 60 * 60 * 1000;
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TICK_DELAY_MS = 80;
 const MULTIPLAYER_AI_ENDPOINT = process.env.MAJO_MULTIPLAYER_AI_ENDPOINT?.trim() || FREE_PROVIDER_ENDPOINT;
+const MULTIPLAYER_AI_ORIGIN = process.env.MAJO_MULTIPLAYER_AI_ORIGIN?.trim();
 const MULTIPLAYER_AI_RETRY_COUNT = Math.min(5, Math.max(0, Math.trunc(Number(process.env.MAJO_MULTIPLAYER_AI_RETRY_COUNT ?? 2))));
 const MULTIPLAYER_UPDATE_FILES = [
   'multiplayer/server.ts',
@@ -108,7 +109,13 @@ const MULTIPLAYER_UPDATE_CONFIG = {
   backupKeepCount: 5,
   restartOnSuccess: 'code0',
 };
-const MULTIPLAYER_AI_CONFIG = { provider: 'free' as const, retryCount: MULTIPLAYER_AI_RETRY_COUNT, endpoint: MULTIPLAYER_AI_ENDPOINT };
+const MULTIPLAYER_AI_CONFIG: FreeAiProviderConfig = {
+  provider: 'free',
+  retryCount: MULTIPLAYER_AI_RETRY_COUNT,
+  endpoint: MULTIPLAYER_AI_ENDPOINT,
+  ...(MULTIPLAYER_AI_ORIGIN ? { origin: MULTIPLAYER_AI_ORIGIN } : {}),
+  allowHttp: true,
+};
 interface RateWindow { startedAt: number; count: number }
 
 interface Participant {

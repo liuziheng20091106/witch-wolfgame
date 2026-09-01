@@ -28,6 +28,17 @@ const POST_GAME_TRUNCATION_MARKER = '\n【赛后复盘上下文过长，已保�
 // 中文上下文按 UTF-8 计量时，32 KiB 通常落在约 5k～10k 模型 token 的目标区间。
 const PROMPT_TARGET_BODY_BYTES = 32 * 1024;
 const UTF8_ENCODER = new TextEncoder();
+const ACTION_DESCRIPTION_TRUNCATION_MARKER = '…';
+
+function boundedActionDescription(description: string): string {
+  const maxLength = PROMPT_LIMITS.actionDescriptionMaxLength;
+  if (description.length <= maxLength) return description;
+  const contentLength = maxLength - ACTION_DESCRIPTION_TRUNCATION_MARKER.length;
+  const headLength = Math.ceil(contentLength / 2);
+  const tailLength = contentLength - headLength;
+  return `${description.slice(0, headLength)}${ACTION_DESCRIPTION_TRUNCATION_MARKER}${description.slice(-tailLength)}`;
+}
+
 
 function promptBodyByteLength(
   systemContent: string,
@@ -319,7 +330,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
   const systemContent = buildGameSystemPrompt(pendingDecision.schemaKey);
 
   const promptPayload: Record<string, unknown> = {
-    action: { kind: pendingDecision.kind, title: pendingDecision.title, description: pendingDecision.description, schema: pendingDecision.schemaKey },
+    action: { kind: pendingDecision.kind, title: pendingDecision.title, description: boundedActionDescription(pendingDecision.description), schema: pendingDecision.schemaKey },
     actor: buildActorPayload(
       actor,
       character,
