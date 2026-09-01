@@ -105,7 +105,6 @@ docker compose ps
 代理自动更新接口仍受 mTLS 保护，并额外要求请求头 `Authorization: Bearer <MAJO_UPDATE_PASS>`；密钥不接受查询字符串。下载允许最多 5 次 HTTPS 重定向，网络错误、HTTP 408/425/429 和 5xx 默认自动重试 3 次，并在流式读取超过 8MB 时立即中止。更新文件先完整暂存，任一下载或替换失败都会清理临时文件并回滚已替换文件。同一时刻只允许一个更新事务；多人服务复用同一更新逻辑。
 主后端保持 HTTP 监听，由外部 Cloudflare/反向代理负责公网 HTTPS 终止；不要给主后端配置或暴露独立 HTTPS 端口。代理节点内部继续使用 TLS 1.3 mTLS。
 
-自动更新以 `.github/workflows/auto-update.yml` 为准。仓库不再提供旧版 `scripts/quick_update.py` 和 `certs/update-pass.txt` 流程，请勿按旧文档创建这些文件或执行该命令。
 
 
 把 `server/.env.example` 与 `proxy/.env.example` 中对应的 `MAJO_PROXY_PASSWORD_PRIMARY` 设置为同一个高熵随机值。`providers.json` 的 `apiKeysEnv` 指向逗号分隔的密钥环境变量。每个 provider 必须配置 `enabled`、`totalTimeoutMs`、`firstByteTimeoutMs` 和 `retryCount`：`enabled: false` 时完全跳过且不读取其 API Key；`retryCount` 只计算初次请求之后的额外重试。provider 按配置文件顺序组成固定 fallback 链，每次新请求都从第一个已启用 provider 开始；当前 provider 的重试预算耗尽后才尝试下一个，成功后立即停止。每次尝试轮换 API Key，首字节或总请求超时会中止当前上游连接。每个代理节点可使用独立密码变量、证书和服务商池；在主后端 `proxies` 中分别配置。主后端和代理的结构化日志均含 ISO `time`，成功请求分别记录 `ai_success`、`proxy_success` 和 `provider_success`。
