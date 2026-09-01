@@ -41,13 +41,28 @@ jobs:
             echo "dependency_changed=false" >> "$GITHUB_OUTPUT"
           else
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-              DIFF_RANGE="HEAD~1 HEAD"
+              if git rev-parse --verify -q HEAD~1 >/dev/null 2>&1; then
+                BASE="HEAD~1"
+              else
+                BASE=""
+              fi
             elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-              DIFF_RANGE="HEAD~1 HEAD"
+              BASE=""
             else
-              DIFF_RANGE="${{ github.event.before }} ${{ github.sha }}"
+              BASE="${{ github.event.before }}"
             fi
-            if git diff --name-only $DIFF_RANGE | grep -qE '^package(-lock)?\.json$'; then
+            if [ -z "$BASE" ]; then
+              if ! CHANGED=$(git diff-tree --root --no-commit-id --name-only -r HEAD); then
+                echo "::error::无法计算无父提交（root commit）的变更文件列表，git diff-tree 失败，已停止部署判断"
+                exit 1
+              fi
+            else
+              if ! CHANGED=$(git diff --name-only "$BASE" HEAD); then
+                echo "::error::无法计算变更文件列表，git diff 失败（可能基准提交不存在），已停止部署判断"
+                exit 1
+              fi
+            fi
+            if printf '%s\n' "$CHANGED" | grep -qE '^package(-lock)?\.json$'; then
               echo "dependency_changed=true" >> "$GITHUB_OUTPUT"
             else
               echo "dependency_changed=false" >> "$GITHUB_OUTPUT"
@@ -55,7 +70,7 @@ jobs:
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
               echo "changed=all" >> "$GITHUB_OUTPUT"
             else
-              CHANGED=$(git diff --name-only $DIFF_RANGE | grep -E '^(server|proxy|shared|multiplayer)/|^src/(ai|data|domain|multiplayer)/|^src/config/version\.ts$|^src/storage/gameStateSchema\.ts$|^package(-lock)?\.json$' || true)
+              CHANGED=$(printf '%s\n' "$CHANGED" | grep -E '^(server|proxy|shared|multiplayer)/|^src/(ai|data|domain|multiplayer)/|^src/config/version\.ts$|^src/storage/gameStateSchema\.ts$|^package(-lock)?\.json$' || true)
               if [ -z "$CHANGED" ]; then
                 echo "changed=" >> "$GITHUB_OUTPUT"
               else
