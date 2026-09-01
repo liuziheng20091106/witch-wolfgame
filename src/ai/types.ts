@@ -9,6 +9,8 @@ export interface FreeAiProviderConfig {
   provider: 'free';
   retryCount: number;
   endpoint?: string;
+  origin?: string;
+  allowHttp?: boolean;
 }
 
 export type AiProfileKind = 'default' | 'fast' | 'deep';
