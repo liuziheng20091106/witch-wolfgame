@@ -1,6 +1,6 @@
 {
   "listen": {
-    "host": "127.0.0.1",
+    "host": "0.0.0.0",
     "port": 34022
   },
   "cors": {
@@ -11,7 +11,7 @@
   "proxies": [
     {
       "name": "proxy-primary",
-      "url": "https://127.0.0.1:34023/internal/v1/chat/completions",
+      "url": "https://proxy:34023/internal/v1/chat/completions",
       "ca": "../certs/ca.crt",
       "clientCert": "../certs/main-client.crt",
       "clientKey": "../certs/main-client.key",
@@ -32,7 +32,7 @@
   "updateNodes": [
     {
       "name": "proxy-primary",
-      "url": "https://127.0.0.1:34023/update",
+      "url": "https://proxy:34023/update",
       "ca": "../certs/ca.crt",
       "clientCert": "../certs/main-client.crt",
       "clientKey": "../certs/main-client.key",
@@ -44,7 +44,7 @@
   "multiplayerUpdateNodes": [
     {
       "name": "multiplayer",
-      "url": "http://127.0.0.1:34024/update",
+      "url": "http://multiplayer:34024/update",
       "updatePassEnv": "MAJO_MAIN_UPDATE_PASS",
       "updateTimeoutMs": 90000
     }
@@ -57,7 +57,7 @@
       "server/gameProtocol.mjs",
       "server/main.mjs",
       "server/shared.mjs",
-      "server/update-core.mjs",
+      "server/update-core.mjs"
     ],
     "projectRoot": ".",
     "downloadTimeoutMs": 30000,

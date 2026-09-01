@@ -3,7 +3,8 @@ name: majowolf-backend
 x-node-service: &node-service
   image: node:22-alpine
   working_dir: /app
-  network_mode: host
+  networks:
+    - backend
   restart: unless-stopped
   init: true
   stop_grace_period: 10s
@@ -37,8 +38,10 @@ services:
       - ./deploy.main.env
     environment:
       MAJO_RESTART_SIGNAL: /app/.runtime/restart-token
-      MAJO_MAIN_CONFIG: /app/server/main.config.json
-      MAJO_MULTIPLAYER_URL: ${MAJO_MULTIPLAYER_URL:-ws://127.0.0.1:34024/multiplayer}
+      MAJO_MAIN_CONFIG: /app/server/main.config.compose.json
+      MAJO_MULTIPLAYER_URL: ${MAJO_MULTIPLAYER_URL:-ws://multiplayer:34024/multiplayer}
+    ports:
+      - "127.0.0.1:34022:34022"
     volumes:
       - ./node_modules:/app/node_modules:ro
       - ./server:/app/server:rw
@@ -49,6 +52,7 @@ services:
       - ./.runtime:/app/.runtime:rw
     depends_on:
       - proxy
+      - multiplayer
 
   multiplayer:
     <<: *node-service
@@ -62,9 +66,13 @@ services:
       MAJO_MULTIPLAYER_STATE: /app/.runtime/multiplayer-rooms.json
       MAJO_MULTIPLAYER_ALLOWED_ORIGINS: ${MAJO_MULTIPLAYER_ALLOWED_ORIGINS:-http://127.0.0.1:5173,http://localhost:5173}
     volumes:
-      - ./multiplayer:/app/multiplayer:ro
-      - ./src:/app/src:ro
-      - ./shared:/app/shared:ro
-      - ./server:/app/server:ro
+      - ./multiplayer:/app/multiplayer:rw
+      - ./src:/app/src:rw
+      - ./shared:/app/shared:rw
+      - ./server:/app/server:rw
       - ./node_modules:/app/node_modules:ro
       - ./.runtime:/app/.runtime:rw
+
+networks:
+  backend:
+    driver: bridge
