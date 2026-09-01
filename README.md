@@ -98,7 +98,7 @@ docker compose ps
 
 集成 `compose.yaml` 使用 bridge 网络；只有主后端将 `34022` 绑定到宿主机 `127.0.0.1`，代理和多人服务只通过 Compose 内部服务名访问，不直接发布 `34023` 或 `34024`。
 
-普通代码更新后只需重启进程，无需重新构建镜像；如果 `package.json` 或 `package-lock.json` 发生变化，Actions 仍会触发并识别该变更，但会在远程更新前安全失败，因为当前更新器不会在容器内执行 `npm ci`。请先在部署机同步依赖并执行 `npm ci`，再通过 `workflow_dispatch` 重新运行部署，并勾选 `dependencies_installed` 确认项。自动与手动触发都按实际提交判断：仅当本次变更真的涉及依赖文件时，才需要勾选该确认项。推送触发按整次 push 的完整提交范围（`before..sha`）判断，即使一次 push 中某个中间提交改了依赖文件也会被识别；仓库或分支首次推送（无父提交）时按根提交全量比较，计算失败会显式报错而不是静默跳过。手动触发必须填写 `deploy_baseline`（部署机未拉取新代码前执行 `git rev-parse HEAD` 得到的提交 SHA）；该值经步骤级 env 传入脚本，并校验必须为 40 位十六进制 commit SHA、是有效提交且是 HEAD 的祖先，随后比较基线以来的完整变更范围（即使勾选 `dependencies_installed` 也会校验并计算），避免只看最近一次提交而漏掉更早提交的依赖修改；首次推送（`before` 为零哈希）则与空树全量比较，覆盖一次推送包含多个提交的情况。
+普通代码更新后只需重启进程，无需重新构建镜像；如果 `package.json` 或 `package-lock.json` 发生变化，请先在部署机同步代码并执行 `npm ci`，再触发部署（自动更新器不会在容器内执行 `npm ci`）。
 
 `deploy.main.env` 保存主后端连接密码、`MAJO_PROXY_UPDATE_PASS` 和 `MAJO_MAIN_UPDATE_PASS`；其中 `MAJO_PROXY_UPDATE_PASS` 必须与 `deploy.proxy.env` 中的 `MAJO_UPDATE_PASS` 保持一致，`MAJO_MAIN_UPDATE_PASS` 由主后端和多人服务共用。`deploy.proxy.env` 还保存 `providers.json` 引用的 API Key 环境变量。两个真实文件均被 Git 忽略，且 `MAJO_PROXY_PASSWORD_PRIMARY` 必须一致。
 主后端收到 `MAJO_MAIN_UPDATE_PASS` 后，先调用 `multiplayerUpdateNodes` 更新多人服务并确认其 `/healthz` 恢复，再执行主后端自身更新；代理更新使用独立的 `MAJO_PROXY_UPDATE_PASS`。多人服务更新完成后由 Compose 自动重启，代码更新无需重建镜像。

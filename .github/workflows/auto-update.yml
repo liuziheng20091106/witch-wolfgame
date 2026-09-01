@@ -8,8 +8,6 @@ on:
       - "proxy/**"
       - "shared/**"
       - "multiplayer/**"
-      - "package.json"
-      - "package-lock.json"
       - "src/ai/**"
       - "src/config/version.ts"
       - "src/data/**"
@@ -17,16 +15,6 @@ on:
       - "src/multiplayer/**"
       - "src/storage/gameStateSchema.ts"
   workflow_dispatch:
-    inputs:
-      dependencies_installed:
-        description: "依赖文件变化时，是否已在部署机执行 npm ci"
-        required: true
-        type: boolean
-        default: false
-      deploy_baseline:
-        description: "当前部署机已运行的提交 SHA（上次部署基线），用于计算自上次部署以来的完整变更范围；请在部署机执行 git rev-parse HEAD 获取（拉取新代码之前的值）。首次部署请先手动部署一次再获取基线"
-        required: true
-        type: string
 
 jobs:
   deploy:
@@ -35,63 +23,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 2
 
       - name: Compute changed paths
         id: changes
-        env:
-          DEPLOY_BASELINE_INPUT: ${{ inputs.deploy_baseline }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            BASELINE="$DEPLOY_BASELINE_INPUT"
-            if [ -z "$BASELINE" ]; then
-              echo "::error::手动触发必须提供 deploy_baseline（当前部署机已运行的 commit SHA），无法判断依赖变更范围"
-              exit 1
-            fi
-            if ! printf '%s' "$BASELINE" | grep -qE '^[0-9a-fA-F]{40}$'; then
-              echo "::error::deploy_baseline 必须是 40 位十六进制 commit SHA：$BASELINE"
-              exit 1
-            fi
-            if ! git rev-parse --verify -q "$BASELINE^{commit}" >/dev/null 2>&1; then
-              echo "::error::deploy_baseline 不是有效提交：$BASELINE"
-              exit 1
-            fi
-            if ! git merge-base --is-ancestor "$BASELINE" HEAD; then
-              echo "::error::deploy_baseline 不是 HEAD 的祖先提交，无法计算自上次部署以来的变更范围：$BASELINE"
-              exit 1
-            fi
-            BASE="$BASELINE"
-          elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-            BASE=""
-          else
-            BASE="${{ github.event.before }}"
-          fi
-          if [ -z "$BASE" ]; then
-            EMPTY_TREE=$(git hash-object -t tree /dev/null)
-            if ! CHANGED=$(git diff --name-only "$EMPTY_TREE" HEAD); then
-              echo "::error::无法计算首次推送（空树到 HEAD 全量变更）的文件列表，git diff 失败，已停止部署判断"
-              exit 1
-            fi
-          else
-            if ! CHANGED=$(git diff --name-only "$BASE" HEAD); then
-              echo "::error::无法计算变更文件列表，git diff 失败（可能基准提交不存在），已停止部署判断"
-              exit 1
-            fi
-          fi
-          if printf '%s\n' "$CHANGED" | grep -qE '^package(-lock)?\.json$'; then
-            DEP_CHANGED="true"
-          else
-            DEP_CHANGED="false"
-          fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$DEP_CHANGED" = "true" ] && [ "${{ inputs.dependencies_installed }}" = "true" ]; then
-            echo "dependency_changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "dependency_changed=$DEP_CHANGED" >> "$GITHUB_OUTPUT"
-          fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "changed=all" >> "$GITHUB_OUTPUT"
           else
-            CHANGED=$(printf '%s\n' "$CHANGED" | grep -E '^(server|proxy|shared|multiplayer)/|^src/(ai|data|domain|multiplayer)/|^src/config/version\.ts$|^src/storage/gameStateSchema\.ts$|^package(-lock)?\.json$' || true)
+            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(server|proxy|shared|multiplayer)/|^src/(ai|data|domain|multiplayer)/|^src/config/version\.ts$|^src/storage/gameStateSchema\.ts$' || true)
             if [ -z "$CHANGED" ]; then
               echo "changed=" >> "$GITHUB_OUTPUT"
             else
@@ -101,15 +41,8 @@ jobs:
             fi
           fi
 
-      - name: Stop for dependency installation
-        if: ${{ steps.changes.outputs.dependency_changed == 'true' }}
-        run: |
-          echo "::error::package.json 或 package-lock.json 发生变化，自动更新器不会执行 npm ci，已停止远程重启"
-          echo "::error::请在部署机同步依赖并执行 npm ci，然后通过 workflow_dispatch 重新运行部署"
-          exit 1
-
       - name: Trigger backend update
-        if: ${{ steps.changes.outputs.changed != '' && steps.changes.outputs.dependency_changed != 'true' }}
+        if: ${{ steps.changes.outputs.changed != '' }}
         env:
           MAIN_UPDATE_URL: ${{ secrets.MAIN_UPDATE_URL }}
           MAIN_UPDATE_PASS: ${{ secrets.MAIN_UPDATE_PASS }}
