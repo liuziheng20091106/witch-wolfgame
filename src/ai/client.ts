@@ -27,7 +27,7 @@ const sessionJsonFallback = new Set<string>();
 const REMOTE_CODE = /^[a-z0-9_]{1,64}$/;
 const REMOTE_PATH = /^[A-Za-z0-9_.[\]-]+$/;
 
-export function validateAiEndpoint(endpoint: string): void {
+export function validateAiEndpoint(endpoint: string, allowHttp = false): void {
   let url: URL;
   try {
     url = new URL(endpoint);
@@ -35,7 +35,7 @@ export function validateAiEndpoint(endpoint: string): void {
     throw new AiCommandError('config', '端点不是合法 URL');
   }
   const localHttp = url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1');
-  if (url.protocol !== 'https:' && !localHttp) throw new AiCommandError('config', '端点必须使用 HTTPS；开发时仅允许 localhost/127.0.0.1 的 HTTP');
+  if (url.protocol !== 'https:' && !(allowHttp && url.protocol === 'http:') && !localHttp) throw new AiCommandError('config', '端点必须使用 HTTPS；开发时仅允许 localhost/127.0.0.1 的 HTTP');
   if (!url.pathname.endsWith('/chat/completions')) throw new AiCommandError('config', '端点必须是完整的 /chat/completions 地址');
 }
 
@@ -82,15 +82,16 @@ async function requestContent(
   const timeout = globalThis.setTimeout(() => timeoutController.abort(), 60_000);
   const abort = () => timeoutController.abort();
   signal.addEventListener('abort', abort, { once: true });
+  const endpoint = config.provider === 'free' ? config.endpoint?.trim() || FREE_PROVIDER_ENDPOINT : config.endpoint;
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Majo-Wolf-Session': sessionId };
   if (config.provider === 'free') {
     headers['X-Majo-Wolf-Client'] = FREE_CLIENT_PROTOCOL.name;
     headers['X-Majo-Wolf-Version'] = APP_VERSION;
+    if (config.origin) headers.Origin = config.origin;
   } else {
     headers.Authorization = `Bearer ${config.apiKey}`;
   }
-  const endpoint = config.provider === 'free' ? config.endpoint?.trim() || FREE_PROVIDER_ENDPOINT : config.endpoint;
-  validateAiEndpoint(endpoint);
+  validateAiEndpoint(endpoint, config.provider === 'free' && config.allowHttp === true);
   try {
     const response = await fetch(endpoint, {
       method: 'POST',

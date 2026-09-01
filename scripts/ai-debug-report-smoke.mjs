@@ -477,6 +477,9 @@ async function captureError(run) {
 const freeConfig = { provider: 'free', retryCount: 2 };
 
 let calls = installFetch([chatResponse('{"targetPlayerId":1}')]);
+await requestDecision(request, { ...freeConfig, endpoint: 'http://127.0.0.1:34022/api/ai/chat/completions', origin: 'https://majowolf.tkcloud.online' }, new AbortController().signal);
+assert.equal(calls[0].init.headers.Origin, 'https://majowolf.tkcloud.online');
+calls = installFetch([chatResponse('{"targetPlayerId":1}')]);
 const fastPending = { ...pendingDecision, kind: 'seer-action', id: 'fast-profile' };
 const fastRequest = {
   observation: { ...observation, phase: 'seer-action', pendingDecision: fastPending },
