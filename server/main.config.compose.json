@@ -58,7 +58,6 @@
       "server/main.mjs",
       "server/shared.mjs",
       "server/update-core.mjs"
-      "server/main.config.compose.json"
     ],
     "projectRoot": ".",
     "downloadTimeoutMs": 30000,
