@@ -25,7 +25,8 @@ interface ShotEligibility {
 
 /**
  * 死亡反击资格（猎人 / 白狼王）：
- * - 猎人：被狼人袭击死亡（sources 含 'wolf'）或被放逐（sources 为空）时可开枪；被毒药、魔女杀手、枪决带走时不能。
+ * - 猎人：被放逐（sources 为空）或"仅"死于狼人袭击（sources 恰好只含 'wolf'）时可开枪；
+ *   被毒药、魔女杀手、枪决带走不能开枪；复合死亡（如狼刀+毒药同夜）也不得开枪（毒杀禁止反击）。
  * - 白狼王：仅被放逐时可带走一人。
  * 资源 hunterShot / wolfKingShot 为 1 且未消耗（已消耗说明本日已反击过，防重复生成）。
  */
@@ -33,7 +34,11 @@ function shotEligibility(state: GameState, playerId: PlayerId): ShotEligibility 
   const assignment = getRoleAssignment(state, playerId);
   const sources = deathSources(state, playerId);
   if (assignment.roleId === 'hunter' && assignment.resources.hunterShot === 1) {
-    if (sources.includes('wolf') || sources.length === 0) {
+    if (sources.length === 0) {
+      return { kind: 'hunter-shot' };
+    }
+    const nonWolfSources = sources.filter((source) => source !== 'wolf');
+    if (sources.includes('wolf') && nonWolfSources.length === 0) {
       return { kind: 'hunter-shot' };
     }
   }

@@ -162,4 +162,38 @@ function exileEvent(state, targetPlayerId) {
   console.log('场景5 守卫不可连守同一人 ✓');
 }
 
+// ===== 场景 6：复合死亡（狼刀+毒药）不触发猎人开枪 =====
+{
+  const g = newGame(8, 1006);
+  const hunter = g.players.findIndex((p) => roleOf(g, p.id) === 'hunter');
+  assert.ok(hunter >= 0, '猎人存在');
+  // 将猎人技能改为非死亡回溯技能，避免复合死亡结算触发回溯回退干扰断言
+  const hunterSkill = g.skillInstances.find((entry) => entry.id === g.players[hunter].skillInstanceId);
+  if (hunterSkill) {
+    hunterSkill.definitionId = 'ignition';
+  }
+  const intentEvent = (source) => ({
+    id: `test-intent-${source}-${hunter}`,
+    kind: 'wolf-attack',
+    day: g.day,
+    phase: 'night-resolution',
+    text: '复合死亡意图',
+    actorPlayerId: null,
+    targetPlayerIds: [hunter],
+    displayAuthorPlayerId: null,
+    actualAuthorPlayerId: null,
+    data: { intentSource: source, preventable: true, targetPlayerId: hunter },
+  });
+  g.privateEvents.push(intentEvent('wolf'));
+  g.privateEvents.push(intentEvent('poison'));
+  g.phase = 'night-resolution';
+  g.pendingDecision = null;
+  const afterNight = reduceGame(g, { type: 'advance' });
+  assert.equal(afterNight.players[hunter].alive, false, '复合死亡下猎人应死亡');
+  assert.notEqual(afterNight.pendingDecision?.kind, 'hunter-shot', '狼刀+毒药复合死亡不得触发猎人开枪');
+  const shotResource = afterNight.roleAssignments.find((a) => a.ownerPlayerId === hunter);
+  assert.equal(shotResource.resources.hunterShot, 1, '未开枪时猎人子弹不应消耗');
+  console.log('场景6 复合死亡（狼刀+毒药）不触发猎人开枪 ✓');
+}
+
 console.log('\n全部定向规则场景通过 ✓');
