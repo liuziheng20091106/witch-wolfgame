@@ -37,8 +37,17 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 
 const GAMES = Math.max(1, Number(getArg('games', 200)) || 200);
 const SEED = Number(getArg('seed', 1)) >>> 0;
-const PLAYER_COUNT = Math.min(14, Math.max(6, Number(getArg('players', 6)) || 6));
-const POISON_DAY = Math.max(0, Number(getArg('poison-day', 2)) || 2);
+const rawPlayers = getArg('players', '6');
+const PLAYER_COUNT = Number(rawPlayers);
+if (!Number.isInteger(PLAYER_COUNT) || PLAYER_COUNT < 6 || PLAYER_COUNT > 14) {
+  console.error(`--players 必须是 6-14 的整数，收到：${rawPlayers}`);
+  process.exit(1);
+}
+const POISON_DAY = Number(getArg('poison-day', '2'));
+if (!Number.isInteger(POISON_DAY) || POISON_DAY < 0) {
+  console.error(`--poison-day 必须是非负整数，收到：${getArg('poison-day', '2')}`);
+  process.exit(1);
+}
 const MAX_ITER = Math.max(100, Number(getArg('max-iter', 5000)) || 5000);
 const AS_JSON = process.argv.includes('--json');
 
