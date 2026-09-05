@@ -35,7 +35,7 @@ const MIN_P = Math.max(6, Number(arg('min', 6)) || 6);
 const MAX_P = Math.min(14, Number(arg('max', 14)) || 14);
 const GAMES = Math.max(1, Number(arg('games', 1)) || 1);
 const SEED = (Number(arg('seed', 9000)) || 9000) >>> 0;
-const TIMEOUT_MS = Number(arg('timeout-ms', 120000)) || 120000;
+const TIMEOUT_MS = Number(arg('timeout-ms', 600000)) || 600000;
 const SPEECH_DIR = arg('keep-speeches', '');
 
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
@@ -62,6 +62,7 @@ const aiConfig = {
   },
   retryCount: 0,
   jsonOutputMode: 'auto',
+  timeoutMs: 300_000,
 };
 
 /** 提交前防御校验（防止非法决策弄脏状态后抛错中断对局）。 */

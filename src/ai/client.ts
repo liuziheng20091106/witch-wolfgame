@@ -79,7 +79,8 @@ async function requestContent(
   if (signal.aborted) throw new AiCommandError('cancelled', 'AI 请求已取消');
   if (config.provider === 'custom') validateCustomConfig(config);
   const timeoutController = new AbortController();
-  const timeout = globalThis.setTimeout(() => timeoutController.abort(), 60_000);
+  const requestTimeoutMs = config.provider === 'custom' && config.timeoutMs !== undefined ? config.timeoutMs : 60_000;
+  const timeout = globalThis.setTimeout(() => timeoutController.abort(), requestTimeoutMs);
   const abort = () => timeoutController.abort();
   signal.addEventListener('abort', abort, { once: true });
   const endpoint = config.provider === 'free' ? config.endpoint?.trim() || FREE_PROVIDER_ENDPOINT : config.endpoint;
