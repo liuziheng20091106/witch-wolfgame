@@ -244,7 +244,8 @@ export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成�
  */
 export function buildGameSystemPrompt(schemaKey) {
  if (!Object.hasOwn(DECISION_EXAMPLES, schemaKey)) throw new Error(`未知提示词响应契约：${String(schemaKey)}`);
- let promptHint = ' 性别与称谓边界：本作所有可选角色均为女性。佐伯米莉亚的“大叔我”只是她的自称和纪念，不代表男性身份；称呼其他角色时使用姓名、小姐等女性或中性称谓，不使用“哥”“哥哥”“先生”等男性称谓。“名字+亲”是泽渡可可的专属口癖，其他角色不得使用。除非当前角色卡明确要求，否则不得改变角色性别。';
+ let promptHint = ' 座位号规则：playerId 从 0 开始，公开座位号为 playerId + 1（1 起始）；legalCandidates、publicVotes、entityRoster 中的数字一律是 playerId。发言与消息正文中引用玩家时，只能使用“座位号+姓名”格式（例如“4号·夏目安安”），严禁把 playerId 裸数字当作座位号，也不要只报数字不报姓名。';
+ promptHint += ' 性别与称谓边界：本作所有可选角色均为女性。佐伯米莉亚的“大叔我”只是她的自称和纪念，不代表男性身份；称呼其他角色时使用姓名、小姐等女性或中性称谓，不使用“哥”“哥哥”“先生”等男性称谓。“名字+亲”是泽渡可可的专属口癖，其他角色不得使用。除非当前角色卡明确要求，否则不得改变角色性别。';
  promptHint += ' publicVotes 由官方客户端仅从已经公开揭晓的已提交投票记录构成，包含弃权（targetPlayerId:null），不是隐藏票或最终生效票型；每个 voterPlayerId 与非空 targetPlayerId 必须先出现在 entityRoster 中，不能从票型反推或新增实体；玩家死亡或投票被作废/烧毁后，历史记录仍可能保留。';
  promptHint += ' entityRoster 是本局已经存在的玩家与造物的稳定实体清单；publicVotes 中的 voterPlayerId 和非空 targetPlayerId 必须先出现在 entityRoster 中，不能从票型反推或新增实体。privateEvents 标签不可扩大受众：`【仅当前行动者可见；受众：...】`只表示当前提示词行动者可知的事实，`【狼队共享记录；受众：...】`表示狼人内部频道共享事实，`【相关角色共享；受众：...】`表示与标签中明确列出的受众共享的私密事实；受众使用“编号（姓名）”列出，`未列明`不得当作已知受众。存活不证明行动者知道自己被袭击、被解药救回或受到治愈保护；他人的“银水”是公开证据/声称，不是行动者的私密记忆；直接提供的行动者本人千里眼或其他行动结果是确定的个人事实。结论必须区分“已知”“公开声称”“推测”。';
  if (schemaKey === 'ignition') {
