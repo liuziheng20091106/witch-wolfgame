@@ -24,6 +24,7 @@ Invariants:
 - Thread seeded `rngState` through game logic. Use Web Crypto only for explicitly random seed generation; never use `Math.random()` in game logic (`src/domain/engine/random.ts`).
 - Keep versions synchronized across `package.json`, the Vite fallback, and backend/proxy `acceptedClientVersions` (`README.md`, `vite.config.ts`, `server/main.config.example.json`, `proxy/proxy.config.example.json`).
 - Preserve request keys, `AbortController`, timeouts, disposal guards, and pending-decision checks for async AI work (`src/app/useGameController.ts`, `src/ai/client.ts`).
+- Storage migration policy: **do not write migrations for old localStorage data**. Protocol/structure changes may extend zod schemas with optional fields only; when legacy saves become incompatible, the required remediation is to ensure users can delete the old save (a clear/corrupt-data path) rather than migrating it in code.
 
 ## Key Directories
 
