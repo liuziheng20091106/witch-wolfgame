@@ -15,7 +15,8 @@
  *   --players N / --min N --max N
  *   --games N     每档对局数（默认 1）
  *   --seed        起始种子（默认 9000）
- *   --timeout-ms  单决策超时（默认 120000）
+ *   --timeout-ms  整局超时上限毫秒（默认 600000，超时中止该局）
+ *   --decision-timeout-ms 单决策超时毫秒（默认 300000，写入 custom 配置）
  *   --keep-speeches DIR 保存每局发言/狼议样本到 jsonl（用于人工检查奇怪发言）
  */
 import { createServer } from 'vite';
@@ -37,6 +38,7 @@ const MAX_P = Math.min(14, Number(arg('max', 14)) || 14);
 const GAMES = Math.max(1, Number(arg('games', 1)) || 1);
 const SEED = (Number(arg('seed', 9000)) || 9000) >>> 0;
 const TIMEOUT_MS = Number(arg('timeout-ms', 600000)) || 600000;
+const DECISION_TIMEOUT_MS = Math.max(30_000, Number(arg('decision-timeout-ms', 300000)) || 300000);
 const SPEECH_DIR = arg('keep-speeches', '');
 
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
@@ -63,7 +65,7 @@ const aiConfig = {
   },
   retryCount: 0,
   jsonOutputMode: 'auto',
-  timeoutMs: 300_000,
+  timeoutMs: DECISION_TIMEOUT_MS,
 };
 
 /** 提交前防御校验（防止非法决策弄脏状态后抛错中断对局）。 */
