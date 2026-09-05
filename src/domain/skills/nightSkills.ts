@@ -340,6 +340,9 @@ export function describeNightTrajectory(state: GameState, targetPlayerId: Player
     if (data.savedWolfTargetPlayerId === targetPlayerId) {
       return `${targetName} 在第${event.day}夜被救下。`;
     }
+    if (data.guardTargetPlayerId === targetPlayerId) {
+      return `${targetName} 在第${event.day}夜被守卫保护。`;
+    }
     if (data.protectTargetPlayerId === targetPlayerId) {
       return `${targetName} 在第${event.day}夜被治愈保护。`;
     }

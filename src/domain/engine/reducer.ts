@@ -838,7 +838,7 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
     addPrivateEvent(state, [guardId], 'protection', `${nameOf(state, guardId)} 守护了 ${nameOf(state, guardTargetId)}，她本夜免疫狼人袭击。`, {
       actorPlayerId: guardId,
       targetPlayerIds: [guardTargetId],
-      data: { protectTargetPlayerId: guardTargetId },
+      data: { guardTargetPlayerId: guardTargetId },
     });
     return state;
   }
@@ -991,4 +991,3 @@ export function reduceGame(state: GameState, event: GameEvent): GameState {
   if (event.failure) next.lastAiFailure = { ...event.failure, day: next.day, phase: next.phase };
   return next;
 }
-

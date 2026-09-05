@@ -154,16 +154,23 @@ export function resolveNight(state: GameState): GameState {
       .filter((event) => event.day === state.day && typeof event.data.savedWolfTargetPlayerId === 'number')
       .map((event) => event.data.savedWolfTargetPlayerId as PlayerId),
   );
-  const protectedTargets = new Set(
+  const healedTargets = new Set(
     state.privateEvents
       .filter((event) => event.day === state.day && typeof event.data.protectTargetPlayerId === 'number')
       .map((event) => event.data.protectTargetPlayerId as PlayerId),
   );
+  const guardedTargets = new Set(
+    state.privateEvents
+      .filter((event) => event.day === state.day && typeof event.data.guardTargetPlayerId === 'number')
+      .map((event) => event.data.guardTargetPlayerId as PlayerId),
+  );
   const survivingIntents = nightIntents(state).filter((intent) => {
-    if (intent.source === 'wolf' && savedTargets.has(intent.targetPlayerId)) {
-      return false;
+    if (intent.source === 'wolf') {
+      if (savedTargets.has(intent.targetPlayerId) || guardedTargets.has(intent.targetPlayerId)) {
+        return false;
+      }
     }
-    return !(intent.preventable && protectedTargets.has(intent.targetPlayerId));
+    return !(intent.preventable && healedTargets.has(intent.targetPlayerId));
   });
   const grouped = new Map<PlayerId, DeathIntent['source'][]>();
   for (const intent of survivingIntents) {
@@ -205,4 +212,3 @@ export function refreshMorningCheckpoint(state: GameState): void {
 export function isRecoveredThisNight(skill: WitchSkillInstance, day: number): boolean {
   return skill.data.recoveredNight === day;
 }
-

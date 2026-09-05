@@ -142,8 +142,40 @@ function exileEvent(state, targetPlayerId) {
   assert.equal(assignment.resources.lastGuardNight, afterGuard.day);
   assert.equal(assignment.resources.lastGuardTargetPlayerId, protectTarget);
   const protectEvent = afterGuard.privateEvents.some((e) => typeof e.data.protectTargetPlayerId === 'number' && e.data.protectTargetPlayerId === protectTarget);
-  assert.ok(protectEvent, '守卫应写入保护事件');
-  console.log('场景4 守卫守护决策/资源/保护事件 ✓');
+  assert.equal(protectEvent, false, '守卫事件不应伪装成治愈保护');
+  const guardEvent = afterGuard.privateEvents.some((e) => typeof e.data.guardTargetPlayerId === 'number' && e.data.guardTargetPlayerId === protectTarget);
+  assert.ok(guardEvent, '守卫应写入守卫保护事件');
+  const wolfIntent = {
+    id: `test-guard-wolf-${protectTarget}`,
+    kind: 'wolf-attack',
+    day: afterGuard.day,
+    phase: 'night-resolution',
+    text: '守卫回归狼刀意图',
+    actorPlayerId: null,
+    targetPlayerIds: [protectTarget],
+    displayAuthorPlayerId: null,
+    actualAuthorPlayerId: null,
+    data: { intentSource: 'wolf', preventable: true, targetPlayerId: protectTarget },
+  };
+  const protectedNight = structuredClone(afterGuard);
+  protectedNight.phase = 'night-resolution';
+  protectedNight.privateEvents.push(wolfIntent);
+  const afterProtectedNight = reduceGame(protectedNight, { type: 'advance' });
+  assert.equal(afterProtectedNight.players[protectTarget].alive, true, '守卫应阻止狼刀');
+  const mixedNight = structuredClone(afterGuard);
+  mixedNight.phase = 'night-resolution';
+  mixedNight.privateEvents.push(wolfIntent, {
+    ...wolfIntent,
+    id: `test-guard-poison-${protectTarget}`,
+    text: '守卫回归毒药意图',
+    data: { intentSource: 'poison', preventable: true, targetPlayerId: protectTarget },
+  });
+  const afterMixedNight = reduceGame(mixedNight, { type: 'advance' });
+  assert.equal(afterMixedNight.players[protectTarget].alive, false, '守卫不应阻止同夜毒药');
+  const mixedDeath = afterMixedNight.publicEvents.findLast((e) => e.kind === 'death' && e.targetPlayerIds.includes(protectTarget));
+  assert.ok(mixedDeath && Array.isArray(mixedDeath.data.sources) && mixedDeath.data.sources.includes('poison'), '同夜毒药应保留死亡来源');
+  assert.ok(mixedDeath && !mixedDeath.data.sources.includes('wolf'), '被守卫挡下的狼刀不应保留死亡来源');
+  console.log('场景4 守卫保护资源与狼刀/毒药结算 ✓');
 }
 
 // ===== 场景 5：守卫不可连续两夜守护同一人 =====
@@ -195,4 +227,3 @@ function exileEvent(state, targetPlayerId) {
 }
 
 console.log('\n全部定向规则场景通过 ✓');
-
