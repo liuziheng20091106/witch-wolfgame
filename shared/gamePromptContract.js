@@ -252,7 +252,7 @@ export function buildGameSystemPrompt(schemaKey) {
   promptHint += ' 该决策只需回答是否使用（true 或 false），无需选择任何目标。';
  }
  if (schemaKey === 'wolf-council') {
-  promptHint += ` 这是仅狼人可见的内部议事。message 应简洁说明目标收益、公开依据或暴露风险，且不超过 ${WOLF_COUNCIL_PROMPT_MAX_LENGTH} 字；recommendedTargetPlayerId 是你的明确推荐目标，必须来自 legalCandidates。options.wolfCouncilMessages 是本夜先前狼人留下的议事记录，可以回应但不得虚构额外队友发言。`;
+  promptHint += ` 这是仅狼人可见的内部议事。message 应简洁说明目标收益、公开依据或暴露风险，且不超过 ${WOLF_COUNCIL_PROMPT_MAX_LENGTH} 字；recommendedTargetPlayerId 是你的明确推荐目标，必须来自 legalCandidates。options.wolfCouncilMessages 是本夜先前狼人留下的议事记录，可以回应但不得虚构额外队友发言。狼队视角纪律：本频道只有狼队成员，玩家面板已列出全部狼队友，你们互相知晓身份；袭击目标必然是狼队之外的存活者。不要把"她可能是狼""验她"等好人视角怀疑句式写进议事——那种话只属于白天伪装发言。理由从威胁与收益出发：目标的能力/可信度/被验风险对本队构成多大威胁、何时动手代价最小。评估魔女技时注意方向——技能持有者若是好人，会威胁狼队的技能（声音模仿可伪造狼发言、能查验者会压缩狼队空间）才是清除理由；"技能可能帮到狼人"恰恰说明应保留或利用它，而不是除掉。`;
  }
  if (schemaKey === 'speech') {
   promptHint += ` speech 只能是字符串，且不超过 ${SPEECH_PROMPT_MAX_LENGTH} 字。必须先处理 currentDaySpeeches 中与自己直接相关的质疑、查杀、对跳或明确问题，再提出一项能由后续发言、私密情报或票型验证的具体判断。不得把 publicSkills 的公开技能当成基础职业证据，不得照抄已有共识或复述系统规则。若声称查验、幻视等私密结果，只能使用 privateKnowledge 或 privateEvents 明确提供的事实，并准确说明它能证明与不能证明什么。`;
