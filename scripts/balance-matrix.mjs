@@ -9,7 +9,8 @@ import { resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 function arg(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
-  return index !== -1 && process.argv[index + 1] !== undefined ? process.argv[index + 1] : fallback;
+  if (index === -1 || process.argv[index + 1] === undefined) return fallback;
+  return process.argv[index + 1];
 }
 const GAMES = Math.max(10, Number(arg('games', 50)) || 50);
 const MIN = Math.max(6, Number(arg('min', 6)) || 6);
@@ -60,16 +61,25 @@ function runTemplate(playerCount, poisonDay) {
     days += result.day;
     finished += 1;
   }
-  const base = finished > 0 ? finished : 1;
+  let wolfPct = null;
+  let goodPct = null;
+  let neutralPct = null;
+  let avgDays = null;
+  if (finished > 0) {
+    wolfPct = Number(((counts.wolf / finished) * 100).toFixed(1));
+    goodPct = Number(((counts.good / finished) * 100).toFixed(1));
+    neutralPct = Number(((counts.neutral / finished) * 100).toFixed(1));
+    avgDays = Number((days / finished).toFixed(1));
+  }
   return {
     good: counts.good,
     wolf: counts.wolf,
     neutral: counts.neutral,
     timedOut: counts.timedOut,
-    wolfPct: finished > 0 ? Number(((counts.wolf / finished) * 100).toFixed(1)) : null,
-    goodPct: finished > 0 ? Number(((counts.good / finished) * 100).toFixed(1)) : null,
-    neutralPct: finished > 0 ? Number(((counts.neutral / finished) * 100).toFixed(1)) : null,
-    avgDays: finished > 0 ? Number((days / finished).toFixed(1)) : null,
+    wolfPct,
+    goodPct,
+    neutralPct,
+    avgDays,
   };
 }
 

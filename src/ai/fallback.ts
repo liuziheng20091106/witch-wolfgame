@@ -148,7 +148,12 @@ export function fallbackDecision(state: GameState, pending: PendingDecision, tem
   if (pending.schemaKey === 'target' && (pending.kind === 'vote' || pending.kind === 'runoff')) {
     if (isWolfFaction(state, pending.actorId)) {
       const pool = pending.candidates.filter((playerId) => !isWolfFaction(state, playerId));
-      const picked = pool.length > 0 ? chooseCandidate({ ...pending, candidates: pool }, state.rngState) : chooseCandidate(pending, state.rngState);
+      let picked: { playerId: PlayerId; rngState: number };
+      if (pool.length > 0) {
+        picked = chooseCandidate({ ...pending, candidates: pool }, state.rngState);
+      } else {
+        picked = chooseCandidate(pending, state.rngState);
+      }
       return { decision: { targetPlayerId: picked.playerId }, rngState: picked.rngState };
     }
     const confirmed = knownWolfTargets(state, pending.actorId).filter((playerId) => pending.candidates.includes(playerId));
@@ -170,7 +175,12 @@ export function fallbackDecision(state: GameState, pending: PendingDecision, tem
       return { decision: { targetPlayerId: null }, rngState: state.rngState };
     }
     const pool = pending.candidates.filter((playerId) => !isWolfFaction(state, playerId));
-    const picked = pool.length > 0 ? chooseCandidate({ ...pending, candidates: pool }, state.rngState) : chooseCandidate(pending, state.rngState);
+    let picked: { playerId: PlayerId; rngState: number };
+    if (pool.length > 0) {
+      picked = chooseCandidate({ ...pending, candidates: pool }, state.rngState);
+    } else {
+      picked = chooseCandidate(pending, state.rngState);
+    }
     return { decision: { targetPlayerId: picked.playerId }, rngState: picked.rngState };
   }
   const selected = chooseCandidate(pending, state.rngState);

@@ -2,7 +2,7 @@
 
 支持 6–14 人的 AI 狼人杀网页游戏。开局可指定人数与出庭角色；每个玩家人数对应一份固定平衡版型，基础职业池含 9 种：狼人、守卫、猎人、预言家、女巫、村民、白狼王（狼）、隐狼（狼）与中立的呆头鹅。角色人格、基础职业与魔女技互相独立；
 
-当前客户端与提示词协议版本为 `2.4.0`。发布时必须同步更新 `package.json`、Vite 版本回退值，以及主后端和代理配置中的 `acceptedClientVersions`。
+当前客户端与提示词协议版本为 `2.5.0`。发布时必须同步更新 `package.json`、Vite 版本回退值，以及主后端和代理配置中的 `acceptedClientVersions`。
 
 ## 功能
 
@@ -169,5 +169,4 @@ npm run test:update
 与[上游](https://github.com/Illusory-moon/witch-wolfgame)保持相同。
 
 详见LICENSE界面
-
 

@@ -25,7 +25,8 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 const root = resolve(import.meta.dirname, '..');
 function arg(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
-  return index !== -1 && process.argv[index + 1] !== undefined ? process.argv[index + 1] : fallback;
+  if (index === -1 || process.argv[index + 1] === undefined) return fallback;
+  return process.argv[index + 1];
 }
 const ENDPOINT = arg('endpoint', 'http://127.0.0.1:11434/v1/chat/completions');
 const MODEL = arg('model', 'qwen2.5:7b');
@@ -106,7 +107,10 @@ async function aiPlayOne(playerCount, seed) {
           );
         } catch (error) {
           stats.aiFailures += 1;
-          const reason = error instanceof Error && error.message ? error.message.slice(0, 100) : 'ai-error';
+          let reason = 'ai-error';
+          if (error instanceof Error && error.message) {
+            reason = error.message.slice(0, 100);
+          }
           stats.lastFailureReason = reason;
           if (signalController.signal.aborted) {
             aborted = true;
@@ -116,10 +120,18 @@ async function aiPlayOne(playerCount, seed) {
         // 样本采集：公开发言与狼议全文（含人类可读检查价值的决策）
         if (pending.schemaKey === 'speech' && pending.options?.postGame !== true) {
           const text = decision?.speech ?? '';
-          stats.speeches.push({ day: game.day, actorId: pending.actorId, text, failed: decision === null, reason: decision === null ? stats.lastFailureReason : undefined });
+          let speechReason = null;
+          if (decision === null) {
+            speechReason = stats.lastFailureReason;
+          }
+          stats.speeches.push({ day: game.day, actorId: pending.actorId, text, failed: decision === null, reason: speechReason });
         }
         if (pending.schemaKey === 'wolf-council') {
-          stats.council.push({ day: game.day, actorId: pending.actorId, message: decision?.message ?? '', target: decision?.recommendedTargetPlayerId ?? null, failed: decision === null, reason: decision === null ? stats.lastFailureReason : undefined });
+          let councilReason = null;
+          if (decision === null) {
+            councilReason = stats.lastFailureReason;
+          }
+          stats.council.push({ day: game.day, actorId: pending.actorId, message: decision?.message ?? '', target: decision?.recommendedTargetPlayerId ?? null, failed: decision === null, reason: councilReason });
         }
         let resolved = false;
         if (decision !== null && preValidate(pending, decision)) {
@@ -184,13 +196,22 @@ function writeSamples(playerCount, seed, result) {
 console.log(`AI 对弈抽检  endpoint=${ENDPOINT} model=${MODEL} reasoning=${REASONING} 每档 ${GAMES} 局`);
 console.log('档位 | 局 | 胜者 | 天数 | 决策数 | AI失败 | 兜底 | 狼议数');
 const totals = {};
-for (let p = (PLAYERS > 0 ? PLAYERS : MIN_P); p <= (PLAYERS > 0 ? PLAYERS : MAX_P); p += 1) {
+let startP = MIN_P;
+let endP = MAX_P;
+if (PLAYERS > 0) {
+  startP = PLAYERS;
+  endP = PLAYERS;
+}
+for (let p = startP; p <= endP; p += 1) {
   for (let i = 0; i < GAMES; i += 1) {
     const seed = SEED + p * 100 + i;
     const started = Date.now();
     const result = await aiPlayOne(p, seed);
     const elapsed = Math.round((Date.now() - started) / 1000);
-    const winnerLabel = result.winner === 'wolf' ? '狼' : result.winner === 'neutral' ? '呆头鹅' : result.winner === 'good' ? '好' : '超时';
+    let winnerLabel = '超时';
+    if (result.winner === 'wolf') winnerLabel = '狼';
+    else if (result.winner === 'neutral') winnerLabel = '呆头鹅';
+    else if (result.winner === 'good') winnerLabel = '好';
     console.log(`${p}人 | ${i + 1} | ${winnerLabel} | ${result.day}天 | ${result.stats.decisions} | ${result.stats.aiFailures} | ${result.stats.fallbackUsed} | ${result.stats.council.length} | ${elapsed}s`);
     writeSamples(p, seed, result);
     const key = String(p);
@@ -206,8 +227,13 @@ console.log('');
 console.log('== 汇总（每档全部局）==');
 for (const [p, row] of Object.entries(totals)) {
   const finished = row.good + row.wolf + row.neutral;
-  const wolfPct = finished > 0 ? ((row.wolf / finished) * 100).toFixed(0) : '-';
-  console.log(`${p}人: 好${row.good} 狼${row.wolf} 中${row.neutral} 超时${row.timedOut} | AI失败${row.aiFailures} 决策${row.decisions} 均天${finished > 0 ? (row.days / finished).toFixed(1) : '-'} 狼胜${wolfPct}%`);
+  let wolfPct = '-';
+  let avgDays = '-';
+  if (finished > 0) {
+    wolfPct = ((row.wolf / finished) * 100).toFixed(0);
+    avgDays = (row.days / finished).toFixed(1);
+  }
+  console.log(`${p}人: 好${row.good} 狼${row.wolf} 中${row.neutral} 超时${row.timedOut} | AI失败${row.aiFailures} 决策${row.decisions} 均天${avgDays} 狼胜${wolfPct}%`);
 }
 console.log('');
 console.log('说明: 真实 LLM 决策（含语义层），样本量小仅作方向参考；AI 失败=模型返回非法/超时后由本地策略兜底。');

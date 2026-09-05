@@ -49,6 +49,7 @@ const currentProfiles = {
   },
   retryCount: 3,
   jsonOutputMode: 'auto',
+  timeoutMs: 120_000,
 };
 saveSettings(currentProfiles);
 assert.deepEqual(loadSettings(), { ok: true, value: currentProfiles });
