@@ -143,7 +143,7 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
         },
         retryCount: singleProfile.data.retryCount,
         jsonOutputMode: singleProfile.data.jsonOutputMode,
-        timeoutMs: 120_000,
+        timeoutMs: singleProfile.data.timeoutMs,
       },
     };
   }

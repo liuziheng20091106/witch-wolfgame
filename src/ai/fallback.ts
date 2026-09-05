@@ -11,12 +11,9 @@ export interface FallbackResult {
   rngState: number;
 }
 
-/**
- * 本地策略模板（MC 2.0）：修正结构性自损行为，使模拟反映更接近理性玩家的基线。
- * 语义层（发言、跳神、心理战）本地策略无法表达，由真实 AI 对弈与真人数据校准。
- */
+/** 本地策略模板：修正结构性自损行为；语义层表现由真实 AI 与真人数据校准。 */
 export interface FallbackTemplate {
-  /** 女巫最早可下毒的白天号（state.day）。默认 2（第 3 个白天起），避免首两日随机毒杀好人。0 = 旧行为（药可用即随机下毒） */
+  /** 女巫最早可下毒的白天号，默认 2（第 3 个白天起）。 */
   witchPoisonDay: number;
 }
 
@@ -33,13 +30,13 @@ function actorRoleId(state: GameState, playerId: PlayerId): RoleId | null {
   return state.roleAssignments.find((assignment) => assignment.ownerPlayerId === playerId)?.roleId ?? null;
 }
 
-/** 狼队互知（设计内）：该玩家当前是否狼阵营。 */
+/** 该玩家当前是否狼阵营（狼队互知）。 */
 function isWolfFaction(state: GameState, playerId: PlayerId): boolean {
   const roleId = actorRoleId(state, playerId);
   return roleId !== null && roleAlignment[roleId] === 'wolf';
 }
 
-/** 玩家自身 knowledge 中已确认为狼（role 类查验结果）的目标，含白狼王/隐狼。 */
+/** 玩家自己已确认的狼目标（含白狼王/隐狼）。 */
 function knownWolfTargets(state: GameState, actorId: PlayerId): PlayerId[] {
   const facts = state.knowledgeByPlayer[actorId] ?? [];
   const targets: PlayerId[] = [];
@@ -144,7 +141,7 @@ export function fallbackDecision(state: GameState, pending: PendingDecision, tem
     if (pending.schemaKey === 'optional-target') return { decision: { use: false, targetPlayerId: null }, rngState: state.rngState };
     return { decision: { targetPlayerId: null }, rngState: state.rngState };
   }
-  // 投票启发（理性模板）：狼人不投队友；好人优先投自己查验确认的狼（预言家查杀跟随）
+  // 狼人不投队友；好人优先投已确认的狼。
   if (pending.schemaKey === 'target' && (pending.kind === 'vote' || pending.kind === 'runoff')) {
     if (isWolfFaction(state, pending.actorId)) {
       const pool = pending.candidates.filter((playerId) => !isWolfFaction(state, playerId));

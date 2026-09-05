@@ -9,7 +9,7 @@ import {
   isAllowedDecisionPair,
 } from '../../shared/gamePromptContract.js';
 import { characterById } from '../domain/catalog/characters';
-import { roleDescriptions, roleNames, roleUsageHints } from '../domain/catalog/roles';
+import { roleDescriptions, roleNames } from '../domain/catalog/roles';
 import { defaultSkillByCharacterId, skillUsageHints, witchSkillDefinitions } from '../domain/catalog/witchSkills';
 import { buildPostGameContext } from '../domain/skills/postGame';
 import { APP_VERSION } from '../config/version';
@@ -306,7 +306,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     }));
   let visibleRole = '未公开';
   if (actor.roleId !== null) {
-    visibleRole = `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}${roleUsageHints[actor.roleId] ?? ''}`;
+    visibleRole = `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}`;
   }
   let visibleSkill = '无可见技能';
   if (actor.skillId !== null) {
