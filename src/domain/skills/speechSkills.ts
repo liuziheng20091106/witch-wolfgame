@@ -516,4 +516,3 @@ function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pend
   asked.push(viewerId);
   skill.data.viewerIds = asked;
 }
-

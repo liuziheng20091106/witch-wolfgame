@@ -154,4 +154,3 @@ export const defaultCustomAiConfig: CustomAiProviderConfig = {
   jsonOutputMode: 'auto',
   timeoutMs: 120_000,
 };
-

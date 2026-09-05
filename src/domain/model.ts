@@ -338,4 +338,3 @@ export interface WitchSkillDefinition {
   timings: SkillTiming[];
   usage: 'once' | 'nightly' | 'daily' | 'passive';
 }
-

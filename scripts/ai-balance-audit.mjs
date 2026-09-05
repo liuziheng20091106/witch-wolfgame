@@ -237,4 +237,3 @@ for (const [p, row] of Object.entries(totals)) {
 }
 console.log('');
 console.log('说明: 真实 LLM 决策（含语义层），样本量小仅作方向参考；AI 失败=模型返回非法/超时后由本地策略兜底。');
-

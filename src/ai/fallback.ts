@@ -187,4 +187,3 @@ export function fallbackDecision(state: GameState, pending: PendingDecision, tem
   }
   return { decision: { targetPlayerId: selected.playerId }, rngState: selected.rngState };
 }
-
