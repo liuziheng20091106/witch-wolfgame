@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-const appVersion = process.env.npm_package_version ?? '2.5.0';
+const appVersion = process.env.npm_package_version ?? '2.4.0';
 
 const publicShell = [
   './manifest.webmanifest',
