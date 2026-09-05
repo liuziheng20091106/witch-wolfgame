@@ -25,6 +25,8 @@ Invariants:
 - Keep versions synchronized across `package.json`, the Vite fallback, and backend/proxy `acceptedClientVersions` (`README.md`, `vite.config.ts`, `server/main.config.example.json`, `proxy/proxy.config.example.json`).
 - Preserve request keys, `AbortController`, timeouts, disposal guards, and pending-decision checks for async AI work (`src/app/useGameController.ts`, `src/ai/client.ts`).
 - Storage migration policy: **do not write migrations for old localStorage data**. Protocol/structure changes may extend zod schemas with optional fields only; when legacy saves become incompatible, the required remediation is to ensure users can delete the old save (a clear/corrupt-data path) rather than migrating it in code.
+- Pull requests are opened and merged by human maintainers only: **agents never create, close, or merge PRs**. Agents may push feature branches and reply to review threads, but PR lifecycle actions belong to the owner.
+- Working documents (design drafts, simulation reports, AI audit notes under `docs/` and similar) are local-only work notes and are **not committed to the repository**.
 
 ## Key Directories
 
