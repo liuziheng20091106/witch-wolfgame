@@ -37,11 +37,6 @@ export const ROLE_CATALOG = freeze([
 ]);
 export const ROLE_IDS = freeze(ROLE_CATALOG.map((role) => role.id));
 export const ALIGNMENTS = freeze(/** @type {const} */(['wolf', 'good', 'neutral']));
-/**
- * 每档人数固定版型（Issue #95 v2）：
- * - 6/7 人：2 狼；8/11 人狼数对齐经典网杀惯例（8 人 3 狼、11 人 4 狼）；10 人 4 狼局（白狼王入队）。
- * - 守卫仅 9+ 人档（小局双保护拖局）；隐狼仅在 13/14 人档；呆头鹅（中立）仅 9/12 人档试点。
- */
 const PLAYER_COUNT_ROLE_POOLS = freeze(/** @type {Record<number, ReadonlyArray<(typeof ROLE_IDS)[number]>>} */({
  6: ['wolf', 'wolf', 'seer', 'witch', 'hunter', 'villager'],
  7: ['wolf', 'wolf', 'seer', 'witch', 'hunter', 'villager', 'villager'],
@@ -245,7 +240,7 @@ export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成�
 export function buildGameSystemPrompt(schemaKey) {
  if (!Object.hasOwn(DECISION_EXAMPLES, schemaKey)) throw new Error(`未知提示词响应契约：${String(schemaKey)}`);
   const base = `你是魔女狼人杀（6-14 人）的玩家，按角色人格行动，只依据观察决定，不得假设隐藏身份或继承原作剧情。基础职业（狼人/守卫/猎人/预言家/女巫/村民/白狼王/隐狼/呆头鹅）与魔女技互相独立，均以观察中的当前状态为准。胜负：狼人全部出局则好人胜；存活狼人不少于存活好人则狼胜；呆头鹅（中立）被白天放逐则独自获胜，其他结局她失败。所有角色均为女性，不得改变性别。编号：playerId 从 0 起，座位号=playerId+1；所有列表中的数字均为 playerId，正文引用玩家必须写“座位号+姓名”。隐私：privateEvents 只能按受众标签使用，未列明受众的事实不可用；结论必须区分“已知”“公开声称”“推测”。角色卡边界：actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；“名字+亲”是泽渡可可的专属口癖。若 options.postGame 为 true，finalRoles 是最终身份唯一来源。publicVotes 由官方客户端仅从已经公开揭晓的已提交投票记录构成。privateEvents 标签：\`【仅当前行动者可见；受众：...】\`只表示当前提示词行动者可知的事实；\`【狼队共享记录；受众：...】\`表示狼人内部频道共享事实；\`【相关角色共享；受众：...】\`表示与标签中明确列出的受众共享的私密事实。存活不证明行动者知道自己被袭击、被解药救回或受到治愈保护；他人的“银水”是公开证据/声称，不是行动者的私密记忆；直接提供的行动者本人千里眼或其他行动结果是确定的个人事实。legalCandidates 是唯一合法目标集合，非 null 目标必须取自其中；allowAbstain 为 false 时不得弃权。`;
- let hint = ' 职业要点：狼人不自曝；守卫每夜守护一名其他存活者且不可连守；猎人被狼袭或被放逐可开枪带走一人（被毒/技能致死不可），无把握可弃枪；白狼王被放逐可带走一人；隐狼被查验显示村民；呆头鹅被放逐即独自获胜，狼刀对她有效。';
+ let hint = '';
  if (schemaKey === 'wolf-council') {
   hint += ` 这是仅狼队可见的内部议事。message 不超过 ${WOLF_COUNCIL_PROMPT_MAX_LENGTH} 字，推荐目标须来自 legalCandidates 且与 message 中的人物一致；袭击目标必在队外，理由从威胁收益出发，不得用“她可能是狼”等好人句式。`;
  }

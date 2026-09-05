@@ -228,7 +228,15 @@ const dynamicPrompt = buildDecisionPrompt({
 const dynamicPayload = JSON.parse(dynamicPrompt[1].content);
 assert.match(dynamicPayload.actor.personality, /original-case\.A2-C2/, '实际提示词应注入动态命中的可可案');
 assert.match(dynamicPayload.actor.personality, /不得作为本局身份、投票或行动依据/, '案件卡必须携带本局隔离边界');
-assert.match(buildGameSystemPrompt('speech'), /狼人不自曝/, '狼人必须收到谨慎自曝建议');
+assert.doesNotMatch(buildGameSystemPrompt('speech'), /狼人不自曝/, '通用系统提示不得注入狼队策略');
+assert.match(dynamicPayload.actor.role, /不要公开自曝/, '狼人行动者必须收到谨慎自曝建议');
+const goodPrompt = buildDecisionPrompt({
+  observation: { ...baseObservation, pendingDecision: baseSpeechDecision },
+  pendingDecision: baseSpeechDecision,
+  sessionId: 'roleplay-good-role',
+});
+const goodPayload = JSON.parse(goodPrompt[1].content);
+assert.doesNotMatch(goodPayload.actor.role, /不要公开自曝/, '好人行动者不得收到狼队自曝建议');
 assert.match(dynamicPayload.actor.skill, /第一天信任不足，几乎无人观看/, '千里眼持有者必须收到首日保留建议');
 const noahPublicSkill = dynamicPayload.publicSkills.find((entry) => entry.playerId === 3);
 assert.ok(noahPublicSkill, '公共技能列表必须包含诺亚');

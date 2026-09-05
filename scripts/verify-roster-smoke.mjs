@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-/**
- * 版型扩展回归 smoke（Issue #95）
- * - 断言 6-14 人版型表与文档 v2 一致（人数/狼数/守卫档位/隐狼档位/呆头鹅试点档）
- * - 各档跑少量本地策略对局，断言全部正常结束且胜者合法（狼/好/中立），无死循环
- * 用法: node scripts/verify-roster-smoke.mjs [--games N]
- */
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { resolve } from 'node:path';
@@ -24,7 +18,6 @@ try {
   await server.close();
 }
 
-// 期望版型（与 docs/issue-95-roster-design.md v2 表一致）：roleId 计数
 const expectedCounts = {
   6: { wolf: 2, seer: 1, witch: 1, hunter: 1, villager: 1 },
   7: { wolf: 2, seer: 1, witch: 1, hunter: 1, villager: 2 },

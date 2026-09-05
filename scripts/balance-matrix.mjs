@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * MC 2.0 平衡矩阵（Issue #95）：固定版型 × 女巫毒药策略模板 的胜率对照
- * 用法: node scripts/balance-matrix.mjs [--games N] [--min 6] [--max 14]
- */
 import { createServer } from 'vite';
 import { resolve } from 'node:path';
 

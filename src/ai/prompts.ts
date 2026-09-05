@@ -15,7 +15,7 @@ import { buildPostGameContext } from '../domain/skills/postGame';
 import { APP_VERSION } from '../config/version';
 import { buildRoleplayPersonality, buildRoleplaySpeechStyle } from './roleplayLore';
 import { buildPostGamePromptContext } from './postGameLore';
-import type { CharacterId, GameObservation, PendingDecision } from '../domain/model';
+import type { CharacterId, GameObservation, PendingDecision, RoleId } from '../domain/model';
 import type { AiDecisionRequest, AiProviderKind } from './types';
 
 export interface PromptMessage {
@@ -25,6 +25,14 @@ export interface PromptMessage {
 
 const CREATURE_PERSONALITY = '你是诺亚用魔法创造、与当前主人绑定的造物。你明确知道自己与当前主人始终共享同一基础职业和阵营，但不拥有她的魔女技。你的投票跟随当前主人，其他行动可以独立决策；伤害主人等同于损害自己的阵营，通常没有好处。';
 const POST_GAME_TRUNCATION_MARKER = '\n【赛后复盘上下文过长，已保留开头和结尾；省略部分不代表没有发生】\n';
+const ROLE_DECISION_GUIDANCE: Partial<Record<RoleId, string>> = {
+  wolf: '（行动建议：以狼队获胜为目标并与队友协作；除非有明确战术收益，不要公开自曝。）',
+  'hidden-wolf': '（行动建议：与狼队协作；查验显示为村民，白天像普通村民发言投票，避免过度维护队友暴露关联。）',
+  'wolf-king': '（行动建议：以狼队获胜为目标；被放逐时可带走一人，除非有明确战术收益不要自曝。）',
+  guard: '（本次行动建议：优先守护狼队最可能袭击的高价值目标，不能连续两夜守同一人。）',
+  hunter: '（本次行动建议：被狼袭或放逐时才可开枪；被毒或技能致死不能开枪，无高确信目标可弃枪。）',
+  dodo: '（行动建议：唯一胜利条件是白天被放逐；狼刀对你有效，被验出后不能再被放逐。）',
+};
 // 中文上下文按 UTF-8 计量时，32 KiB 通常落在约 5k～10k 模型 token 的目标区间。
 const PROMPT_TARGET_BODY_BYTES = 32 * 1024;
 const UTF8_ENCODER = new TextEncoder();
@@ -133,6 +141,12 @@ function historicalSpeechLimit(pendingDecision: PendingDecision, playerCount: nu
     || pendingDecision.kind === 'wolf-decision';
   if (isSocialDecision) return Math.min(playerCount * 2, PROMPT_LIMITS.historicalSpeechesMaxItems);
   return Math.min(playerCount, 6);
+}
+
+function roleDecisionGuidance(roleId: RoleId, pendingDecision: PendingDecision): string {
+  if (roleId === 'guard' && pendingDecision.kind !== 'guard-action') return '';
+  if (roleId === 'hunter' && pendingDecision.kind !== 'hunter-shot') return '';
+  return ROLE_DECISION_GUIDANCE[roleId] ?? '';
 }
 
 function fitRuntimeContext(
@@ -306,7 +320,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
     }));
   let visibleRole = '未公开';
   if (actor.roleId !== null) {
-    visibleRole = `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}`;
+    visibleRole = `${roleNames[actor.roleId]}：${roleDescriptions[actor.roleId]}${roleDecisionGuidance(actor.roleId, pendingDecision)}`;
   }
   let visibleSkill = '无可见技能';
   if (actor.skillId !== null) {
