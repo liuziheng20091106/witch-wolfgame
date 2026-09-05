@@ -498,7 +498,11 @@ function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pend
       targetPlayerIds: [viewerId],
     });
   } else {
-    const roleId = getRoleAssignment(state, viewerId).roleId;
+    let roleId = getRoleAssignment(state, viewerId).roleId;
+    // 隐狼：role 类查验统一伪造为村民（与预言家规则一致，owner 与 viewer 双事件对外一致）
+    if (roleId === 'hidden-wolf') {
+      roleId = 'villager';
+    }
     const roleName = roleNames[roleId];
     const event = addPrivateEvent(state, [ownerId], 'knowledge', `${viewerName} 观看了 ${ownerName} 的直播，职业是${roleName}。`, {
       actorPlayerId: ownerId,

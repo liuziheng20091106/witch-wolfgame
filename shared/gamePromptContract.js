@@ -29,21 +29,39 @@ export const ROLE_CATALOG = freeze([
  freeze(/** @type {const} */({ id: 'seer', name: '预言家', description: '每夜查验一名其他存活者的当前职业。', alignment: 'good' })),
  freeze(/** @type {const} */({ id: 'witch', name: '女巫', description: '拥有一瓶解药与一瓶毒药，每种整局只能使用一次。', alignment: 'good' })),
  freeze(/** @type {const} */({ id: 'villager', name: '村民', description: '依靠公开发言、投票与魔女技找出狼人。', alignment: 'good' })),
+ freeze(/** @type {const} */({ id: 'guard', name: '守卫', description: '每夜守护一名其他存活者，被守护者当夜免疫狼人袭击；不能连续两夜守护同一人。', alignment: 'good' })),
+ freeze(/** @type {const} */({ id: 'hunter', name: '猎人', description: '被狼人袭击死亡或被放逐时，可开枪带走一名其他存活者；被毒药、魔女杀手或其他技能致死时不能开枪。', alignment: 'good' })),
+ freeze(/** @type {const} */({ id: 'wolf-king', name: '白狼王', description: '狼队头领。被放逐时，可带走一名其他存活者。', alignment: 'wolf' })),
+ freeze(/** @type {const} */({ id: 'hidden-wolf', name: '隐狼', description: '隐匿于好人中的狼。被查验职业时，对方看到的结果是村民；夜里与狼队一同行动。', alignment: 'wolf' })),
+ freeze(/** @type {const} */({ id: 'dodo', name: '呆头鹅', description: '中立的迷途者。若她在白天被放逐，将立即独自获胜；被狼人袭击或其他方式死亡、或活到终局，则她失败。', alignment: 'neutral' })),
 ]);
 export const ROLE_IDS = freeze(ROLE_CATALOG.map((role) => role.id));
-export const ALIGNMENTS = freeze(/** @type {const} */(['wolf', 'good']));
+export const ALIGNMENTS = freeze(/** @type {const} */(['wolf', 'good', 'neutral']));
+/**
+ * 每档人数固定版型（Issue #95 v2）：
+ * - 6/7 人：2 狼；8/11 人狼数对齐经典网杀惯例（8 人 3 狼、11 人 4 狼）；10 人 4 狼局（白狼王入队）。
+ * - 守卫仅 9+ 人档（小局双保护拖局）；隐狼仅在 13/14 人档；呆头鹅（中立）仅 9/12 人档试点。
+ */
+const PLAYER_COUNT_ROLE_POOLS = freeze(/** @type {Record<number, ReadonlyArray<(typeof ROLE_IDS)[number]>>} */({
+ 6: ['wolf', 'wolf', 'seer', 'witch', 'hunter', 'villager'],
+ 7: ['wolf', 'wolf', 'seer', 'witch', 'hunter', 'villager', 'villager'],
+ 8: ['wolf', 'wolf', 'wolf', 'seer', 'witch', 'hunter', 'villager', 'villager'],
+ 9: ['wolf', 'wolf', 'wolf', 'seer', 'witch', 'guard', 'villager', 'villager', 'dodo'],
+ 10: ['wolf', 'wolf', 'wolf', 'wolf-king', 'seer', 'witch', 'hunter', 'villager', 'villager', 'villager'],
+ 11: ['wolf', 'wolf', 'wolf', 'wolf', 'seer', 'witch', 'guard', 'hunter', 'villager', 'villager', 'villager'],
+ 12: ['wolf', 'wolf', 'wolf', 'wolf-king', 'seer', 'witch', 'guard', 'hunter', 'villager', 'villager', 'villager', 'dodo'],
+ 13: ['wolf', 'wolf', 'wolf-king', 'hidden-wolf', 'seer', 'witch', 'guard', 'hunter', 'villager', 'villager', 'villager', 'villager', 'villager'],
+ 14: ['wolf', 'wolf', 'wolf', 'wolf-king', 'hidden-wolf', 'seer', 'witch', 'guard', 'hunter', 'villager', 'villager', 'villager', 'villager', 'villager'],
+}));
+
 /** @param {number} playerCount */
 export function rolePoolForPlayerCount(playerCount) {
  if (!Number.isInteger(playerCount) || playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS) {
   throw new Error(`玩家人数必须在 ${MIN_PLAYERS} 到 ${MAX_PLAYERS} 之间`);
  }
- const wolfCount = Math.min(4, Math.floor(playerCount / 3));
- return freeze(/** @type {Array<(typeof ROLE_IDS)[number]>} */([
-  ...Array.from({ length: wolfCount }, () => 'wolf'),
-  'seer',
-  'witch',
-  ...Array.from({ length: playerCount - wolfCount - 2 }, () => 'villager'),
- ]));
+ const pool = PLAYER_COUNT_ROLE_POOLS[playerCount];
+ if (!pool) throw new Error(`缺少 ${playerCount} 人版型定义`);
+ return freeze([...pool]);
 }
 
 /** @param {ReadonlyArray<(typeof ROLE_IDS)[number]>} rolePool */
@@ -104,6 +122,9 @@ export const DECISION_SCHEMA_KEYS = freeze(/** @type {Array<keyof typeof DECISIO
 export const DECISION_KIND_SCHEMAS = freeze(/** @type {const} */({
  skill: freeze(/** @type {const} */(['target', 'optional-target', 'liquid-control', 'levitation', 'voice-mimic', 'ignition'])),
  'wolf-suggestion': freeze(/** @type {const} */(['target', 'wolf-council'])),
+ 'guard-action': freeze(/** @type {const} */(['target'])),
+ 'hunter-shot': freeze(/** @type {const} */(['target'])),
+ 'wolf-king-shot': freeze(/** @type {const} */(['target'])),
  'wolf-decision': freeze(/** @type {const} */(['target'])),
  'witch-action': freeze(/** @type {const} */(['witch'])),
  'seer-action': freeze(/** @type {const} */(['target'])),
@@ -242,9 +263,9 @@ export function buildGameSystemPrompt(schemaKey) {
   promptHint += ' use 为 true 代表消耗或发动当前魔女技。只有行动能产生明确且符合阵营收益时才发动；否则保留技能并返回 use:false、targetPlayerId:null。';
  }
  if (schemaKey === 'target') {
- return `你正在进行 6 至 14 人可配置阵容的魔女狼人杀，具体人数与职业构成以 board、entityRoster 和 publicSkills 为准。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。先按信息可靠度决策：privateKnowledge 中明确的职业/阵营事实与 privateEvents 中亲历结果最高；可核对的公开事件、完整发言链与票型其次；基于语气、角色人格或 publicSkills 的猜测最低；entityRoster 是已存在玩家与造物的稳定实体清单。任何结论都要区分“已知”“公开声称”“推测”，不得把公开声称自动当成事实。actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；两者只约束稳定性格、关系语气、表达边界与思考方式，不提供本局身份、阵营、存活、技能或隐藏情报；actor.role、actor.skill、phase、day、board、alivePlayers、entityRoster、legalCandidates、currentDaySpeeches、historicalSpeeches、recentPublic、privateKnowledge、publicSkills、privateEvents 与其他观察字段才是本局事实来源。只能依据提供的观察作决定，不得假设隐藏身份，不得把静态卡或原作旧剧情中的死亡、凶手、证据、关系变化当成本局事实。当前对局默认不继承角色在其他作品时间线中的权能，只有 actor.skill 和本局事件明确授予的效果有效。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。若 options.postGame 为 true，当前是赛后复盘阶段：finalRoles 是最终身份唯一来源，提供全部座位的最终基础职业真相；postGameContext 汇总本局完整公开事件、私密行动、死亡回溯旧时间线与此前赛后发言；请承认真相已揭晓，可讨论自己的真实身份和全部过程，但仍不得捏造上下文中不存在的事实。仅返回一个 JSON 对象，不要 Markdown，不要解释。响应格式示例：${DECISION_EXAMPLES[schemaKey]}` + promptHint;
+ return `你正在进行 6 至 14 人可配置阵容的魔女狼人杀，具体人数与职业构成以 board、entityRoster 和 publicSkills 为准。基础职业（狼人/守卫/猎人/预言家/女巫/村民/白狼王/隐狼/呆头鹅）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。呆头鹅是中立的迷失者：若她在白天被放逐，她将立即独自获胜（狼人与好人阵营均失败）；其他任何结局她都不赢。先按信息可靠度决策：privateKnowledge 中明确的职业/阵营事实与 privateEvents 中亲历结果最高；可核对的公开事件、完整发言链与票型其次；基于语气、角色人格或 publicSkills 的猜测最低；entityRoster 是已存在玩家与造物的稳定实体清单。任何结论都要区分“已知”“公开声称”“推测”，不得把公开声称自动当成事实。actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；两者只约束稳定性格、关系语气、表达边界与思考方式，不提供本局身份、阵营、存活、技能或隐藏情报；actor.role、actor.skill、phase、day、board、alivePlayers、entityRoster、legalCandidates、currentDaySpeeches、historicalSpeeches、recentPublic、privateKnowledge、publicSkills、privateEvents 与其他观察字段才是本局事实来源。只能依据提供的观察作决定，不得假设隐藏身份，不得把静态卡或原作旧剧情中的死亡、凶手、证据、关系变化当成本局事实。当前对局默认不继承角色在其他作品时间线中的权能，只有 actor.skill 和本局事件明确授予的效果有效。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。若 options.postGame 为 true，当前是赛后复盘阶段：finalRoles 是最终身份唯一来源，提供全部座位的最终基础职业真相；postGameContext 汇总本局完整公开事件、私密行动、死亡回溯旧时间线与此前赛后发言；请承认真相已揭晓，可讨论自己的真实身份和全部过程，但仍不得捏造上下文中不存在的事实。仅返回一个 JSON 对象，不要 Markdown，不要解释。响应格式示例：${DECISION_EXAMPLES[schemaKey]}` + promptHint;
  }
- return `你正在进行 6 至 14 人可配置阵容的魔女狼人杀，具体人数与职业构成以 board、entityRoster 和 publicSkills 为准。基础职业（狼人/预言家/女巫/村民）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。先按信息可靠度决策：privateKnowledge 中明确的职业/阵营事实与 privateEvents 中亲历结果最高；可核对的公开事件、完整发言链与票型其次；基于语气、角色人格或 publicSkills 的猜测最低；entityRoster 是已存在玩家与造物的稳定实体清单。任何结论都要区分“已知”“公开声称”“推测”，不得把公开声称自动当成事实。actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；两者只约束稳定性格、关系语气、表达边界与思考方式，不提供本局身份、阵营、存活、技能或隐藏情报；actor.role、actor.skill、phase、day、board、alivePlayers、entityRoster、legalCandidates、currentDaySpeeches、historicalSpeeches、recentPublic、privateKnowledge、publicSkills、privateEvents 与其他观察字段才是本局事实来源。只能依据提供的观察作决定，不得假设隐藏身份，不得把静态卡或原作旧剧情中的死亡、凶手、证据、关系变化当成本局事实。当前对局默认不继承角色在其他作品时间线中的权能，只有 actor.skill 和本局事件明确授予的效果有效。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。若 options.postGame 为 true，当前是赛后复盘阶段：finalRoles 是最终身份唯一来源，提供全部座位的最终基础职业真相；postGameContext 汇总本局完整公开事件、私密行动、死亡回溯旧时间线与此前赛后发言；请承认真相已揭晓，可讨论自己的真实身份和全部过程，但仍不得捏造上下文中不存在的事实。仅返回一个 JSON 对象，不要 Markdown，不要解释。响应格式示例：${DECISION_EXAMPLES[schemaKey]}${promptHint}`;
+ return `你正在进行 6 至 14 人可配置阵容的魔女狼人杀，具体人数与职业构成以 board、entityRoster 和 publicSkills 为准。基础职业（狼人/守卫/猎人/预言家/女巫/村民/白狼王/隐狼/呆头鹅）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。呆头鹅是中立的迷失者：若她在白天被放逐，她将立即独自获胜（狼人与好人阵营均失败）；其他任何结局她都不赢。先按信息可靠度决策：privateKnowledge 中明确的职业/阵营事实与 privateEvents 中亲历结果最高；可核对的公开事件、完整发言链与票型其次；基于语气、角色人格或 publicSkills 的猜测最低；entityRoster 是已存在玩家与造物的稳定实体清单。任何结论都要区分“已知”“公开声称”“推测”，不得把公开声称自动当成事实。actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；两者只约束稳定性格、关系语气、表达边界与思考方式，不提供本局身份、阵营、存活、技能或隐藏情报；actor.role、actor.skill、phase、day、board、alivePlayers、entityRoster、legalCandidates、currentDaySpeeches、historicalSpeeches、recentPublic、privateKnowledge、publicSkills、privateEvents 与其他观察字段才是本局事实来源。只能依据提供的观察作决定，不得假设隐藏身份，不得把静态卡或原作旧剧情中的死亡、凶手、证据、关系变化当成本局事实。当前对局默认不继承角色在其他作品时间线中的权能，只有 actor.skill 和本局事件明确授予的效果有效。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。若 options.postGame 为 true，当前是赛后复盘阶段：finalRoles 是最终身份唯一来源，提供全部座位的最终基础职业真相；postGameContext 汇总本局完整公开事件、私密行动、死亡回溯旧时间线与此前赛后发言；请承认真相已揭晓，可讨论自己的真实身份和全部过程，但仍不得捏造上下文中不存在的事实。仅返回一个 JSON 对象，不要 Markdown，不要解释。响应格式示例：${DECISION_EXAMPLES[schemaKey]}${promptHint}`;
 }
 
 /**

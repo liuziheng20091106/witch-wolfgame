@@ -249,7 +249,7 @@ export interface GameHistoryEntry {
   gameId: string;
   seed: number;
   finishedDay: number;
-  winner: 'wolf' | 'good';
+  winner: 'wolf' | 'good' | 'neutral';
   finishedAt: string;
 }
 
@@ -257,7 +257,7 @@ const historySchema = z.array(z.strictObject({
   gameId: z.string().min(1),
   seed: z.number().int().min(0).max(0xffff_ffff),
   finishedDay: z.number().int().min(0),
-  winner: z.enum(['wolf', 'good']),
+  winner: z.enum(['wolf', 'good', 'neutral']),
   finishedAt: z.iso.datetime(),
 })).max(50);
 

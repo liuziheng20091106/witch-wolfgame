@@ -4,14 +4,17 @@ import { createRewindSnapshot } from './createGame';
 import { getName, getPlayer } from './selectors';
 import { checkWin } from './win';
 import { getNextLastWordsDecision } from '../skills/lastWords';
+import { getNextShotDecision } from './retaliation';
 
 function nameOf(state: GameState, playerId: PlayerId): string {
   return getName(state, playerId);
 }
 
-function sourceLabel(source: DeathIntent['source']): string {
+function sourceLabel(source: string): string {
   if (source === 'wolf') return '狼人袭击';
   if (source === 'poison') return '女巫毒药';
+  if (source === 'hunter-gun') return '猎人之枪';
+  if (source === 'wolf-king-gun') return '白狼王的獠牙';
   return '魔女杀手';
 }
 
@@ -176,6 +179,13 @@ export function resolveNight(state: GameState): GameState {
   );
   // 死亡回溯返回晨间快照，当前死亡批次已被撤销，不进入遗言或胜负结算。
   if (resolved !== state) return resolved;
+  // 夜间死亡反击：猎人被狼人袭击死亡可开枪带走一人（毒/魔女杀手/枪决致死不可开枪）。
+  const retaliation = getNextShotDecision(resolved);
+  if (retaliation) {
+    resolved.pendingDecision = retaliation;
+    resolved.phase = 'night-resolution';
+    return resolved;
+  }
   // 遗言：夜间死亡结算后，若有合格死者需要发布遗言，保持 night-resolution 阶段等待遗言决策。
   // 多个死者时逐个询问；只有全部遗言结束后才确认最终胜负。
   const lastWords = getNextLastWordsDecision(resolved);

@@ -73,6 +73,12 @@ export interface CreatureState {
 export interface RoleResources {
   antidote?: 0 | 1;
   poison?: 0 | 1;
+  /** 猎人 / 白狼王的扳机（0 已用，1 可用） */
+  hunterShot?: 0 | 1;
+  wolfKingShot?: 0 | 1;
+  /** 守卫上次守护的夜晚与目标（不可连续两夜守同一人） */
+  lastGuardNight?: number;
+  lastGuardTargetPlayerId?: PlayerId;
 }
 
 export interface RoleAssignmentState {
@@ -155,7 +161,7 @@ export interface VoteRecord {
 
 export interface DeathIntent {
   targetPlayerId: PlayerId;
-  source: 'wolf' | 'poison' | 'precise-kill';
+  source: 'wolf' | 'poison' | 'precise-kill' | 'hunter-gun' | 'wolf-king-gun';
   preventable: boolean;
 }
 
@@ -228,7 +234,7 @@ export type SubmittedDecision =
 
 export interface GameResult {
   winner: Alignment;
-  reason: 'wolves-eliminated' | 'parity';
+  reason: 'wolves-eliminated' | 'parity' | 'dodo-exiled';
   finishedDay: number;
 }
 

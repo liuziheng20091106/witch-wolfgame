@@ -40,6 +40,30 @@ const phaseNames: Record<GameObservation['phase'], string> = {
 
 type MobileTab = 'live' | 'players' | 'history';
 
+function winnerTitle(winner: 'wolf' | 'good' | 'neutral'): string {
+  if (winner === 'wolf') return '狼人阵营获胜';
+  if (winner === 'neutral') return '呆头鹅独自获胜';
+  return '好人阵营获胜';
+}
+
+/** 玩家阵营与本局胜者比较，生成胜负文案。 */
+function viewerResultText(observation: GameObservation): string {
+  if (observation.mode !== 'player' || observation.viewerPlayerId === null || !observation.result) {
+    return '对局详细已揭晓~';
+  }
+  const viewerRole = observation.players.find((player) => player.id === observation.viewerPlayerId)?.roleId;
+  let viewerFaction: 'wolf' | 'good' | 'neutral' | null = null;
+  if (viewerRole === 'wolf' || viewerRole === 'wolf-king' || viewerRole === 'hidden-wolf') {
+    viewerFaction = 'wolf';
+  } else if (viewerRole === 'dodo') {
+    viewerFaction = 'neutral';
+  } else if (viewerRole !== null) {
+    viewerFaction = 'good';
+  }
+  const viewerWin = viewerFaction === observation.result.winner;
+  return `你的阵营${viewerWin ? '获胜' : '失败'}。`;
+}
+
 function automationStatus(observation: GameObservation): string {
   const pending = observation.pendingDecision;
   if (pending !== null) {
@@ -195,7 +219,7 @@ export function GameView(props: GameViewProps) {
     {!decisionPanelVisible && <div className={styles.automationBar} aria-live="polite"><Bot /><div><span>{automationModeLabel(observation)}</span><strong>{automationStatus(observation)}</strong></div>{observation.result && <button className={styles.mobileRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button>}{props.thinking && <LoaderCircle className={styles.automationSpin} />}</div>}
     {mobileChromeHidden && <button className={styles.mobileReveal} type="button" onClick={(event) => { event.stopPropagation(); revealMobileChrome(); }} aria-label="显示游戏控制"><ChevronDown />展开面板</button>}
     {selectedPlayer && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedPlayerId(null)}><section className={styles.playerDialog} role="dialog" aria-modal="true" aria-labelledby="player-detail-title"><button className={styles.close} type="button" onClick={() => setSelectedPlayerId(null)} aria-label="关闭角色详情"><X /></button><img src={selectedPlayer.avatarUrl} alt="" /><div><span>{selectedSeatLabel}</span><h2 id="player-detail-title">{selectedPlayer.name}</h2><p>{selectedPlayer.alive ? '存活' : '已死亡'}</p><dl><dt>基础职业</dt><dd>{selectedPlayer.roleId ? `${roleNames[selectedPlayer.roleId]} · ${roleDescriptions[selectedPlayer.roleId]}` : '尚未公开'}</dd><dt>魔女技</dt><dd>{selectedPlayer.skillId ? `${witchSkillDefinitions[selectedPlayer.skillId].name} · ${witchSkillDefinitions[selectedPlayer.skillId].description}` : '尚未公开'}</dd></dl></div></section></div>}
-    {observation.result && !resultDismissed && <section className={`${styles.result} ${resultFaded ? styles.resultFaded : ''}`} aria-live="assertive"><Gavel /><div><span>FINAL VERDICT · ROUND {observation.roundNumber}</span><h2>{observation.result.winner === 'wolf' ? '狼人阵营获胜' : '好人阵营获胜'}</h2><p>{observation.mode === 'player' && observation.viewerPlayerId !== null ? `你的阵营${observation.players.find((player) => player.id === observation.viewerPlayerId)?.roleId === 'wolf' ? observation.result.winner === 'wolf' ? '获胜' : '失败' : observation.result.winner === 'good' ? '获胜' : '失败'}。` : '对局详细已揭晓~'}</p></div><div className={styles.resultActions}>{props.showContinueRound && <button type="button" onClick={props.onContinueRound}><Sparkles />重新分配身份并继续</button>}<button className={styles.desktopRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button><button type="button" onClick={props.onExit}>离开</button></div></section>}
+    {observation.result && !resultDismissed && <section className={`${styles.result} ${resultFaded ? styles.resultFaded : ''}`} aria-live="assertive"><Gavel /><div><span>FINAL VERDICT · ROUND {observation.roundNumber}</span><h2>{winnerTitle(observation.result.winner)}</h2><p>{viewerResultText(observation)}</p></div><div className={styles.resultActions}>{props.showContinueRound && <button type="button" onClick={props.onContinueRound}><Sparkles />重新分配身份并继续</button>}<button className={styles.desktopRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button><button type="button" onClick={props.onExit}>离开</button></div></section>}
     {confirmRestart && <div className={styles.modalBackdrop} role="presentation"><section className={styles.confirm} role="alertdialog" aria-modal="true" aria-labelledby="restart-title"><Sparkles /><span>NEW CASE</span><h2 id="restart-title">开始同配置新局？</h2><p>当前存档将被覆盖，并重新随机生成种子。</p><div><button type="button" onClick={() => setConfirmRestart(false)}>取消</button><button type="button" className={styles.danger} onClick={() => { setConfirmRestart(false); props.onRestart(); }}>覆盖并重开</button></div></section></div>}
   </main>;
 }

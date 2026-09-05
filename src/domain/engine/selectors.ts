@@ -106,10 +106,11 @@ export function selectObservation(
   const omniscient = viewer.kind === 'spectator' || state.phase === 'ended' || state.phase === 'post-game';
   const viewerPlayerId = viewer.kind === 'player' ? viewer.playerId : null;
   const viewerRole = viewerPlayerId === null ? null : getRoleAssignment(state, viewerPlayerId).roleId;
+  const viewerAlignment = viewerRole === null ? null : roleAlignment[viewerRole];
 
   const players = state.players.map((player) => {
     const assignment = getRoleAssignment(state, player.id);
-    const showWolfTeammate = viewerRole === 'wolf' && assignment.roleId === 'wolf';
+    const showWolfTeammate = viewerAlignment === 'wolf' && roleAlignment[assignment.roleId] === 'wolf';
     const showPrivate = omniscient || player.id === viewerPlayerId || showWolfTeammate;
     const character = characterById[player.characterId];
     return {
@@ -130,7 +131,7 @@ export function selectObservation(
     }
     const ownerName = getName(state, creature.ownerPlayerId);
     const assignment = getRoleAssignment(state, creature.id);
-    const showWolfTeammate = viewerRole === 'wolf' && assignment.roleId === 'wolf';
+    const showWolfTeammate = viewerAlignment === 'wolf' && roleAlignment[assignment.roleId] === 'wolf';
     // 造物自己或主人查看时，能看到造物的职业（造物决策需要知道自己的身份）
     const viewerIsCreatureOrOwner = creature.id === viewerPlayerId || creature.ownerPlayerId === viewerPlayerId;
     const showPrivate = omniscient || viewerIsCreatureOrOwner || showWolfTeammate;

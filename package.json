@@ -25,6 +25,7 @@
     "test:visual-evidence": "node scripts/integration-visual-test.mjs",
     "test:continuation": "node scripts/verify-continuation.mjs",
     "test:roster": "node scripts/configurable-roster-smoke.mjs",
+    "test:roster-v2": "node scripts/verify-roster-smoke.mjs && node scripts/verify-roster-rules.mjs",
     "test:voting": "node scripts/verify-voting.mjs",
     "sim": "node scripts/monte-carlo.mjs"
   },

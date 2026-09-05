@@ -1,4 +1,4 @@
-import { roleAlignment, roleNames } from '../catalog/roles';
+import { initialRoleResources, roleAlignment, roleNames } from '../catalog/roles';
 import { witchSkillDefinitions } from '../catalog/witchSkills';
 import type {
   GameState,
@@ -776,7 +776,7 @@ function createCreature(state: GameState, skill: WitchSkillInstance): void {
     id: `creature-role-${ownerId}`,
     ownerPlayerId: 99,
     roleId,
-    resources: {},
+    resources: initialRoleResources(roleId),
   };
   state.roleAssignments.push(assignment);
   state.creatures.push({
