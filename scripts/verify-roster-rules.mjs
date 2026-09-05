@@ -226,4 +226,41 @@ function exileEvent(state, targetPlayerId) {
   console.log('场景6 复合死亡（狼刀+毒药）不触发猎人开枪 ✓');
 }
 
+function assertHunterCannotShoot(source, seed) {
+  const g = newGame(8, seed);
+  const hunter = g.players.findIndex((p) => roleOf(g, p.id) === 'hunter');
+  assert.ok(hunter >= 0, '猎人存在');
+  const hunterSkill = g.skillInstances.find((entry) => entry.id === g.players[hunter].skillInstanceId);
+  if (hunterSkill) {
+    hunterSkill.definitionId = 'ignition';
+  }
+  g.privateEvents.push({
+    id: `test-intent-${source}-${hunter}`,
+    kind: 'skill',
+    day: g.day,
+    phase: 'night-resolution',
+    text: '测试死亡意图',
+    actorPlayerId: null,
+    targetPlayerIds: [hunter],
+    displayAuthorPlayerId: null,
+    actualAuthorPlayerId: null,
+    data: { intentSource: source, preventable: source !== 'precise-kill', targetPlayerId: hunter },
+  });
+  g.phase = 'night-resolution';
+  g.pendingDecision = null;
+  const afterNight = reduceGame(g, { type: 'advance' });
+  assert.equal(afterNight.players[hunter].alive, false, `${source} 应使猎人死亡`);
+  assert.notEqual(afterNight.pendingDecision?.kind, 'hunter-shot', `${source} 死亡不得交给 AI 生成猎人开枪决策`);
+  const shotResource = afterNight.roleAssignments.find((a) => a.ownerPlayerId === hunter);
+  assert.equal(shotResource.resources.hunterShot, 1, `${source} 死亡时猎人子弹应保留`);
+}
+
+// ===== 场景 7：单独毒杀不触发猎人开枪 =====
+assertHunterCannotShoot('poison', 1007);
+console.log('场景7 单独毒杀不触发猎人开枪 ✓');
+
+// ===== 场景 8：魔女杀手精准击杀不触发猎人开枪 =====
+assertHunterCannotShoot('precise-kill', 1008);
+console.log('场景8 魔女杀手精准击杀不触发猎人开枪 ✓');
+
 console.log('\n全部定向规则场景通过 ✓');

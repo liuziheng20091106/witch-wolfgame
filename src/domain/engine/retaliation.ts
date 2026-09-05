@@ -1,9 +1,5 @@
 import type { GameState, PendingDecision, PlayerId } from '../model';
-import { getAlivePlayerIds, getName, getRoleAssignment } from './selectors';
-
-function nameOf(state: GameState, playerId: PlayerId): string {
-  return getName(state, playerId);
-}
+import { getAlivePlayerIds, getRoleAssignment } from './selectors';
 
 function deathSources(state: GameState, playerId: PlayerId): string[] {
   for (const event of state.publicEvents) {
@@ -22,15 +18,21 @@ interface ShotEligibility {
   kind: 'hunter-shot' | 'wolf-king-shot';
 }
 
+function canHunterShoot(sources: string[]): boolean {
+  if (sources.length === 0) {
+    return true;
+  }
+  if (sources.includes('poison') || sources.includes('precise-kill')) {
+    return false;
+  }
+  return sources.length === 1 && sources[0] === 'wolf';
+}
+
 function shotEligibility(state: GameState, playerId: PlayerId): ShotEligibility | null {
   const assignment = getRoleAssignment(state, playerId);
   const sources = deathSources(state, playerId);
   if (assignment.roleId === 'hunter' && assignment.resources.hunterShot === 1) {
-    if (sources.length === 0) {
-      return { kind: 'hunter-shot' };
-    }
-    const nonWolfSources = sources.filter((source) => source !== 'wolf');
-    if (sources.includes('wolf') && nonWolfSources.length === 0) {
+    if (canHunterShoot(sources)) {
       return { kind: 'hunter-shot' };
     }
   }
@@ -58,7 +60,7 @@ export function getNextShotDecision(state: GameState): PendingDecision | null {
       let description = '你已被放逐。发动白狼王的獠牙，带走一名其他存活者吗？（可选择弃权）';
       if (eligibility.kind === 'hunter-shot') {
         title = '猎人之枪';
-        description = '你已死亡。发动猎人之枪，带走一名其他存活者吗？（被毒药或魔女杀手杀害时不能开枪；可选择弃枪）';
+        description = '你已死亡。发动猎人之枪，带走一名其他存活者吗？（可选择弃枪）';
       }
       return {
         id: `${state.gameId}-decision-${state.day}-${eligibility.kind}-${deadId}`,
