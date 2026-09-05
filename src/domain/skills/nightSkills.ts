@@ -1,4 +1,4 @@
-import { roleAlignment, roleNames } from '../catalog/roles';
+import { initialRoleResources, roleAlignment, roleNames } from '../catalog/roles';
 import { witchSkillDefinitions } from '../catalog/witchSkills';
 import type {
   GameState,
@@ -339,6 +339,9 @@ export function describeNightTrajectory(state: GameState, targetPlayerId: Player
     // 目标被救 / 被治愈（这些代表实际生效：能挡下意图即说明救/保护真实发生）
     if (data.savedWolfTargetPlayerId === targetPlayerId) {
       return `${targetName} 在第${event.day}夜被救下。`;
+    }
+    if (data.guardTargetPlayerId === targetPlayerId) {
+      return `${targetName} 在第${event.day}夜被守卫保护。`;
     }
     if (data.protectTargetPlayerId === targetPlayerId) {
       return `${targetName} 在第${event.day}夜被治愈保护。`;
@@ -776,7 +779,7 @@ function createCreature(state: GameState, skill: WitchSkillInstance): void {
     id: `creature-role-${ownerId}`,
     ownerPlayerId: 99,
     roleId,
-    resources: {},
+    resources: initialRoleResources(roleId),
   };
   state.roleAssignments.push(assignment);
   state.creatures.push({

@@ -73,6 +73,10 @@ export interface CreatureState {
 export interface RoleResources {
   antidote?: 0 | 1;
   poison?: 0 | 1;
+  hunterShot?: 0 | 1;
+  wolfKingShot?: 0 | 1;
+  lastGuardNight?: number;
+  lastGuardTargetPlayerId?: PlayerId;
 }
 
 export interface RoleAssignmentState {
@@ -155,7 +159,7 @@ export interface VoteRecord {
 
 export interface DeathIntent {
   targetPlayerId: PlayerId;
-  source: 'wolf' | 'poison' | 'precise-kill';
+  source: 'wolf' | 'poison' | 'precise-kill' | 'hunter-gun' | 'wolf-king-gun';
   preventable: boolean;
 }
 
@@ -228,7 +232,7 @@ export type SubmittedDecision =
 
 export interface GameResult {
   winner: Alignment;
-  reason: 'wolves-eliminated' | 'parity';
+  reason: 'wolves-eliminated' | 'parity' | 'dodo-exiled';
   finishedDay: number;
 }
 

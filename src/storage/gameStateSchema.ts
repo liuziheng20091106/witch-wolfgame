@@ -42,7 +42,7 @@ export const gameStateSchema = z.object({
   })).min(MIN_PLAYERS).max(MAX_PLAYERS),
   roleAssignments: z.array(z.object({
     id: z.string(), ownerPlayerId: playerIdSchema, roleId: roleIdSchema,
-    resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
+    resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional(), hunterShot: z.union([z.literal(0), z.literal(1)]).optional(), wolfKingShot: z.union([z.literal(0), z.literal(1)]).optional(), lastGuardNight: z.number().int().min(0).optional(), lastGuardTargetPlayerId: playerIdSchema.optional() }),
   })).min(MIN_PLAYERS).max(MAX_PLAYERS + 1),
   skillInstances: z.array(z.object({
     id: z.string(), definitionId: skillIdSchema, ownerPlayerId: playerIdSchema,
@@ -55,7 +55,7 @@ export const gameStateSchema = z.object({
     characterId: z.enum(CHARACTER_IDS),
     roleAssignmentId: z.string(),
     alive: z.boolean(),
-    resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional() }),
+    resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional(), hunterShot: z.union([z.literal(0), z.literal(1)]).optional(), wolfKingShot: z.union([z.literal(0), z.literal(1)]).optional(), lastGuardNight: z.number().int().min(0).optional(), lastGuardTargetPlayerId: playerIdSchema.optional() }),
   })).default([]),
   speechOrder: z.array(regularPlayerIdSchema).min(MIN_PLAYERS).max(MAX_PLAYERS),
   publicEvents: z.array(z.unknown()),

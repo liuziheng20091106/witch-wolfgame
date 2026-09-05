@@ -68,6 +68,7 @@ const customSettingsSchema = z.object({
   }),
   retryCount: z.number().int().min(0).max(5).default(2),
   jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
+  timeoutMs: z.number().int().min(10_000).max(600_000).default(120_000),
 });
 const settingsSchema = z.discriminatedUnion('provider', [freeSettingsSchema, customSettingsSchema]);
 const singleProfileSettingsSchema = z.object({
@@ -78,6 +79,7 @@ const singleProfileSettingsSchema = z.object({
   reasoningEffort: reasoningEffortSchema.default('low'),
   retryCount: z.number().int().min(0).max(5).default(2),
   jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
+  timeoutMs: z.number().int().min(10_000).max(600_000).default(120_000),
 });
 const legacySettingsSchema = z.object({
   endpoint: z.string(),
@@ -141,6 +143,7 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
         },
         retryCount: singleProfile.data.retryCount,
         jsonOutputMode: singleProfile.data.jsonOutputMode,
+        timeoutMs: singleProfile.data.timeoutMs,
       },
     };
   }
@@ -162,6 +165,7 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
         },
         retryCount: 2,
         jsonOutputMode: 'auto',
+        timeoutMs: 120_000,
       },
     };
   }
@@ -249,7 +253,7 @@ export interface GameHistoryEntry {
   gameId: string;
   seed: number;
   finishedDay: number;
-  winner: 'wolf' | 'good';
+  winner: 'wolf' | 'good' | 'neutral';
   finishedAt: string;
 }
 
@@ -257,7 +261,7 @@ const historySchema = z.array(z.strictObject({
   gameId: z.string().min(1),
   seed: z.number().int().min(0).max(0xffff_ffff),
   finishedDay: z.number().int().min(0),
-  winner: z.enum(['wolf', 'good']),
+  winner: z.enum(['wolf', 'good', 'neutral']),
   finishedAt: z.iso.datetime(),
 })).max(50);
 

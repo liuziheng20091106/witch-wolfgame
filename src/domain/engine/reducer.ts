@@ -1,5 +1,5 @@
 import { CREATURE_ID, SPEECH_MAX_LENGTH, SPEECH_PROMPT_MAX_LENGTH, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
-import { roleNames } from '../catalog/roles';
+import { roleAlignment, roleNames } from '../catalog/roles';
 import type {
   GameEvent,
   GameState,
@@ -42,6 +42,7 @@ import {
   publishSpeech,
 } from '../skills/registry';
 import { addKnowledge, addPrivateEvent, addPublicEvent } from './events';
+import { getNextShotDecision } from './retaliation';
 import { finalizeGameIfWon, refreshMorningCheckpoint, resolveDeathBatch, resolveNight } from './night';
 import { getAlivePlayerIds, getName, getPlayer, getRoleAssignment, getSkillInstance } from './selectors';
 import { exhaustSkill } from '../skills/types';
@@ -99,7 +100,7 @@ function makeRoleDecision(
 }
 
 function livingWolves(state: GameState): PlayerId[] {
-  return getAlivePlayerIds(state).filter((playerId) => getRoleAssignment(state, playerId).roleId === 'wolf');
+  return getAlivePlayerIds(state).filter((playerId) => roleAlignment[getRoleAssignment(state, playerId).roleId] === 'wolf');
 }
 
 function speakingWolves(state: GameState): PlayerId[] {
@@ -164,7 +165,7 @@ function wolfCouncilMessages(state: GameState) {
 }
 
 function wolfTargets(state: GameState): PlayerId[] {
-  return getAlivePlayerIds(state).filter((playerId) => getRoleAssignment(state, playerId).roleId !== 'wolf');
+  return getAlivePlayerIds(state).filter((playerId) => roleAlignment[getRoleAssignment(state, playerId).roleId] !== 'wolf');
 }
 
 function advanceNightSkills(state: GameState): GameState {
@@ -331,7 +332,33 @@ function advanceSeer(state: GameState): GameState {
   return state;
 }
 
+function getGuardDecision(state: GameState): PendingDecision | null {
+  const guardSubjects = getAlivePlayerIds(state).filter((playerId) => getRoleAssignment(state, playerId).roleId === 'guard');
+  for (const guardId of guardSubjects) {
+    const assignment = getRoleAssignment(state, guardId);
+    if (assignment.resources.lastGuardNight === state.day) {
+      continue;
+    }
+    let candidates = getAlivePlayerIds(state).filter((playerId) => playerId !== guardId);
+    const lastNight = assignment.resources.lastGuardNight;
+    const lastTarget = assignment.resources.lastGuardTargetPlayerId;
+    if (lastNight !== undefined && lastTarget !== undefined && state.day - lastNight === 1) {
+      candidates = candidates.filter((playerId) => playerId !== lastTarget);
+    }
+    if (candidates.length === 0) {
+      continue;
+    }
+    return makeRoleDecision(state, 'guard-action', guardId, '守卫守护', '选择一名其他存活者守护：她本夜免疫狼人袭击。不能连续两夜守护同一人。', candidates, false);
+  }
+  return null;
+}
+
 function advanceProtection(state: GameState): GameState {
+  const guardPending = getGuardDecision(state);
+  if (guardPending) {
+    state.pendingDecision = guardPending;
+    return state;
+  }
   const pending = getHealingDecision(state);
   if (pending) {
     state.pendingDecision = pending;
@@ -600,10 +627,21 @@ function advanceDayResolution(state: GameState): GameState {
   if (typeof exile?.data.exileTargetPlayerId === 'number') {
     const targetPlayerId = exile.data.exileTargetPlayerId as PlayerId;
     if (getPlayer(state, targetPlayerId).alive) {
+      if (getRoleAssignment(state, targetPlayerId).roleId === 'dodo') {
+        state.result = { winner: 'neutral', reason: 'dodo-exiled', finishedDay: state.day };
+        state.phase = 'ended';
+        addPublicEvent(state, 'result', `${nameOf(state, targetPlayerId)}（呆头鹅）被放逐，呆头鹅独自获胜，狼人与好人阵营均告失败。`);
+        return state;
+      }
       const resolved = resolveDeathBatch(state, [{ playerId: targetPlayerId, sources: [] }]);
       // 死亡回溯返回新状态（死者被救回），当前放逐与遗言均被撤销。
       if (resolved !== state) return resolved;
     }
+  }
+  const retaliation = getNextShotDecision(state);
+  if (retaliation) {
+    state.pendingDecision = retaliation;
+    return state;
   }
   // 遗言：白天放逐死亡结算后，若有合格死者需要发布遗言，保持 day-resolution 阶段等待遗言决策。
   // 提交遗言后 advance 会再次进入本阶段，此时 exile 目标已死跳过结算，再检查是否还有遗言。
@@ -788,6 +826,47 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
     return state;
   }
   const targetPlayerId = validateTarget(state, decision, pending);
+  if (pending.kind === 'guard-action') {
+    const guardId = pending.actorId;
+    const assignment = getRoleAssignment(state, guardId);
+    if (assignment.roleId !== 'guard') {
+      throw new Error('守卫身份异常');
+    }
+    const guardTargetId = targetPlayerId as PlayerId;
+    assignment.resources.lastGuardNight = state.day;
+    assignment.resources.lastGuardTargetPlayerId = guardTargetId;
+    addPrivateEvent(state, [guardId], 'protection', `${nameOf(state, guardId)} 守护了 ${nameOf(state, guardTargetId)}，她本夜免疫狼人袭击。`, {
+      actorPlayerId: guardId,
+      targetPlayerIds: [guardTargetId],
+      data: { guardTargetPlayerId: guardTargetId },
+    });
+    return state;
+  }
+  if (pending.kind === 'hunter-shot' || pending.kind === 'wolf-king-shot') {
+    const shotAssignment = getRoleAssignment(state, pending.actorId);
+    if (pending.kind === 'hunter-shot') {
+      shotAssignment.resources.hunterShot = 0;
+    } else {
+      shotAssignment.resources.wolfKingShot = 0;
+    }
+    if (targetPlayerId !== null) {
+      const shotTargetId = targetPlayerId;
+      let gunName = '猎人之枪';
+      let shotSource: 'hunter-gun' | 'wolf-king-gun' = 'hunter-gun';
+      if (pending.kind === 'wolf-king-shot') {
+        gunName = '白狼王的獠牙';
+        shotSource = 'wolf-king-gun';
+      }
+      addPublicEvent(state, 'death', `${nameOf(state, pending.actorId)} 发动${gunName}，带走了 ${nameOf(state, shotTargetId)}。`, {
+        actorPlayerId: pending.actorId,
+        targetPlayerIds: [shotTargetId],
+        data: { actionKind: pending.kind },
+      });
+      const resolved = resolveDeathBatch(state, [{ playerId: shotTargetId, sources: [shotSource] }]);
+      return resolved;
+    }
+    return state;
+  }
   if (pending.kind === 'wolf-decision') {
     addPrivateEvent(state, livingWolves(state), 'wolf-attack', `狼队决定袭击 ${wolfTargetLabel(state, targetPlayerId as PlayerId)}。`, {
       actorPlayerId: null,
@@ -805,7 +884,10 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
       });
       return state;
     }
-    const roleId = getRoleAssignment(state, targetId).roleId;
+    let roleId = getRoleAssignment(state, targetId).roleId;
+    if (roleId === 'hidden-wolf') {
+      roleId = 'villager';
+    }
     // 造物查验：结果同时传给诺亚（造物的主人）——她设计为"查验结果由诺亚统一接收"
     const creatureOwners = state.creatures.filter((creature) => creature.id === 99).map((creature) => creature.ownerPlayerId);
     const receiverIds: PlayerId[] = [pending.actorId];

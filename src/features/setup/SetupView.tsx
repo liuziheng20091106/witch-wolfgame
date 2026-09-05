@@ -12,6 +12,11 @@ import type { MultiplayerController } from '../../multiplayer/useMultiplayerRoom
 import { MultiplayerLobby } from './MultiplayerLobby';
 import styles from './SetupView.module.css';
 
+function winnerLabel(winner: GameHistoryEntry['winner']): string {
+  if (winner === 'neutral') return '呆头鹅胜';
+  if (winner === 'wolf') return '狼人胜';
+  return '好人胜';
+}
 
 interface SetupViewProps {
   settings: AiProviderConfig;
@@ -178,7 +183,7 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
           {history.map((entry) => (
             <div key={entry.gameId} className={styles.historyEntry}>
               <strong>种子 {entry.seed}</strong>
-              <span>第 {entry.finishedDay} 天 · {entry.winner === 'wolf' ? '狼人胜' : '好人胜'}</span>
+              <span>第 {entry.finishedDay} 天 · {winnerLabel(entry.winner)}</span>
               <span>{new Date(entry.finishedAt).toLocaleString()}</span>
               <button type="button" className={styles.copyButton} onClick={() => copySeed(entry.seed)}><Copy />{copiedSeed === entry.seed ? '已复制' : '复制'}</button>
             </div>

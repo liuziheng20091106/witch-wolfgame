@@ -28,6 +28,8 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 
   --games N      对局数（默认 200）
   --seed N       起始随机种子（默认 1），每局种子 = seed + 局号
+  --players N    玩家人数 6-14（默认 6，对应固定版型表）
+  --poison-day N 女巫最早可下毒的白天号（默认 2=保守模板；0=旧行为药在即随机毒）
   --max-iter N   单局最大状态推进次数，防止死循环（默认 5000）
   --json         输出 JSON 而非人类可读表格`);
   process.exit(0);
@@ -35,6 +37,17 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 
 const GAMES = Math.max(1, Number(getArg('games', 200)) || 200);
 const SEED = Number(getArg('seed', 1)) >>> 0;
+const rawPlayers = getArg('players', '6');
+const PLAYER_COUNT = Number(rawPlayers);
+if (!Number.isInteger(PLAYER_COUNT) || PLAYER_COUNT < 6 || PLAYER_COUNT > 14) {
+  console.error(`--players 必须是 6-14 的整数，收到：${rawPlayers}`);
+  process.exit(1);
+}
+const POISON_DAY = Number(getArg('poison-day', '2'));
+if (!Number.isInteger(POISON_DAY) || POISON_DAY < 0) {
+  console.error(`--poison-day 必须是非负整数，收到：${getArg('poison-day', '2')}`);
+  process.exit(1);
+}
 const MAX_ITER = Math.max(100, Number(getArg('max-iter', 5000)) || 5000);
 const AS_JSON = process.argv.includes('--json');
 
@@ -52,12 +65,12 @@ try {
 }
 
 function playOne(seed) {
-  let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: 6, selectedCharacterIds: [] });
+  let game = createGame({ mode: 'spectator', humanCharacterId: null, seed: seed >>> 0, playerCount: PLAYER_COUNT, selectedCharacterIds: [] });
   let iterations = 0;
   while (game.phase !== 'ended') {
     if (++iterations > MAX_ITER) return { timedOut: true, winner: null, day: game.day, exhausted: new Set(), deadByRole: {} };
     if (game.pendingDecision) {
-      const fallback = fallbackDecision(game, game.pendingDecision);
+      const fallback = fallbackDecision(game, game.pendingDecision, { witchPoisonDay: POISON_DAY });
       game = reduceGame(game, { type: 'set-rng-state', rngState: fallback.rngState });
       game = reduceGame(game, {
         type: 'submit-decision',
@@ -89,6 +102,7 @@ const stats = {
   games: GAMES,
   good: 0,
   wolf: 0,
+  neutral: 0,
   timedOut: 0,
   days: [],
   skillUsage: {},
@@ -102,6 +116,7 @@ for (let index = 0; index < GAMES; index += 1) {
   }
   if (result.winner === 'wolf') stats.wolf += 1;
   else if (result.winner === 'good') stats.good += 1;
+  else if (result.winner === 'neutral') stats.neutral += 1;
   stats.days.push(result.day);
   for (const skillId of result.exhausted) stats.skillUsage[skillId] = (stats.skillUsage[skillId] ?? 0) + 1;
   for (const [roleId, count] of Object.entries(result.deadByRole)) {
@@ -109,8 +124,9 @@ for (let index = 0; index < GAMES; index += 1) {
   }
 }
 
-const finished = stats.good + stats.wolf;
+const finished = stats.good + stats.wolf + stats.neutral;
 const wolfRate = finished > 0 ? ((stats.wolf / finished) * 100).toFixed(1) : 'N/A';
+const neutralRate = finished > 0 ? ((stats.neutral / finished) * 100).toFixed(1) : 'N/A';
 const avgDays = stats.days.length > 0 ? (stats.days.reduce((sum, day) => sum + day, 0) / stats.days.length).toFixed(2) : 'N/A';
 const minDays = stats.days.length > 0 ? Math.min(...stats.days) : '-';
 const maxDays = stats.days.length > 0 ? Math.max(...stats.days) : '-';
@@ -128,8 +144,8 @@ if (AS_JSON) {
   console.log(JSON.stringify(summary, null, 2));
 } else {
   console.log('================ 本地蒙特卡洛结果 ================');
-  console.log(`对局数: ${GAMES}  起始种子: ${SEED}  完成: ${finished}  超时: ${stats.timedOut}`);
-  console.log(`好人胜: ${stats.good} (${finished > 0 ? ((stats.good / finished) * 100).toFixed(1) : 'N/A'}%)  狼人胜: ${stats.wolf} (${wolfRate}%)`);
+  console.log(`人数: ${PLAYER_COUNT}人局  对局数: ${GAMES}  起始种子: ${SEED}  完成: ${finished}  超时: ${stats.timedOut}`);
+  console.log(`好人胜: ${stats.good} (${finished > 0 ? ((stats.good / finished) * 100).toFixed(1) : 'N/A'}%)  狼人胜: ${stats.wolf} (${wolfRate}%)  呆头鹅胜: ${stats.neutral} (${neutralRate}%)`);
   console.log(`对局长度(天): 平均 ${avgDays}  最短 ${minDays}  最长 ${maxDays}`);
   console.log('');
   console.log('技能使用率（按使用局数排序）:');

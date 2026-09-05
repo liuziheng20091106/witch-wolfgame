@@ -1,5 +1,6 @@
 import { CREATURE_ID, MAX_PLAYERS, MIN_PLAYERS, PLAYER_IDS, formatBoardDescription, rolePoolForPlayerCount } from '../../../shared/gamePromptContract.js';
 import { characterById, characters } from '../catalog/characters';
+import { initialRoleResources } from '../catalog/roles';
 import { defaultSkillByCharacterId, witchSkillDefinitions } from '../catalog/witchSkills';
 import type {
   CharacterId,
@@ -43,7 +44,7 @@ function createRound(input: RoundInput): GameState {
   const roleAssignments = activePlayerIds.map((playerId) => {
     const roleId = shuffledRoles.items[playerId];
     if (!roleId) throw new Error(`座位 ${playerId} 缺少职业`);
-    const resources: RoleResources = roleId === 'witch' ? { antidote: 1, poison: 1 } : {};
+    const resources: RoleResources = initialRoleResources(roleId);
     return { id: `role-${playerId}`, ownerPlayerId: playerId, roleId, resources };
   });
   const skillInstances: WitchSkillInstance[] = activePlayerIds.map((playerId) => {
