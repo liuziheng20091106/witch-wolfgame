@@ -13,11 +13,10 @@ import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
-let createGame, reduceGame, fallbackDecision;
+let createGame, reduceGame;
 try {
   ({ createGame } = await server.ssrLoadModule('/src/domain/engine/createGame.ts'));
   ({ reduceGame } = await server.ssrLoadModule('/src/domain/engine/reducer.ts'));
-  ({ fallbackDecision } = await server.ssrLoadModule('/src/ai/fallback.ts'));
 } finally {
   await server.close();
 }
@@ -101,14 +100,18 @@ function exileEvent(state, targetPlayerId) {
   const afterExile = reduceGame(g, { type: 'advance' });
   assert.equal(afterExile.pendingDecision?.kind, 'hunter-shot', '猎人被放逐应生成开枪决策');
   const shotPending = afterExile.pendingDecision;
-  const fb = fallbackDecision(afterExile, shotPending);
-  const shotTarget = fb.decision.targetPlayerId;
-  assert.ok(typeof shotTarget === 'number' && shotTarget !== hunter, '开枪目标应有效');
+  // 本地策略模板下猎人无确认狼目标时弃枪（防自损）；此处手选一个无死亡回溯的合法目标验证开枪路径
+  const shotTarget = shotPending.candidates.find((playerId) => {
+    const player = afterExile.players[playerId];
+    const skill = player?.skillInstanceId === null ? null : afterExile.skillInstances.find((entry) => entry.id === player?.skillInstanceId);
+    return skill?.definitionId !== 'death-rewind';
+  });
+  assert.ok(shotTarget !== undefined && shotTarget !== hunter, '存在可开枪目标');
   const afterShot = reduceGame(afterExile, {
     type: 'submit-decision',
     pendingDecisionId: shotPending.id,
     actorId: shotPending.actorId,
-    decision: fb.decision,
+    decision: { targetPlayerId: shotTarget },
   });
   assert.equal(afterShot.players[shotTarget].alive, false, '开枪目标应死亡');
   const hunterAssignment = afterShot.roleAssignments.find((a) => a.ownerPlayerId === hunter);

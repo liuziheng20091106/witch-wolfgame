@@ -1,7 +1,9 @@
 # Issue #95 职业扩展与版型平衡 · 设计文档（v2）
 
 > 关联 Issue: https://github.com/liuziheng20091106/witch-wolfgame/issues/95
-> 状态：P0 设计问题已全部敲定，**代码尚未开工**。本文件是施工蓝图。
+> 状态：P0 设计问题已全部敲定；**核心功能已实现并通过验证**（契约/引擎/AI/存储/UI，commit 695b36e）。
+> 验证：verify-roster-smoke（版型表+全档守恒）、verify-roster-rules（5 定向规则场景）、回归套件与 build 全绿。
+> 后续：MC 2.0 平衡矩阵（fallback 策略模板 + balance-matrix.mjs）、AI 对弈抽检、志愿者真人测试。
 > 分支：dev（基于 origin/main 75cf993）
 
 ## 1. 目标与范围

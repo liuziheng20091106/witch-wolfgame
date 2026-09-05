@@ -29,6 +29,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   --games N      对局数（默认 200）
   --seed N       起始随机种子（默认 1），每局种子 = seed + 局号
   --players N    玩家人数 6-14（默认 6，对应固定版型表）
+  --poison-day N 女巫最早可下毒的白天号（默认 2=保守模板；0=旧行为药在即随机毒）
   --max-iter N   单局最大状态推进次数，防止死循环（默认 5000）
   --json         输出 JSON 而非人类可读表格`);
   process.exit(0);
@@ -37,6 +38,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 const GAMES = Math.max(1, Number(getArg('games', 200)) || 200);
 const SEED = Number(getArg('seed', 1)) >>> 0;
 const PLAYER_COUNT = Math.min(14, Math.max(6, Number(getArg('players', 6)) || 6));
+const POISON_DAY = Math.max(0, Number(getArg('poison-day', 2)) || 2);
 const MAX_ITER = Math.max(100, Number(getArg('max-iter', 5000)) || 5000);
 const AS_JSON = process.argv.includes('--json');
 
@@ -59,7 +61,7 @@ function playOne(seed) {
   while (game.phase !== 'ended') {
     if (++iterations > MAX_ITER) return { timedOut: true, winner: null, day: game.day, exhausted: new Set(), deadByRole: {} };
     if (game.pendingDecision) {
-      const fallback = fallbackDecision(game, game.pendingDecision);
+      const fallback = fallbackDecision(game, game.pendingDecision, { witchPoisonDay: POISON_DAY });
       game = reduceGame(game, { type: 'set-rng-state', rngState: fallback.rngState });
       game = reduceGame(game, {
         type: 'submit-decision',

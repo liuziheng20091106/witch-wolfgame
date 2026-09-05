@@ -1,6 +1,7 @@
 import { SPEECH_MAX_LENGTH, VOICE_MIMIC_MAX_LENGTH } from '../../shared/gamePromptContract.js';
 import { characterById } from '../domain/catalog/characters';
-import type { GameState, PendingDecision, PlayerId, SubmittedDecision } from '../domain/model';
+import { roleAlignment } from '../domain/catalog/roles';
+import type { GameState, PendingDecision, PlayerId, RoleId, SubmittedDecision } from '../domain/model';
 import { chooseWithState } from '../domain/engine/random';
 import { getName, getPlayer } from '../domain/engine/selectors';
 import { gazeRequiredMention } from '../domain/skills/speechSkills';
@@ -10,9 +11,48 @@ export interface FallbackResult {
   rngState: number;
 }
 
+/**
+ * 本地策略模板（MC 2.0）：修正结构性自损行为，使模拟反映更接近理性玩家的基线。
+ * 语义层（发言、跳神、心理战）本地策略无法表达，由真实 AI 对弈与真人数据校准。
+ */
+export interface FallbackTemplate {
+  /** 女巫最早可下毒的白天号（state.day）。默认 2（第 3 个白天起），避免首两日随机毒杀好人。0 = 旧行为（药可用即随机下毒） */
+  witchPoisonDay: number;
+}
+
+export const DEFAULT_FALLBACK_TEMPLATE: FallbackTemplate = {
+  witchPoisonDay: 2,
+};
+
 function chooseCandidate(pending: PendingDecision, rngState: number): { playerId: PlayerId; rngState: number } {
   const selected = chooseWithState(pending.candidates, rngState);
   return { playerId: selected.item, rngState: selected.state };
+}
+
+function actorRoleId(state: GameState, playerId: PlayerId): RoleId | null {
+  return state.roleAssignments.find((assignment) => assignment.ownerPlayerId === playerId)?.roleId ?? null;
+}
+
+/** 狼队互知（设计内）：该玩家当前是否狼阵营。 */
+function isWolfFaction(state: GameState, playerId: PlayerId): boolean {
+  const roleId = actorRoleId(state, playerId);
+  return roleId !== null && roleAlignment[roleId] === 'wolf';
+}
+
+/** 玩家自身 knowledge 中已确认为狼（role 类查验结果）的目标，含白狼王/隐狼。 */
+function knownWolfTargets(state: GameState, actorId: PlayerId): PlayerId[] {
+  const facts = state.knowledgeByPlayer[actorId] ?? [];
+  const targets: PlayerId[] = [];
+  for (const fact of facts) {
+    if (fact.kind !== 'role' || fact.subjectPlayerId === actorId) {
+      continue;
+    }
+    const roleId = fact.value as RoleId;
+    if (roleAlignment[roleId] === 'wolf' && !targets.includes(fact.subjectPlayerId)) {
+      targets.push(fact.subjectPlayerId);
+    }
+  }
+  return targets;
 }
 
 function guidedSpeech(state: GameState, actorId: PlayerId, source: string): string {
@@ -42,7 +82,7 @@ function fallbackSpeech(state: GameState, speakerId: PlayerId, pending: PendingD
   return { speech: guidedSpeech(state, pending.actorId, selected.item), rngState: selected.state };
 }
 
-export function fallbackDecision(state: GameState, pending: PendingDecision): FallbackResult {
+export function fallbackDecision(state: GameState, pending: PendingDecision, template: FallbackTemplate = DEFAULT_FALLBACK_TEMPLATE): FallbackResult {
   if (pending.schemaKey === 'speech') {
     const speech = fallbackSpeech(state, pending.actorId, pending, state.rngState);
     return { decision: { speech: speech.speech }, rngState: speech.rngState };
@@ -62,8 +102,9 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
     const canSave = state.day === 0 && pending.options.canSave === true;
     let rng = state.rngState;
     let poisonTargetPlayerId: PlayerId | null = null;
-    if (pending.options.canPoison === true) {
-      // 毒药可用时随机下毒：候选已排除自己；若本夜救人，排除被救的袭击目标
+    // 毒药延后至 template.witchPoisonDay 才可用：前几日无可靠依据随机下毒会毒杀好人（结构性自损）
+    if (pending.options.canPoison === true && state.day >= template.witchPoisonDay) {
+      // 候选已排除自己；若本夜救人，排除被救的袭击目标
       let pool = pending.candidates;
       const attacked = typeof pending.options.attackedPlayerId === 'number' ? pending.options.attackedPlayerId as PlayerId : null;
       if (canSave && attacked !== null) {
@@ -102,6 +143,35 @@ export function fallbackDecision(state: GameState, pending: PendingDecision): Fa
     if (pending.schemaKey === 'voice-mimic') return { decision: { use: false, targetPlayerId: null, forgedSpeech: null }, rngState: state.rngState };
     if (pending.schemaKey === 'optional-target') return { decision: { use: false, targetPlayerId: null }, rngState: state.rngState };
     return { decision: { targetPlayerId: null }, rngState: state.rngState };
+  }
+  // 投票启发（理性模板）：狼人不投队友；好人优先投自己查验确认的狼（预言家查杀跟随）
+  if (pending.schemaKey === 'target' && (pending.kind === 'vote' || pending.kind === 'runoff')) {
+    if (isWolfFaction(state, pending.actorId)) {
+      const pool = pending.candidates.filter((playerId) => !isWolfFaction(state, playerId));
+      const picked = pool.length > 0 ? chooseCandidate({ ...pending, candidates: pool }, state.rngState) : chooseCandidate(pending, state.rngState);
+      return { decision: { targetPlayerId: picked.playerId }, rngState: picked.rngState };
+    }
+    const confirmed = knownWolfTargets(state, pending.actorId).filter((playerId) => pending.candidates.includes(playerId));
+    const confirmedTarget = confirmed[0];
+    if (confirmedTarget !== undefined) {
+      return { decision: { targetPlayerId: confirmedTarget }, rngState: state.rngState };
+    }
+    const picked = chooseCandidate(pending, state.rngState);
+    return { decision: { targetPlayerId: picked.playerId }, rngState: picked.rngState };
+  }
+  // 死亡反击启发：猎人无确认狼目标时弃枪（防自损）；白狼王被放逐必带走一名非狼队友（狼队互知）
+  if (pending.schemaKey === 'target' && (pending.kind === 'hunter-shot' || pending.kind === 'wolf-king-shot')) {
+    if (pending.kind === 'hunter-shot') {
+      const confirmed = knownWolfTargets(state, pending.actorId).filter((playerId) => pending.candidates.includes(playerId));
+      const confirmedTarget = confirmed[0];
+      if (confirmedTarget !== undefined) {
+        return { decision: { targetPlayerId: confirmedTarget }, rngState: state.rngState };
+      }
+      return { decision: { targetPlayerId: null }, rngState: state.rngState };
+    }
+    const pool = pending.candidates.filter((playerId) => !isWolfFaction(state, playerId));
+    const picked = pool.length > 0 ? chooseCandidate({ ...pending, candidates: pool }, state.rngState) : chooseCandidate(pending, state.rngState);
+    return { decision: { targetPlayerId: picked.playerId }, rngState: picked.rngState };
   }
   const selected = chooseCandidate(pending, state.rngState);
   if (pending.schemaKey === 'liquid-control') {
