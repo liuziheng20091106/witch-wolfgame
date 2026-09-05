@@ -100,7 +100,6 @@ function exileEvent(state, targetPlayerId) {
   const afterExile = reduceGame(g, { type: 'advance' });
   assert.equal(afterExile.pendingDecision?.kind, 'hunter-shot', '猎人被放逐应生成开枪决策');
   const shotPending = afterExile.pendingDecision;
-  // 本地策略模板下猎人无确认狼目标时弃枪（防自损）；此处手选一个无死亡回溯的合法目标验证开枪路径
   const shotTarget = shotPending.candidates.find((playerId) => {
     const player = afterExile.players[playerId];
     const skill = player?.skillInstanceId === null ? null : afterExile.skillInstances.find((entry) => entry.id === player?.skillInstanceId);
@@ -167,7 +166,6 @@ function exileEvent(state, targetPlayerId) {
   const g = newGame(8, 1006);
   const hunter = g.players.findIndex((p) => roleOf(g, p.id) === 'hunter');
   assert.ok(hunter >= 0, '猎人存在');
-  // 将猎人技能改为非死亡回溯技能，避免复合死亡结算触发回溯回退干扰断言
   const hunterSkill = g.skillInstances.find((entry) => entry.id === g.players[hunter].skillInstanceId);
   if (hunterSkill) {
     hunterSkill.definitionId = 'ignition';
@@ -197,3 +195,4 @@ function exileEvent(state, targetPlayerId) {
 }
 
 console.log('\n全部定向规则场景通过 ✓');
+

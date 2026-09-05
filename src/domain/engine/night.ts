@@ -179,7 +179,6 @@ export function resolveNight(state: GameState): GameState {
   );
   // 死亡回溯返回晨间快照，当前死亡批次已被撤销，不进入遗言或胜负结算。
   if (resolved !== state) return resolved;
-  // 夜间死亡反击：猎人被狼人袭击死亡可开枪带走一人（毒/魔女杀手/枪决致死不可开枪）。
   const retaliation = getNextShotDecision(resolved);
   if (retaliation) {
     resolved.pendingDecision = retaliation;
@@ -206,3 +205,4 @@ export function refreshMorningCheckpoint(state: GameState): void {
 export function isRecoveredThisNight(skill: WitchSkillInstance, day: number): boolean {
   return skill.data.recoveredNight === day;
 }
+

@@ -332,7 +332,6 @@ function advanceSeer(state: GameState): GameState {
   return state;
 }
 
-/** 守卫决策：每晚一次，守护一名其他存活者；不可连续两夜守同一人（上次守卫隔一夜才可再守）。 */
 function getGuardDecision(state: GameState): PendingDecision | null {
   const guardSubjects = getAlivePlayerIds(state).filter((playerId) => getRoleAssignment(state, playerId).roleId === 'guard');
   for (const guardId of guardSubjects) {
@@ -628,7 +627,6 @@ function advanceDayResolution(state: GameState): GameState {
   if (typeof exile?.data.exileTargetPlayerId === 'number') {
     const targetPlayerId = exile.data.exileTargetPlayerId as PlayerId;
     if (getPlayer(state, targetPlayerId).alive) {
-      // 呆头鹅被放逐：立即独自获胜（优先于放逐死亡、遗言、反击与死亡回溯）。
       if (getRoleAssignment(state, targetPlayerId).roleId === 'dodo') {
         state.result = { winner: 'neutral', reason: 'dodo-exiled', finishedDay: state.day };
         state.phase = 'ended';
@@ -640,7 +638,6 @@ function advanceDayResolution(state: GameState): GameState {
       if (resolved !== state) return resolved;
     }
   }
-  // 放逐死亡反击：猎人被放逐可开枪、白狼王被放逐可带走一人（提交后进入遗言/胜负结算）。
   const retaliation = getNextShotDecision(state);
   if (retaliation) {
     state.pendingDecision = retaliation;
@@ -888,7 +885,6 @@ function applyRoleDecision(state: GameState, pending: PendingDecision, decision:
       return state;
     }
     let roleId = getRoleAssignment(state, targetId).roleId;
-    // 隐狼：role 类查验统一伪造为村民（预言家/千里眼对外结果一致；隐狼自身知识不受影响）
     if (roleId === 'hidden-wolf') {
       roleId = 'villager';
     }
@@ -995,3 +991,4 @@ export function reduceGame(state: GameState, event: GameEvent): GameState {
   if (event.failure) next.lastAiFailure = { ...event.failure, day: next.day, phase: next.phase };
   return next;
 }
+

@@ -244,30 +244,24 @@ export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成�
  */
 export function buildGameSystemPrompt(schemaKey) {
  if (!Object.hasOwn(DECISION_EXAMPLES, schemaKey)) throw new Error(`未知提示词响应契约：${String(schemaKey)}`);
- let promptHint = ' 座位号规则：playerId 从 0 开始，公开座位号为 playerId + 1（1 起始）；legalCandidates、publicVotes、entityRoster 中的数字一律是 playerId。发言与消息正文中引用玩家时，只能使用“座位号+姓名”格式（例如“4号·夏目安安”），严禁把 playerId 裸数字当作座位号，也不要只报数字不报姓名。';
- promptHint += ' 基础职业介绍：狼人——以狼队获胜为目标并与队友协作，除非有显著提高狼队胜率的明确战术，否则不要公开自曝身份。守卫——每夜选择一名其他存活者守护（不可连续两夜守护同一人），优先守护疑似神职或狼队最可能袭击的高价值目标。猎人——被狼袭或被放逐时可开枪带走一人（被毒药或技能致死不能开枪）；枪是威慑也是输出，无高确信目标时可弃枪保留悬念。白狼王——被放逐时可带走一人，利用威慑阻止好人冲票；若必被放逐，带走你最确信的神职。隐狼——你被查验时对方看到的是村民；白天像普通村民一样发言投票，避免过度维护狼队友而暴露关联。呆头鹅——中立的迷途者，唯一胜利条件是白天被放逐；可选风格为搅局资产、假神对跳或边缘排水；你没有夜间自保手段，狼刀对你有效，被预言家验出后你将无法再被放逐。';
- promptHint += ' 性别与称谓边界：本作所有可选角色均为女性。佐伯米莉亚的“大叔我”只是她的自称和纪念，不代表男性身份；称呼其他角色时使用姓名、小姐等女性或中性称谓，不使用“哥”“哥哥”“先生”等男性称谓。“名字+亲”是泽渡可可的专属口癖，其他角色不得使用。除非当前角色卡明确要求，否则不得改变角色性别。';
- promptHint += ' publicVotes 由官方客户端仅从已经公开揭晓的已提交投票记录构成，包含弃权（targetPlayerId:null），不是隐藏票或最终生效票型；每个 voterPlayerId 与非空 targetPlayerId 必须先出现在 entityRoster 中，不能从票型反推或新增实体；玩家死亡或投票被作废/烧毁后，历史记录仍可能保留。';
- promptHint += ' entityRoster 是本局已经存在的玩家与造物的稳定实体清单；publicVotes 中的 voterPlayerId 和非空 targetPlayerId 必须先出现在 entityRoster 中，不能从票型反推或新增实体。privateEvents 标签不可扩大受众：`【仅当前行动者可见；受众：...】`只表示当前提示词行动者可知的事实，`【狼队共享记录；受众：...】`表示狼人内部频道共享事实，`【相关角色共享；受众：...】`表示与标签中明确列出的受众共享的私密事实；受众使用“编号（姓名）”列出，`未列明`不得当作已知受众。存活不证明行动者知道自己被袭击、被解药救回或受到治愈保护；他人的“银水”是公开证据/声称，不是行动者的私密记忆；直接提供的行动者本人千里眼或其他行动结果是确定的个人事实。结论必须区分“已知”“公开声称”“推测”。';
- if (schemaKey === 'ignition') {
-  promptHint += ' 该决策只需回答是否使用（true 或 false），无需选择任何目标。';
- }
+ const base = `你是魔女狼人杀（6-14 人）的玩家，按角色人格行动，只依据观察决定，不得假设隐藏身份或继承原作剧情。基础职业（狼人/守卫/猎人/预言家/女巫/村民/白狼王/隐狼/呆头鹅）与魔女技互相独立，均以观察中的当前状态为准。胜负：狼人全部出局则好人胜；存活狼人不少于存活好人则狼胜；呆头鹅（中立）被白天放逐则独自获胜，其他结局她失败。所有角色均为女性，不得改变性别。编号：playerId 从 0 起，座位号=playerId+1；所有列表中的数字均为 playerId，正文引用玩家必须写“座位号+姓名”。隐私：privateEvents 只能按受众标签使用，未列明受众的事实不可用；结论区分“已知/公开声称/推测”。legalCandidates 是唯一合法目标集合，非 null 目标必须取自其中；allowAbstain 为 false 时不得弃权。`;
+ let hint = ' 职业要点：狼人不自曝；守卫每夜守护一名其他存活者且不可连守；猎人被狼袭或被放逐可开枪带走一人（被毒/技能致死不可），无把握可弃枪；白狼王被放逐可带走一人；隐狼被查验显示村民；呆头鹅被放逐即独自获胜，狼刀对她有效。';
  if (schemaKey === 'wolf-council') {
-  promptHint += ` 这是仅狼人可见的内部议事。message 应简洁说明目标收益、公开依据或暴露风险，且不超过 ${WOLF_COUNCIL_PROMPT_MAX_LENGTH} 字；recommendedTargetPlayerId 是你的明确推荐目标，必须来自 legalCandidates。options.wolfCouncilMessages 是本夜先前狼人留下的议事记录，可以回应但不得虚构额外队友发言。狼队视角纪律：本频道只有狼队成员，玩家面板已列出全部狼队友，你们互相知晓身份；袭击目标必然是狼队之外的存活者。不要把"她可能是狼""验她"等好人视角怀疑句式写进议事——那种话只属于白天伪装发言。理由从威胁与收益出发：目标的能力/可信度/被验风险对本队构成多大威胁、何时动手代价最小。评估魔女技时注意方向——技能持有者若是好人，会威胁狼队的技能（声音模仿可伪造狼发言、能查验者会压缩狼队空间）才是清除理由；"技能可能帮到狼人"恰恰说明应保留或利用它，而不是除掉。目标一致性：填写 recommendedTargetPlayerId 前对照 entityRoster 核对目标身份，message 中写到的名字/座位号必须与该 id 是同一人，禁止名字与 id 错位。狼队友不会出现在 legalCandidates 中；如果你推荐的目标不在 legalCandidates 里，说明你选中的是狼队友或已出局者，请改选合法目标。`;
+  hint += ` 这是仅狼队可见的内部议事。message 不超过 ${WOLF_COUNCIL_PROMPT_MAX_LENGTH} 字，推荐目标须来自 legalCandidates 且与 message 中的人物一致；袭击目标必在队外，理由从威胁收益出发，不得用“她可能是狼”等好人句式。`;
  }
  if (schemaKey === 'speech') {
-  promptHint += ` speech 只能是字符串，且不超过 ${SPEECH_PROMPT_MAX_LENGTH} 字。必须先处理 currentDaySpeeches 中与自己直接相关的质疑、查杀、对跳或明确问题，再提出一项能由后续发言、私密情报或票型验证的具体判断。不得把 publicSkills 的公开技能当成基础职业证据，不得照抄已有共识或复述系统规则。若声称查验、幻视等私密结果，只能使用 privateKnowledge 或 privateEvents 明确提供的事实，并准确说明它能证明与不能证明什么。公开发言来源纪律：公开频道向全体玩家可见，"狼队共享记录""内部议事/频道""队友"等内部结构词汇与狼议内容绝不可出现在公开发言中（除非是深思熟虑的自曝战术）；需要表达内部情报推导出的判断时，只输出结论本身（如"我怀疑 X 的威胁最大"），不交代信息来源与获得方式。公开场合只能使用白天的语言（怀疑、查验、放逐、出局），禁止把夜间行动作为自己的计划表述（如"今晚建议袭击/夜袭目标/刀 X"等黑话等于自曝狼身份）。`;
+  hint += ` speech 不超过 ${SPEECH_PROMPT_MAX_LENGTH} 字；先回应针对自己的质疑，再提出一条可验证的新判断；不照抄共识，不用公开技能推断职业；公开场合禁说狼队黑话（袭击/刀/狼队记录/队友），只用白天语言（怀疑/查验/放逐）。`;
  }
  if (schemaKey === 'witch') {
-  promptHint += ' 女巫决策应优先保留稀缺药水，除非已知狼刀目标值得救、当前局面临近胜负点，或已有足够可靠的毒杀依据；不得仅凭 publicSkills 使用毒药。若没有可靠毒杀依据，poisonTargetPlayerId 应为 null。';
+  hint += ' 优先保留药水；无可靠毒杀依据时 poisonTargetPlayerId 应为 null。';
  }
  if (schemaKey === 'optional-target') {
-  promptHint += ' use 为 true 代表消耗或发动当前魔女技。只有行动能产生明确且符合阵营收益时才发动；否则保留技能并返回 use:false、targetPlayerId:null。';
+  hint += ' 只有行动能产生明确阵营收益时才发动，否则 use:false、targetPlayerId:null。';
  }
- if (schemaKey === 'target') {
- return `你正在进行 6 至 14 人可配置阵容的魔女狼人杀，具体人数与职业构成以 board、entityRoster 和 publicSkills 为准。基础职业（狼人/守卫/猎人/预言家/女巫/村民/白狼王/隐狼/呆头鹅）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。呆头鹅是中立的迷失者：若她在白天被放逐，她将立即独自获胜（狼人与好人阵营均失败）；其他任何结局她都不赢。先按信息可靠度决策：privateKnowledge 中明确的职业/阵营事实与 privateEvents 中亲历结果最高；可核对的公开事件、完整发言链与票型其次；基于语气、角色人格或 publicSkills 的猜测最低；entityRoster 是已存在玩家与造物的稳定实体清单。任何结论都要区分“已知”“公开声称”“推测”，不得把公开声称自动当成事实。actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；两者只约束稳定性格、关系语气、表达边界与思考方式，不提供本局身份、阵营、存活、技能或隐藏情报；actor.role、actor.skill、phase、day、board、alivePlayers、entityRoster、legalCandidates、currentDaySpeeches、historicalSpeeches、recentPublic、privateKnowledge、publicSkills、privateEvents 与其他观察字段才是本局事实来源。只能依据提供的观察作决定，不得假设隐藏身份，不得把静态卡或原作旧剧情中的死亡、凶手、证据、关系变化当成本局事实。当前对局默认不继承角色在其他作品时间线中的权能，只有 actor.skill 和本局事件明确授予的效果有效。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。若 options.postGame 为 true，当前是赛后复盘阶段：finalRoles 是最终身份唯一来源，提供全部座位的最终基础职业真相；postGameContext 汇总本局完整公开事件、私密行动、死亡回溯旧时间线与此前赛后发言；请承认真相已揭晓，可讨论自己的真实身份和全部过程，但仍不得捏造上下文中不存在的事实。仅返回一个 JSON 对象，不要 Markdown，不要解释。响应格式示例：${DECISION_EXAMPLES[schemaKey]}` + promptHint;
+ if (schemaKey === 'ignition') {
+  hint += ' 该决策只需回答是否使用，无需选择目标。';
  }
- return `你正在进行 6 至 14 人可配置阵容的魔女狼人杀，具体人数与职业构成以 board、entityRoster 和 publicSkills 为准。基础职业（狼人/守卫/猎人/预言家/女巫/村民/白狼王/隐狼/呆头鹅）与魔女技是两套独立信息：公开的默认魔女技不能用于推断基础职业，基础职业也不决定当前持有的魔女技；角色或技能可能因游戏效果发生变化，请以观察中提供的当前状态为准。胜负规则：好人阵营在全部狼人出局后获胜；狼人阵营在存活狼人不少于存活好人时获胜。呆头鹅是中立的迷失者：若她在白天被放逐，她将立即独自获胜（狼人与好人阵营均失败）；其他任何结局她都不赢。先按信息可靠度决策：privateKnowledge 中明确的职业/阵营事实与 privateEvents 中亲历结果最高；可核对的公开事件、完整发言链与票型其次；基于语气、角色人格或 publicSkills 的猜测最低；entityRoster 是已存在玩家与造物的稳定实体清单。任何结论都要区分“已知”“公开声称”“推测”，不得把公开声称自动当成事实。actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；两者只约束稳定性格、关系语气、表达边界与思考方式，不提供本局身份、阵营、存活、技能或隐藏情报；actor.role、actor.skill、phase、day、board、alivePlayers、entityRoster、legalCandidates、currentDaySpeeches、historicalSpeeches、recentPublic、privateKnowledge、publicSkills、privateEvents 与其他观察字段才是本局事实来源。只能依据提供的观察作决定，不得假设隐藏身份，不得把静态卡或原作旧剧情中的死亡、凶手、证据、关系变化当成本局事实。当前对局默认不继承角色在其他作品时间线中的权能，只有 actor.skill 和本局事件明确授予的效果有效。legalCandidates 是唯一合法目标集合：回答中的任意非 null 玩家目标必须取自其中的 playerId；除非 actor.playerId 明确出现在 legalCandidates 中，否则不得选择自己。allowAbstain 为 false 时不得放弃必选目标。若 options.postGame 为 true，当前是赛后复盘阶段：finalRoles 是最终身份唯一来源，提供全部座位的最终基础职业真相；postGameContext 汇总本局完整公开事件、私密行动、死亡回溯旧时间线与此前赛后发言；请承认真相已揭晓，可讨论自己的真实身份和全部过程，但仍不得捏造上下文中不存在的事实。仅返回一个 JSON 对象，不要 Markdown，不要解释。响应格式示例：${DECISION_EXAMPLES[schemaKey]}${promptHint}`;
+ return `仅返回一个 JSON 对象，不要 Markdown，不要解释。响应格式示例：${DECISION_EXAMPLES[schemaKey]}${base}${hint}`;
 }
 
 /**

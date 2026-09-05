@@ -2,7 +2,6 @@
 import { createServer } from 'node:http';
 import { appendFileSync, readFileSync } from 'node:fs';
 
-// 可选请求日志（游戏内 AI 决策调试）：LOCAL_AI_LOG=文件路径 或 LOCAL_AI_LOG=stdout
 const logTarget = process.env.LOCAL_AI_LOG ?? '';
 function writeLog(line) {
   if (!logTarget) return;
@@ -14,7 +13,6 @@ function writeLog(line) {
   try {
     appendFileSync(logTarget, `${text}\n`, 'utf8');
   } catch (error) {
-    // 日志失败不影响转发
   }
 }
 
@@ -120,7 +118,6 @@ async function forwardChat(request, response) {
       'Cache-Control': 'no-store',
     });
     response.end(Buffer.from(upstreamBody));
-    // 请求日志：非流式响应下可解析出 AI 决策原文，便于游戏内调试观察
     let requestMeta = '';
     try {
       const parsedRequest = JSON.parse(body);
@@ -183,3 +180,4 @@ function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+

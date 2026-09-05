@@ -73,10 +73,8 @@ export interface CreatureState {
 export interface RoleResources {
   antidote?: 0 | 1;
   poison?: 0 | 1;
-  /** 猎人 / 白狼王的扳机（0 已用，1 可用） */
   hunterShot?: 0 | 1;
   wolfKingShot?: 0 | 1;
-  /** 守卫上次守护的夜晚与目标（不可连续两夜守同一人） */
   lastGuardNight?: number;
   lastGuardTargetPlayerId?: PlayerId;
 }
@@ -340,3 +338,4 @@ export interface WitchSkillDefinition {
   timings: SkillTiming[];
   usage: 'once' | 'nightly' | 'daily' | 'passive';
 }
+

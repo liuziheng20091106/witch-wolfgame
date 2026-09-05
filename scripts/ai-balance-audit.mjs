@@ -68,7 +68,6 @@ const aiConfig = {
   timeoutMs: DECISION_TIMEOUT_MS,
 };
 
-/** 提交前防御校验（防止非法决策弄脏状态后抛错中断对局）。 */
 function preValidate(pending, decision) {
   const target = decision?.targetPlayerId;
   if (typeof target === 'number') {
@@ -119,7 +118,6 @@ async function aiPlayOne(playerCount, seed) {
             break;
           }
         }
-        // 样本采集：公开发言与狼议全文（含人类可读检查价值的决策）
         if (pending.schemaKey === 'speech' && pending.options?.postGame !== true) {
           const text = decision?.speech ?? '';
           let speechReason = null;
@@ -239,3 +237,4 @@ for (const [p, row] of Object.entries(totals)) {
 }
 console.log('');
 console.log('说明: 真实 LLM 决策（含语义层），样本量小仅作方向参考；AI 失败=模型返回非法/超时后由本地策略兜底。');
+

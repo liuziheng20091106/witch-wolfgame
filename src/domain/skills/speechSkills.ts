@@ -499,7 +499,6 @@ function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pend
     });
   } else {
     let roleId = getRoleAssignment(state, viewerId).roleId;
-    // 隐狼：role 类查验统一伪造为村民（与预言家规则一致，owner 与 viewer 双事件对外一致）
     if (roleId === 'hidden-wolf') {
       roleId = 'villager';
     }
@@ -517,3 +516,4 @@ function applyClairvoyanceView(state: GameState, skill: WitchSkillInstance, pend
   asked.push(viewerId);
   skill.data.viewerIds = asked;
 }
+

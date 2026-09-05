@@ -41,7 +41,6 @@ export interface CustomAiProviderConfig {
   profiles: AiModelProfiles;
   retryCount: number;
   jsonOutputMode: JsonOutputMode;
-  /** 单次决策请求超时（毫秒）。默认 60s；本地大模型/长上下文建议加大。 */
   timeoutMs?: number;
 }
 
@@ -155,3 +154,4 @@ export const defaultCustomAiConfig: CustomAiProviderConfig = {
   jsonOutputMode: 'auto',
   timeoutMs: 120_000,
 };
+
