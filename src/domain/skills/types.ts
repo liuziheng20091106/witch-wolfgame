@@ -1,4 +1,4 @@
-import type { GameState, PendingDecision, PlayerId, WitchSkillInstance } from '../model';
+import type { GameState, PendingDecision, PlayerId, SubmittedDecision, TargetDecision, WitchSkillInstance } from '../model';
 
 export function makeSkillDecision(
   state: GameState,
@@ -38,4 +38,12 @@ export function markOffered(skill: WitchSkillInstance, key: string): void {
 export function exhaustSkill(skill: WitchSkillInstance): void {
   skill.status = 'exhausted';
   skill.remainingUses = 0;
+}
+
+export function requireTarget(decision: SubmittedDecision, candidates: PlayerId[]): PlayerId {
+  const targetPlayerId = (decision as TargetDecision).targetPlayerId;
+  if (targetPlayerId === null || !candidates.includes(targetPlayerId)) {
+    throw new Error('目标不在当前合法候选中');
+  }
+  return targetPlayerId;
 }

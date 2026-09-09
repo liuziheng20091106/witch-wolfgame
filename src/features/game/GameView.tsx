@@ -1,4 +1,4 @@
-import { AlertTriangle, Archive, Bot, ChevronDown, Copy, Gavel, Info, List, LoaderCircle, RotateCcw, ScrollText, Sparkles, Users, X } from 'lucide-react';
+import { Archive, Bot, ChevronDown, Copy, Gavel, Info, List, LoaderCircle, RotateCcw, ScrollText, Sparkles, Users, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AiCommandError } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';

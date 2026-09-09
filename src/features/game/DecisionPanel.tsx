@@ -65,7 +65,7 @@ interface DecisionPanelProps {
   onSettings(): void;
 }
 
-export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, decisionError, onSubmit, onRetry, onLocal, onSettings }: DecisionPanelProps) {
+export function DecisionPanel({ observation, aiError, awaitingRetry, decisionError, onSubmit, onRetry, onLocal, onSettings }: DecisionPanelProps) {
   const [debugExportStatus, setDebugExportStatus] = useState<'idle' | 'copied' | 'downloaded' | 'failed'>('idle');
   const [debugExportError, setDebugExportError] = useState<string | null>(null);
   const debugReportText = aiError?.debugReport ? formatAiDebugReport(aiError.debugReport) : null;

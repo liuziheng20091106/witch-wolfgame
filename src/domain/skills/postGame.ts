@@ -10,11 +10,6 @@ import type {
 } from '../model';
 import { SPEECH_MAX_LENGTH, SPEECH_PROMPT_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
 import { addPublicEvent } from '../engine/events';
-import { getName } from '../engine/selectors';
-
-function nameOf(state: GameState, playerId: PlayerId): string {
-  return getName(state, playerId);
-}
 
 /**
  * 赛后复盘（post-game）：对局结束后，全员按当前座位顺序依次发表赛后发言。

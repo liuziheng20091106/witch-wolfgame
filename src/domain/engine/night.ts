@@ -6,10 +6,6 @@ import { checkWin } from './win';
 import { getNextLastWordsDecision } from '../skills/lastWords';
 import { getNextShotDecision } from './retaliation';
 
-function nameOf(state: GameState, playerId: PlayerId): string {
-  return getName(state, playerId);
-}
-
 function sourceLabel(source: string): string {
   if (source === 'wolf') return '狼人袭击';
   if (source === 'poison') return '女巫毒药';
@@ -77,7 +73,7 @@ function rewindForDeath(state: GameState, deadPlayerIds: PlayerId[]): GameState 
       }
     }
   }
-  addPublicEvent(restored, 'timeline-rewound', `${nameOf(state, trigger.ownerPlayerId)} 的死亡回溯发动，审判返回此前的晨间节点。`, {
+  addPublicEvent(restored, 'timeline-rewound', `${getName(state, trigger.ownerPlayerId)} 的死亡回溯发动，审判返回此前的晨间节点。`, {
     actorPlayerId: trigger.ownerPlayerId,
   });
   return restored;
@@ -117,7 +113,7 @@ export function resolveDeathBatch(
     }
     newlyDead.push(player.id);
     const reason = death.sources.length > 0 ? death.sources.map(sourceLabel).join('、') : '白天放逐';
-    addPublicEvent(state, 'death', `${nameOf(state, player.id)} 死亡。原因：${reason}。`, {
+    addPublicEvent(state, 'death', `${getName(state, player.id)} 死亡。原因：${reason}。`, {
       targetPlayerIds: [player.id],
       data: { sources: death.sources },
     });
