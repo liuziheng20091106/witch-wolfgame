@@ -62,7 +62,7 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
       <label>房间号<input maxLength={6} value={roomCode} onChange={(event) => setRoomCode(event.target.value.toUpperCase())} placeholder="ABC234" /></label>
     </div>
     <RosterEditor playerCount={playerCount} value={roster} onChange={setRoster} />
-    <div className={styles.actions}><button type="button" onClick={() => multiplayer.createRoom(playerName.trim(), characterId, playerCount, undefined, roster)} disabled={multiplayer.connecting || !playerName.trim() || rolePoolError(roster.rolePool ?? rolePoolForPlayerCount(playerCount), playerCount) !== null}><Radio />创建房间</button><button type="button" onClick={() => multiplayer.joinRoom(roomCode, playerName.trim(), characterId)} disabled={multiplayer.connecting || roomCode.length !== 6 || !playerName.trim()}><LogIn />加入房间</button></div>
+    <div className={styles.actions}><button type="button" onClick={() => multiplayer.createRoom(playerName.trim(), characterId, playerCount, undefined, roster)} disabled={multiplayer.connecting || !playerName.trim() || rolePoolError(roster.rolePool ?? rolePoolForPlayerCount(playerCount), playerCount) !== null}><Radio />创建房间</button><button type="button" onClick={() => multiplayer.joinRoom(roomCode, playerName.trim(), characterId)} disabled={multiplayer.connecting || roomCode.length !== 6 || !playerName.trim()}><LogIn />加入房间（使用房主版型）</button></div>
     {multiplayer.connecting && <p>正在连接多人服务器…</p>}
     {multiplayer.error && <p className={styles.error} role="alert">{multiplayer.error}</p>}
   </section>;
