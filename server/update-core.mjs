@@ -3,6 +3,7 @@ import { access, copyFile, mkdir, readdir, rename, rm, stat, writeFile } from 'n
 import http from 'node:http';
 import https from 'node:https';
 import { basename, dirname, resolve, sep } from 'node:path';
+import { setTimeout as wait } from 'node:timers/promises';
 import { readBody, sendJson } from './shared.mjs';
 
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
@@ -22,10 +23,6 @@ function validateDownloadUrl(value) {
   const localHttp = url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
   if (url.protocol !== 'https:' && !localHttp) throw new Error(`更新源必须使用 HTTPS: ${url}`);
   return url;
-}
-
-function wait(ms) {
-  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 }
 
 async function readDownloadBody(response) {

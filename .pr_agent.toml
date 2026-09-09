@@ -108,14 +108,12 @@ publish_output_no_suggestions=true # Set to "false" if you only need the reviewe
 persistent_comment=true
 inline_key_issues=false
 extra_instructions = """\
-请对变更进行严格、基于证据的审查，并优先关注以下问题：
-- 代码执行路径中的错误处理是否完整、明确且可恢复；检查异常、失败返回值、超时、资源清理和错误信息是否被正确处理。
-- 特别设计的 AI 提示词是否无歧义、可执行，并且不包含无效、重复或与目标无关的信息。
-- 技能或技能文件的修改是否合理、可实现；评估其潜在后果、边界条件，以及与现有技能、配置、提示词和代码逻辑是否冲突。
-- 是否添加了无用的说明文件、注释、调试代码、临时文件或其他不应提交的内容；指出应删除的内容。
-- 新增功能的实现是否符合现有架构和项目约定；在有充分证据时，指出明显更简单、可靠、可维护或性能更好的实现方案。
-
-只报告能够从代码、配置、测试或变更上下文中明确证明的问题，不提出纯主观偏好。每条问题必须说明影响、依据、具体位置和可执行的修复方向。避免重复报告同一根因；如果没有发现问题，明确说明未发现可验证的问题。"""
+用中文审查本次 PR 引入或加重的实际缺陷，遵循 AGENTS.md 的“协作与审查范围”。
+每条发现说明具体位置、触发条件、可观察影响、与本次改动的关系及修复方向。缺少证据时说明不确定性，不将猜测列为阻塞项。
+优先关注逻辑错误、隐私泄露、数据丢失和异步失效等具体后果，不以泛化的“最佳实践”要求作者扩展范围。
+普通 PR 不要求升级版本或同步所有版本字符串；不默认要求兼容全部历史存档或为每次 schema 改动补迁移。真实的请求拒绝或受支持数据读取回归仍需依据代码报告。
+既有问题、风格偏好、可选重构和无关测试或文档补全不列为必须修复。尊重维护者确认的范围与取舍，没有新证据不重复争论。
+同一根因只报告一次；未发现可验证的问题时直接说明，无需凑数。"""
 num_max_findings = 10
 final_update_message = true
 # review labels
@@ -169,7 +167,10 @@ commitable_code_suggestions = false
 dual_publishing_score_threshold=-1 # -1 to disable, [0-10] to set the threshold (>=) for publishing a code suggestion both in a table and as committable
 focus_only_on_problems=true
 #
-extra_instructions = ""
+extra_instructions = """\
+用中文提出建议，遵循 AGENTS.md 的“协作与审查范围”。仅针对本次变更引入或加重、且有具体触发条件和可观察影响的问题提供修复建议。
+不因风格偏好、可选重构、版本字符串差异或假设中的历史存档兼容要求生成修改建议；真实兼容性回归需说明受影响的请求或数据路径。
+不重复提出同一根因或维护者已接受且没有新缺陷证据的取舍；没有明确问题时不生成建议。"""
 enable_help_text=false
 enable_chat_text=false
 persistent_comment=true
@@ -344,19 +345,15 @@ max_skills_tokens = 8000 # token budget for the combined skills_context block
 
 [best_practices]
 content = """\
-- 代码执行必须进行严格、明确且完整的错误处理；正确处理异常、失败返回值、超时、资源清理和错误信息，避免静默失败。
-- AI 提示词必须无歧义、易于执行，并且只包含有效、必要且与目标相关的信息；避免冲突、重复和无法验证的要求。
-- 修改技能或技能文件时，必须评估其合理性、可实现性、潜在后果、边界条件，以及与现有技能、配置、提示词和代码逻辑的兼容性。
-- 不添加无用的说明文件、注释、调试代码或临时文件；提交 PR 前删除不再需要的说明、注释、调试输出和临时文件。
-- 新增功能必须结合现有架构和项目约定评估实现方案，优先选择在正确性、可靠性、可维护性、性能和复杂度之间更合适的方案，并避免没有依据的过度设计。
+以 AGENTS.md 的“协作与审查范围”为准。项目习惯用于理解代码，不作为要求每个 PR 整改全仓库的清单；只依据本次变更的实际影响提出问题。
 """
 organization_name = ""
 max_lines_allowed = 800
 enable_global_best_practices = false
 
 [auto_best_practices]
-enable_auto_best_practices = true # public - general flag to disable all auto best practices usage
-utilize_auto_best_practices = true # public - disable usage of auto best practices in the 'improve' tool
+enable_auto_best_practices = false # 不自动生成额外审查规则
+utilize_auto_best_practices = false # 代码建议也不使用自动生成的规则
 extra_instructions = "" # public - extra instructions to the auto best practices generation prompt
 content = ""
 max_patterns = 5 # max number of patterns to be detected

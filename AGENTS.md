@@ -1,124 +1,69 @@
 # 仓库指南
 
-## 项目概览
+## 协作与审查范围
 
-魔女狼人杀是一款基于 React/TypeScript 的浏览器社交推理游戏，支持配置 6–14 人对局。游戏支持确定性种子、localStorage 持久化、观战或真人玩家模式、AI 决策、确定性的本地回退、多人房间，以及可安装且支持离线的 PWA（`README.md`、`public/manifest.webmanifest`）。
+- 以本次任务、PR 描述和维护者确认的范围为准。下文用于帮助理解项目，不是要求每个 PR 整改全仓库的检查清单。
+- 审查聚焦本次变更引入或加重的实际缺陷。报告时说明具体位置、触发条件、可观察影响，以及它与本次改动的关系；上下文不足时说明不确定性，不把猜测作为阻塞项。
+- 既有问题、个人风格偏好、可选重构、假设中的未来需求，以及与本次改动无关的测试或文档补全，不作为必须修复的问题。确有价值的建议标为非阻塞，不要求作者顺带处理。
+- 同一根因只报告一次。维护者已明确接受的取舍，不在缺少新证据时反复要求修改；仍有具体缺陷时说明新证据和影响。未发现可验证的问题时直接说明，无需凑数。
+- 普通功能、修复、重构和文档 PR 不要求升级版本或同步所有版本字符串。涉及发布或协议变更时，按实际请求链检查兼容性；`acceptedClientVersions` 是允许列表，不必与包版本逐字一致。只有能证明目标部署会拒绝本次客户端请求等实际问题时，才提出相应缺陷。
+- 不默认承诺兼容所有历史存档，也不因新增字段或调整 schema 就要求补默认值、迁移或旧档恢复。兼容范围以本次需求和明确支持的数据格式为准；破坏仍受支持的数据读取、丢失数据或绕过校验时，应报告具体路径和影响。
+- Agent 可以创建 PR、推送功能分支并回复审查线程；PR 的关闭和合并由人工维护者负责，agent 不得关闭或合并 PR。
+- 临时设计草稿、模拟报告和 AI 审查记录默认保留在本地；正式文档按任务需要提交。
 
-可选服务包括公开主后端、私有提供商代理和独立多人服务器。主后端负责校验浏览器请求并限流；代理使用 TLS 1.3 双向 mTLS 与 HMAC，并管理提供商重试和回退；多人服务使用 WebSocket（`server/main.mjs`、`proxy/server.mjs`、`multiplayer/server.ts`）。
+## 项目与代码导航
 
-## 架构与数据流
+魔女狼人杀是基于 React/TypeScript 的浏览器社交推理游戏，支持 6–14 人、确定性种子、本地持久化、真人或观战模式、AI 决策、本地回退、多人房间和离线 PWA。
 
-- `src/main.tsx` 恢复主题状态并挂载 `src/app/App.tsx`。
-- `App` 选择设置或游戏界面，组合本地或多人状态，挂载设置/PWA 界面，并按需加载大型视图（`src/app/App.tsx`）。
-- `src/app/useGameController.ts` 管理持久 React 状态、本地持久化、生命周期、回调和 AI 自动化。本地对局依次经过 `createGame` → `reduceGame` → `selectObservation` → 功能视图（`src/domain/engine/createGame.ts`、`src/domain/engine/reducer.ts`、`src/domain/engine/selectors.ts`）。
-- 状态转换由 reducer/engine 负责并采用事件驱动。`reduceGame` 会先复制 `GameState`，再在副本上推进；提交决策时校验 `pendingDecision` 的 ID 和行动者，目标类决策再校验合法候选与存活状态。严禁在 UI 代码中直接修改 `GameState`。
-- `selectObservation` 是隐私边界。玩家视图只应收到当前查看者有权看到的私有事件和知识；不得越权暴露其他人的隐藏职业、秘密投票或伪造发言的真实作者，狼队共享事件只对其受众开放。观战、结束和赛后复盘视图可以展示全量信息（`src/domain/engine/selectors.ts`）。
-- AI 流程为 `prompts.ts` → `client.ts` → `schemas.ts`。提示词接收经过范围限制的观察；客户端负责端点、会话、超时、重试和取消，公益请求携带版本协议头，服务端会再次校验版本和请求结构；Zod 校验模型决策。`fallback.ts` 使用带种子的 RNG，并通过 reducer 提交结果。
-- 多人模式使用 `protocol.ts` 和 `useMultiplayerRoom.ts`：排队发送初始连接消息，持久化恢复令牌，消费房间快照，并且只提交观察到的待处理决策。
-- 通过 `src/storage/browserStorage.ts` 持久化已提交状态；该模块解析并校验设置、开局、对局、历史和会话数据，对旧设置及缺失字段做兼容归一化。控制器按 `gameId` 去重，存储层将历史限制为最多 50 条。
-- 公益 AI 流量通常经过浏览器 → `server/main.mjs` → mTLS/HMAC `proxy/server.mjs` → 提供商；自定义提供商流量由浏览器直连。多人连接在开发环境经 Vite 代理，部署时由主后端的 `/multiplayer` WebSocket 转发。
+- `src/main.tsx`、`src/app/App.tsx`：启动、主题恢复、界面组合与按需加载。
+- `src/app/useGameController.ts`：持久状态、本地存储、生命周期、回调和 AI 自动化。
+- `src/domain/model.ts`、`src/domain/engine/`：领域模型与 `createGame` → `reduceGame` → `selectObservation` 数据流。
+- `src/domain/skills/`：魔女技实现；共享版型与协议契约见 `shared/gamePromptContract.js`。
+- `src/ai/`：`prompts.ts` 接收限定视角的观察，`client.ts` 请求提供商，`schemas.ts` 校验决策，`fallback.ts` 提供确定性回退。
+- `src/features/`：准备区、游戏和设置界面；组件旁放置 CSS Module，全局主题见 `src/styles/global.css`。
+- `src/storage/`：浏览器持久化、schema 与显式兼容处理。
+- `src/multiplayer/`：浏览器 WebSocket 协议与房间 hook；`multiplayer/`：独立房间服务器及持久化。
+- `server/`、`proxy/`：公益请求经主后端校验、限流，再通过 mTLS/HMAC 代理访问提供商；自定义提供商由浏览器直连。主后端也转发 `/multiplayer`。
+- `scripts/`：冒烟测试、模拟和运维工具。`public/`：PWA 资源。`dist/`：生成产物。
 
-核心不变量：
+## 修改相关代码时保留的边界
 
-- 游戏人数范围是 6–14；每个人数对应共享契约中的独立版型，由 `rolePoolForPlayerCount` 生成，具体职业构成以 `board` 和该契约为准，不要在此处写死角色数量。普通玩家 ID 从 0 连续到 `playerCount - 1`；造物（ID `99`）是运行时可能出现的额外实体，不占普通席位。按引擎和 schema 的关联约束保持实际阵容、职业、角色、技能及实体链接有效（`shared/gamePromptContract.js`、`src/domain/engine/createGame.ts`、`src/storage/gameStateSchema.ts`）。
-- 游戏逻辑的随机状态必须沿用带种子的 `rngState` 和 `src/domain/engine/random.ts`；浏览器/服务器的密码学随机数只用于明确需要的种子、会话或房间令牌等边界数据。游戏逻辑中绝不能使用 `Math.random()`。
-- 发布版本必须同步 `package.json`、`src/config/version.ts` 的回退值、Vite 注入的应用版本，以及主后端/代理配置中的 `acceptedClientVersions`（`README.md`、`vite.config.ts`、`server/main.config.example.json`、`proxy/proxy.config.example.json`）。
-- 异步 AI 工作必须保留请求键、`AbortController`、超时、销毁保护和待处理决策校验（`src/app/useGameController.ts`、`src/ai/client.ts`）。
-- 存储兼容策略以 `src/storage/browserStorage.ts` 的 schema 和显式兼容逻辑为准：新增字段优先提供默认值或可选项；无法校验的数据必须返回错误，并保留清除损坏存档的入口。不要把未经校验的数据强行当作有效状态。
+- 游戏状态通过 reducer/engine 转换。`reduceGame` 复制状态后在副本上推进，UI 不直接修改 `GameState`。提交决策沿用 `pendingDecision` 的身份和合法性校验。
+- `selectObservation` 是隐私边界。玩家只能收到其有权看到的角色、事件、知识和投票信息，包括伪造发言作者及狼队私密记录的受众限制；观战和赛后视角按现有规则处理。
+- 游戏随机性沿用 `rngState` 和 `src/domain/engine/random.ts`，不使用 `Math.random()`。密码学随机数用于种子、会话和房间令牌等边界数据。
+- 阵容以共享契约和 `rolePoolForPlayerCount` 为准。保持职业、角色、技能和实体链接有效；造物 ID `99` 是额外实体，不占普通席位。
+- 异步 AI 请求保留取消、超时、请求身份、销毁保护和待处理决策校验，防止过期结果写入新状态。
+- 外部请求、AI 决策和持久化数据沿用所在模块的 Zod schema 或显式校验函数；未经校验的数据不直接进入领域逻辑。
+- 密钥、密码、证书和私有更新材料不写入源码或日志。保留已有部署配置、证书及运行时数据。
 
-## 协作约定
+## 实现习惯
 
-- Pull request 只能由人工维护者创建和合并：**agent 不得创建、关闭或合并 PR**。Agent 可以推送功能分支并回复审查线程，但 PR 生命周期操作归负责人负责。
-- 临时工作文档（例如设计草稿、模拟报告、AI 审查记录）默认只作为本地工作笔记；需要进入仓库的正式文档按维护者要求处理。
+沿用相邻代码的 TypeScript 类型、具名导出、单引号、分号和两空格缩进。领域类型及共享契约优先复用已有定义；领域规则放在引擎，临时表单状态放在功能组件，持久状态放在控制器或领域层。优先使用标准库和浏览器原生 API，仅在能减少实际复杂度时增加抽象或依赖。
 
-## 关键目录
+界面改动复用现有 CSS token、主题和 CSS Module，保留键盘焦点与减少动画支持。这些习惯不要求对未涉及的代码统一改写。
 
-- `src/app/`：应用组合、控制器、主题/PWA、剪贴板、下载和导出适配器。
-- `src/domain/`：模型、目录/数据、确定性引擎、事件、选择器和技能。
-- `src/ai/`：提供商类型、提示词、客户端、schema、回退、诊断和设定集辅助工具。
-- `src/features/setup/`、`src/features/game/`、`src/features/settings/`：受控 React 界面；CSS Module 与组件并列存放。
-- `src/storage/`：持久化、迁移和 Zod schema。
-- `src/multiplayer/`：浏览器 WebSocket 协议和房间 hook。
-- `shared/`：浏览器/Node 契约，尤其是 `gamePromptContract.js`。
-- `server/`：公开校验、CORS、速率/并发限制、代理编排和更新。
-- `proxy/`：私有 mTLS 提供商代理、提供商/配置文件和更新。
-- `multiplayer/`：独立房间服务器和持久化房间处理。
-- `scripts/`：冒烟测试、模拟、证书生成、提供商工具和运维辅助脚本。
-- `public/`：manifest 和图标。`dist/` 为生成目录并被忽略。
+## 开发与验证
 
-## 开发命令
-
-需要 Node.js 22+ 和 npm。使用仓库已提交的 lockfile：
+使用 Node.js 22+ 和 npm，依赖按已提交的 lockfile 安装。可执行命令以 `package.json` 为准：
 
 ```bash
 npm ci
-npm run dev                    # Vite，通常为 127.0.0.1:5173
-npm run build                  # 先运行 tsc -b，再运行 vite build
-npm run preview
-npm run server:multiplayer    # 通常为 127.0.0.1:34024
-npm run server:local-ai       # 通常为 127.0.0.1:34025
-npm run server:proxy
-npm run server:main
-```
-
-常用检查：
-
-```bash
-npm run test:domain            # 知识 + 投票
+npm run dev                    # 通常为 http://127.0.0.1:5173
+npm run build                  # TypeScript 检查与 Vite 构建
+npm run test:domain            # 知识与投票
 npm run test:backend           # 离线主后端/代理集成
 npm run test:multiplayer       # 离线 WebSocket 集成
-npm run test:update             # 离线更新器/回滚
+npm run test:update            # 离线更新与回滚
 npm run test:storage
 npm run test:ai-guidance
-npm run sim -- --games 1000    # 相对 Monte Carlo 信号，不是通过/失败测试
+npm run sim -- --games 1000    # 确定性模拟，结果用于比较，不是平衡性通过标准
 py -m unittest scripts/test_verify_provider.py
 ```
 
-`npm run certs:generate` 需要 OpenSSL 并会修改证书文件；仅在本地后端配置或冒烟测试时使用。`compose.yaml` 是当前集成式 Node 22 部署配置；拆分的 `compose.main.yaml` 和 `compose.proxy.yaml` 使用旧版 `./app/...` 挂载、缺少多人服务，未经检查不得视为规范配置（`compose.yaml`、`compose.main.yaml`、`compose.proxy.yaml`）。
+- 验证范围与改动风险匹配。文档修改检查内容和差异即可；代码修改运行相关检查，跨模块改动结合构建和受影响的集成测试。无需每个 PR 跑全套或新增测试。
+- 新增回归覆盖应验证有意义的行为或失败边界，避免断言源码文本或内部拆分方式。额外技能检查见 `scripts/verify-*.mjs`，按受影响功能选择。
+- 改动界面布局或交互时，在浏览器验证受影响的桌面/移动界面。`test:visual-evidence` 只生成 JSON，不等于浏览器验证。
+- 在线 AI 测试可能消耗提供商配额，仅在任务需要且已授权时运行。离线后端测试可能需要 OpenSSL，Windows 可通过 `OPENSSL_BIN` 指定路径；不要覆盖现有线上证书。
+- 记录已运行的检查及结果；不能运行时说明原因，不把未验证说成通过。
 
-## 代码规范与常见模式
-
-- 使用严格 TypeScript：ES module、具名导出、单引号、分号、两空格缩进、`noUncheckedIndexedAccess` 和 `exactOptionalPropertyTypes`（`tsconfig.json`、`src/**/*.ts`）。
-- 在 `src/domain/model.ts` 集中定义领域类型，并使用可辨识联合。适用时从 `shared/gamePromptContract.js` 导入共享协议/目录契约。
-- 各边界都必须先解析并校验外部数据：前端存档/设置、AI 决策、服务器接收的多人消息和持久化房间状态使用 Zod；主后端与代理协议使用各自的显式校验函数。不要把未经校验的外部数据带入领域逻辑。AI 错误、无效决策、存储失败和损坏历史记录应保持为相互独立的错误类别（`src/ai/schemas.ts`、`src/multiplayer/protocol.ts`、`src/storage/`、`server/gameProtocol.mjs`）。
-- 通过 `reduceGame` 统一执行确定性的领域状态转换；它会先复制状态，领域函数只修改这份工作副本。新增规则应实现为 reducer/engine 的状态转换和结构化事件，不要写成 React 条件分支。
-- 组件采用受控模式：传递范围明确且有类型的回调；临时表单状态放在功能模块，持久状态放在控制器/领域层。
-- 组件/类型使用 PascalCase，函数/局部变量使用 camelCase，存储键/常量使用 UPPER_SNAKE_CASE。阶段/职业/技能判别值使用小写连字符字符串。
-- 优先使用浏览器原生 API，包括 localStorage、Web Crypto、WebSocket、service worker、`AbortController`、`structuredClone`、剪贴板/下载、媒体查询和尺寸观察。
-- 复用全局 CSS token/主题和 CSS Module；保留 focus-visible 无障碍行为及 `prefers-reduced-motion` 支持（`src/styles/global.css`）。
-- 后端配置采用 JSON 加环境变量名称。绝不要把 API key、密码、证书内容或私有更新材料写入源码或日志。
-
-## 重要文件
-
-- `package.json`：版本、脚本和依赖；命令以此为准。
-- `vite.config.ts`、`tsconfig.json`：构建、相对 base、service worker 生成、注入应用版本和严格编译器设置。
-- `src/main.tsx`、`src/app/App.tsx`、`src/app/useGameController.ts`：浏览器启动和应用编排。
-- `src/domain/model.ts`、`src/domain/engine/createGame.ts`、`reducer.ts`、`selectors.ts`、`random.ts`：权威状态、初始化、转换、隐私投影和确定性。
-- `src/ai/client.ts`、`prompts.ts`、`schemas.ts`：提供商边界和合法决策契约。
-- `src/storage/browserStorage.ts`、`gameStateSchema.ts`：持久化、schema、兼容归一化和不变量。
-- `src/multiplayer/protocol.ts`、`useMultiplayerRoom.ts`：WebSocket 边界。
-- `server/gameProtocol.mjs`、`server/main.mjs`、`proxy/server.mjs`：协议校验和服务路由。
-- `server/main.config.example.json`、`proxy/proxy.config.example.json`、`proxy/providers.example.json`：规范配置结构；机密信息应放在环境文件中。
-- `compose.yaml`：首选的集成部署配置。`README.md`：运维手册。`CHANGELOG.md`：面向用户的变更记录，不是命令权威来源。
-
-## 运行时/工具偏好
-
-- 使用 Node.js 22+ 和 npm；项目脚本不得改用 Bun。CI 固定使用 Node 22，并运行 `npm ci` 和 `npm run build`（`.github/workflows/release.yml`）。
-- 仓库不提交 package-manager 版本字段、`.nvmrc` 或 `.node-version`；lockfile 使用 npm lockfileVersion 3。
-- 浏览器代码依赖现代 `fetch`、`AbortController`、`structuredClone`、Web Crypto、`matchMedia`、`ResizeObserver`、`localStorage` 和 WebSocket。
-- Python 为可选工具，用于零依赖的 Tkinter 提供商验证器及其标准库单元测试。证书生成/后端冒烟配置需要 OpenSSL；Windows 上可用 `OPENSSL_BIN` 覆盖自动发现路径。
-- 前端环境变量为 `VITE_MAIN_BACKEND_ENDPOINT` 和 `VITE_MULTIPLAYER_ENDPOINT`。本地 AI 读取 `OMP_AI_CONFIG_FILE` 或 `OMP_AI_BASE_URL`、`OMP_AI_API_KEY`、`OMP_AI_MODEL`（`src/vite-env.d.ts`、`scripts/local-ai-proxy.mjs`）。
-- 将 `.env`、部署环境文件、`certs/`、提供商密钥、更新密码、mTLS 密钥和 `.runtime/` 状态视为敏感信息。保留线上配置/证书，绝不要记录机密。
-
-## 测试与质量保证
-
-- QA 当前由脚本驱动而非测试框架驱动：`.mjs` 冒烟测试使用 Vite SSR 配合 Node `assert/strict` 或本地检查；Python 使用标准库 `unittest`。目前 `package.json` 未配置 Jest/Vitest/Playwright/Cypress、lint、格式化或 coverage 命令；新增工具后以 `package.json` 为准。
-- 离线领域/存储/AI/角色扮演/投票检查包括 `knowledge-fact-smoke.mjs`、`verify-voting.mjs`、`browser-storage-smoke.mjs`、`ai-debug-report-smoke.mjs`、`verify-ai-decision-guidance.mjs`、`roleplay-resource-smoke.mjs` 和 `configurable-roster-smoke.mjs`。
-- `test:backend`、`test:multiplayer` 和 `test:update` 使用本地主机 fixture、临时目录、子进程、WebSocket 或生成的证书隔离依赖，并在结束后清理。它们覆盖协议/安全、重连、重试/回退、SSE、回滚、锁和重启信号。
-- `test:visual-evidence` 在 `.runtime/ai-evidence` 下写入 JSON；它不是浏览器自动化。修改 UI 时，运行 `npm run dev`，待动画/主题稳定后在真实浏览器中检查桌面和移动界面。
-- `test:ai-live`、`scripts/live-ai-integration-smoke.mjs` 和 `scripts/verify_provider.py` 可能发起真实网络请求并消耗提供商配额。只有在明确携带凭据并有意测试时才运行；绝不要在日志或产物中暴露密钥。
-- `npm run sim` 运行确定性的本地回退对局（默认 200 局）并报告相对结果变化；它不是平衡性通过/失败测试。
-- 部分 `scripts/verify-*.mjs` 功能检查目前没有 npm 别名，包括声音模仿、视野、漂浮、造物、点火、遗言、赛后复盘和千里眼；只有受影响行为需要时才直接运行。
-- 为变更后的可观察契约和失败边界增加针对性回归覆盖。避免测试源代码文本或偶然的实现细节。
-
-运行运维更新流程前，以仓库中实际存在的脚本、证书和部署环境文件为准，并先确认路径与权限。`package.json` 是可执行命令的权威来源；`README.md` 是运维手册，遇到冲突时以源码和配置为准。
+部署与环境变量说明见 `README.md`，集成部署优先参考 `compose.yaml`。执行运维脚本前核对实际文件和配置；文档中的现状描述可能过时，遇到冲突以源码、配置和明确的任务要求为准。

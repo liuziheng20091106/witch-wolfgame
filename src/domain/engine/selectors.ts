@@ -35,7 +35,7 @@ export function getName(state: GameState, playerId: PlayerId): string {
 }
 
 /** 把造物适配成"影子玩家"形态，使 getPlayer/getRoleAssignment 等对 99 号透明。 */
-export function creatureAsPlayer(state: GameState, creature: CreatureState): PlayerState {
+export function creatureAsPlayer(_state: GameState, creature: CreatureState): PlayerState {
   return {
     id: creature.id,
     characterId: creature.characterId,

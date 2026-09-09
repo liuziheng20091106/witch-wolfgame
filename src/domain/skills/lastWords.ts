@@ -12,10 +12,6 @@ import { getName } from '../engine/selectors';
 import { exhaustSkill } from './types';
 import { attachBrainwashSuggestion, isRestrainedToday } from './speechSkills';
 
-function nameOf(state: GameState, playerId: PlayerId): string {
-  return getName(state, playerId);
-}
-
 /**
  * 遗言资格判定（经典狼人杀规则 + 本项目魔女技修正）：
  * - 夜晚死亡：只有首夜（day 0）死亡的玩家有遗言；第二夜及之后的夜晚死亡无遗言
@@ -130,9 +126,9 @@ export function applyLastWords(state: GameState, pending: PendingDecision, decis
   }
   let text: string;
   if (speech.length > 0) {
-    text = `${nameOf(state, pending.actorId)} 的遗言：${speech}`;
+    text = `${getName(state, pending.actorId)} 的遗言：${speech}`;
   } else {
-    text = `${nameOf(state, pending.actorId)} 没有留下遗言。`;
+    text = `${getName(state, pending.actorId)} 没有留下遗言。`;
   }
   addPublicEvent(state, 'last-words', text, {
     actorPlayerId: pending.actorId,
