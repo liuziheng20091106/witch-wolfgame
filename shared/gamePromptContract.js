@@ -34,6 +34,8 @@ export const ROLE_CATALOG = freeze([
  freeze(/** @type {const} */({ id: 'wolf-king', name: '白狼王', description: '狼队头领。被放逐时，可带走一名其他存活者。', alignment: 'wolf' })),
  freeze(/** @type {const} */({ id: 'hidden-wolf', name: '隐狼', description: '隐匿于好人中的狼。被查验职业时，对方看到的结果是村民；夜里与狼队一同行动。', alignment: 'wolf' })),
  freeze(/** @type {const} */({ id: 'dodo', name: '呆头鹅', description: '中立的迷途者。若她在白天被放逐，将立即独自获胜；被狼人袭击或其他方式死亡、或活到终局，则她失败。', alignment: 'neutral' })),
+ freeze(/** @type {const} */({ id: 'mortician', name: '守墓人', description: '每夜可查验一名已死亡者的当前职业；隐狼仍显示为村民。', alignment: 'good' })),
+ freeze(/** @type {const} */({ id: 'assassin', name: '暗杀者', description: '狼队成员。整局一次，在发言结束后猜测一名其他存活者的职业，猜对则目标死亡，猜错则自己死亡；可以暂不发动。', alignment: 'wolf' })),
 ]);
 export const ROLE_IDS = freeze(ROLE_CATALOG.map((role) => role.id));
 export const ALIGNMENTS = freeze(/** @type {const} */(['wolf', 'good', 'neutral']));
@@ -59,6 +61,30 @@ export function rolePoolForPlayerCount(playerCount) {
  return freeze([...pool]);
 }
 
+/** @param {unknown} pool @param {number} playerCount @returns {string | null} */
+export function rolePoolError(pool, playerCount) {
+ if (!Number.isInteger(playerCount) || playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS) return '人数必须为 6–14 人';
+ if (!Array.isArray(pool) || pool.length !== playerCount) return `职业总数必须为 ${playerCount}`;
+ const counts = new Map();
+ let wolves = 0;
+ let neutrals = 0;
+ for (const id of pool) {
+  const role = ROLE_CATALOG.find((entry) => entry.id === id);
+  if (!role) return '包含未知职业';
+  const count = (counts.get(id) ?? 0) + 1;
+  counts.set(id, count);
+  if (id !== 'wolf' && id !== 'villager' && count > 1) return `${role.name}最多 1 名`;
+  if (role.alignment === 'wolf') wolves += 1;
+  if (role.alignment === 'neutral') neutrals += 1;
+ }
+ const minWolves = Math.max(1, Math.floor(playerCount / 3) - 1);
+ const maxWolves = Math.floor(playerCount / 3) + 1;
+ if (wolves < minWolves || wolves > maxWolves) return `狼队人数须为 ${minWolves}–${maxWolves}`;
+ if (neutrals > 1) return '中立职业最多 1 名';
+ if (wolves >= playerCount - wolves - neutrals) return '开局好人人数必须多于狼人';
+ return null;
+}
+
 /** @param {ReadonlyArray<(typeof ROLE_IDS)[number]>} rolePool */
 export function formatBoardDescription(rolePool) {
  const counts = new Map();
@@ -75,14 +101,24 @@ export const BOARD_DESCRIPTION = formatBoardDescription(BOARD_ROLE_POOL);
 
 /** @param {unknown} board */
 export function isValidBoardDescription(board) {
- if (typeof board !== 'string') return false;
- for (let playerCount = MIN_PLAYERS; playerCount <= MAX_PLAYERS; playerCount += 1) {
-  if (board === formatBoardDescription(rolePoolForPlayerCount(playerCount))) return true;
+ if (typeof board !== 'string' || board.length > 300) return false;
+ const match = /^(\d{1,2})人局：(.+)$/.exec(board);
+ if (!match || !match[2]) return false;
+ const pool = [];
+ const seen = new Set();
+ for (const part of match[2].split('、')) {
+  const entry = /^(.+)×([1-9]\d?)$/.exec(part);
+  if (!entry) return false;
+  const role = ROLE_CATALOG.find((role) => role.name === entry[1]);
+  if (!role || seen.has(role.id) || Number(entry[2]) > MAX_PLAYERS) return false;
+  seen.add(role.id);
+  pool.push(...Array(Number(entry[2])).fill(role.id));
  }
- return false;
+ return rolePoolError(pool, Number(match[1])) === null;
 }
 
 export const GAME_PHASES = freeze(/** @type {const} */([
+ 'role-draft',
  'first-night',
  'night-skills',
  'wolf-suggestions',
@@ -103,6 +139,8 @@ export const GAME_PHASES = freeze(/** @type {const} */([
 ]));
 
 export const DECISION_EXAMPLES = freeze(/** @type {const} */({
+ 'role-draft': '{"roleId":null}',
+ assassin: '{"targetPlayerId":null,"guessedRoleId":null}',
  speech: '{"speech":"我会根据公开记录继续判断。"}',
  target: '{"targetPlayerId":2}',
  'wolf-council': '{"message":"我建议袭击3号。她的公开判断最可能威胁狼队。","recommendedTargetPlayerId":2}',
@@ -115,6 +153,9 @@ export const DECISION_EXAMPLES = freeze(/** @type {const} */({
 }));
 export const DECISION_SCHEMA_KEYS = freeze(/** @type {Array<keyof typeof DECISION_EXAMPLES>} */(Object.keys(DECISION_EXAMPLES)));
 export const DECISION_KIND_SCHEMAS = freeze(/** @type {const} */({
+ 'role-draft': freeze(/** @type {const} */(['role-draft'])),
+ 'mortician-action': freeze(/** @type {const} */(['target'])),
+ 'assassin-action': freeze(/** @type {const} */(['assassin'])),
  skill: freeze(/** @type {const} */(['target', 'optional-target', 'liquid-control', 'levitation', 'voice-mimic', 'ignition'])),
  'wolf-suggestion': freeze(/** @type {const} */(['target', 'wolf-council'])),
  'guard-action': freeze(/** @type {const} */(['target'])),
@@ -151,7 +192,7 @@ export const CHARACTER_IDS = freeze(CHARACTER_CATALOG.map((character) => charact
 export const WITCH_SKILL_CATALOG = freeze([
  freeze({ id: 'witch-killer', name: '魔女杀手', description: '每局一次，夜间指定一名无法被解药或治愈保护的目标。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
  freeze({ id: 'death-rewind', name: '死亡回溯', description: '首次死亡时回到当日发言前，旧时间线会在赛后完整记录中揭晓。', timings: freeze(/** @type {const} */(['on-death'])), usage: 'passive' }),
- freeze({ id: 'brainwash', name: '洗脑', description: '每天可发动一次：当天发言须含【1~6字】内容，作为强提示词影响其他玩家。', timings: freeze(/** @type {const} */(['before-speech'])), usage: 'once' }),
+ freeze({ id: 'brainwash', name: '洗脑', description: '整局一次：当天发言须含【1~6字】内容，通过言语暗示影响其他玩家的判断。', timings: freeze(/** @type {const} */(['before-speech'])), usage: 'once' }),
  freeze({ id: 'liquid-control', name: '操控液体', description: '每局一次，夜间用液体创造诺亚的造物：造物绑定当前主人（初始为诺亚），与主人始终共享同一基础职业与阵营（不继承魔女技），双方明确知道这一身份关系；造物可独立行动但投票跟随主人，使用者可选择给它解药或毒药。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
  freeze({ id: 'speech-restrain', name: '怪力', description: '使用怪力将一名玩家按在椅子上，使其本轮不能发言。', timings: freeze(/** @type {const} */(['day-start'])), usage: 'once' }),
  freeze({ id: 'levitation', name: '漂浮', description: '每局一次，夜间发动隐藏自己的脚印：直到第二天白天结束，你的行动不留任何可追溯记录，也无法被选中（女巫药、灵魂交换等失效）。', timings: freeze(/** @type {const} */(['night-start'])), usage: 'once' }),
@@ -239,8 +280,10 @@ export const INVALID_GAME_REQUEST_MESSAGE = '提示词不是当前程序生成�
  */
 export function buildGameSystemPrompt(schemaKey) {
  if (!Object.hasOwn(DECISION_EXAMPLES, schemaKey)) throw new Error(`未知提示词响应契约：${String(schemaKey)}`);
-  const base = `你是魔女狼人杀（6-14 人）的玩家，按角色人格行动，只依据观察决定，不得假设隐藏身份或继承原作剧情。基础职业（狼人/守卫/猎人/预言家/女巫/村民/白狼王/隐狼/呆头鹅）与魔女技互相独立，均以观察中的当前状态为准。胜负：狼人全部出局则好人胜；存活狼人不少于存活好人则狼胜；呆头鹅（中立）被白天放逐则独自获胜，其他结局她失败。所有角色均为女性，不得改变性别。编号：playerId 从 0 起，座位号=playerId+1；所有列表中的数字均为 playerId，正文引用玩家必须写“座位号+姓名”。隐私：privateEvents 只能按受众标签使用，未列明受众的事实不可用；结论必须区分“已知”“公开声称”“推测”。角色卡边界：actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；“名字+亲”是泽渡可可的专属口癖。若 options.postGame 为 true，finalRoles 是最终身份唯一来源。publicVotes 由官方客户端仅从已经公开揭晓的已提交投票记录构成。privateEvents 标签：\`【仅当前行动者可见；受众：...】\`只表示当前提示词行动者可知的事实；\`【狼队共享记录；受众：...】\`表示狼人内部频道共享事实；\`【相关角色共享；受众：...】\`表示与标签中明确列出的受众共享的私密事实。存活不证明行动者知道自己被袭击、被解药救回或受到治愈保护；他人的“银水”是公开证据/声称，不是行动者的私密记忆；直接提供的行动者本人千里眼或其他行动结果是确定的个人事实。legalCandidates 是唯一合法目标集合，非 null 目标必须取自其中；allowAbstain 为 false 时不得弃权。`;
+  const base = `你是魔女狼人杀（6-14 人）的玩家，按角色人格行动，只依据观察决定，不得假设隐藏身份或继承原作剧情。基础职业（${ROLE_CATALOG.map((role) => role.name).join('/')}）与魔女技互相独立，均以观察中的当前状态为准。胜负：狼人全部出局则好人胜；存活狼人不少于存活好人则狼胜；呆头鹅（中立）被白天放逐则独自获胜，其他结局她失败。所有角色均为女性，不得改变性别。编号：playerId 从 0 起，座位号=playerId+1；所有列表中的数字均为 playerId，正文引用玩家必须写“座位号+姓名”。隐私：privateEvents 只能按受众标签使用，未列明受众的事实不可用；结论必须区分“已知”“公开声称”“推测”。角色卡边界：actor.personality 由当前角色的静态演绎卡与根据当前决策信号检索的动态演绎上下文组成；动态内容只提供行为指导或原作旧背景，不新增本局事实。actor.speechStyle 是静态卡的声音指纹；“名字+亲”是泽渡可可的专属口癖。若 options.postGame 为 true，finalRoles 是最终身份唯一来源。publicVotes 由官方客户端仅从已经公开揭晓的已提交投票记录构成。privateEvents 标签：\`【仅当前行动者可见；受众：...】\`只表示当前提示词行动者可知的事实；\`【狼队共享记录；受众：...】\`表示狼人内部频道共享事实；\`【相关角色共享；受众：...】\`表示与标签中明确列出的受众共享的私密事实。存活不证明行动者知道自己被袭击、被解药救回或受到治愈保护；他人的“银水”是公开证据/声称，不是行动者的私密记忆；直接提供的行动者本人千里眼或其他行动结果是确定的个人事实。legalCandidates 是唯一合法目标集合，非 null 目标必须取自其中；allowAbstain 为 false 时不得弃权。`;
  let hint = '';
+ if (schemaKey === 'role-draft') hint += ` 尚未确定职业或阵营。roleId 必须来自 options.roleIds，或为 null 以随机抽取剩余职业；不得根据隐藏分配推断他人身份。职业目录：${ROLE_CATALOG.map((role) => `${role.id}（${role.name}，${role.alignment}）：${role.description}`).join('；')}`;
+ if (schemaKey === 'assassin') hint += ' 暂不发动时 targetPlayerId 和 guessedRoleId 均为 null；发动时目标取自 legalCandidates，职业取自 options.roleIds。猜错自己死亡，无可靠职业信息时应保留机会。';
  if (schemaKey === 'wolf-council') {
   hint += ` 这是仅狼队可见的内部议事。message 不超过 ${WOLF_COUNCIL_PROMPT_MAX_LENGTH} 字，推荐目标须来自 legalCandidates 且与 message 中的人物一致；袭击目标必在队外，理由从威胁收益出发，不得用“她可能是狼”等好人句式。`;
  }

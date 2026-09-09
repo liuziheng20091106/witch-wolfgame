@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS } from '../../shared/gamePromptContract.js';
+import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS, ROLE_IDS } from '../../shared/gamePromptContract.js';
 import { APP_VERSION } from '../config/version';
-import type { CharacterId, GameMode, GameState, PlayerId, RewindSnapshot } from '../domain/model';
+import type { CharacterId, GameMode, GameState, PlayerId, RewindSnapshot, RosterOptions } from '../domain/model';
 import type { AiProviderConfig } from '../ai/types';
 import { gameStateSchema } from './gameStateSchema';
 
@@ -23,7 +23,7 @@ export const defaultThemeSettings: ThemeSettings = {
   judgmentMode: false,
 };
 
-export interface SetupPreferences {
+export interface SetupPreferences extends RosterOptions {
   mode: GameMode;
   humanCharacterId: CharacterId | null;
   playerCount: number;
@@ -88,13 +88,15 @@ const legacySettingsSchema = z.object({
   reasoningEffort: reasoningEffortSchema.default('low'),
 }).passthrough();
 const setupSchema = z.strictObject({
+  rolePool: z.array(z.enum(ROLE_IDS)).max(MAX_PLAYERS).optional(),
+  assignmentMode: z.enum(['classic', 'draft']).default('classic'),
   mode: z.enum(['spectator', 'player']),
   humanCharacterId: z.enum(CHARACTER_IDS).nullable(),
   playerCount: z.number().int().min(MIN_PLAYERS).max(MAX_PLAYERS).default(MIN_PLAYERS),
   selectedCharacterIds: z.array(z.enum(CHARACTER_IDS)).max(MAX_PLAYERS).default([]),
   seed: z.number().int().min(0).max(0xffff_ffff),
   randomSeed: z.boolean().default(true),
-});
+}).transform(({ rolePool, ...value }) => rolePool === undefined ? value : { ...value, rolePool });
 const envelopeSchema = z.strictObject({
   schemaVersion: z.literal(1),
   appVersion: z.string().trim().min(1).max(64).nullable().default(null),

@@ -16,6 +16,7 @@ export const roleAlignment = Object.fromEntries(
 
 /** 按职业初始化资源（女巫药瓶 / 猎人子弹 / 白狼王扳机）。 */
 export function initialRoleResources(roleId: RoleId): RoleResources {
+  if (roleId === 'assassin') return { assassination: 1 };
   if (roleId === 'witch') return { antidote: 1, poison: 1 };
   if (roleId === 'hunter') return { hunterShot: 1 };
   if (roleId === 'wolf-king') return { wolfKingShot: 1 };

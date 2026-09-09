@@ -332,7 +332,7 @@ export function buildDecisionPrompt(request: AiDecisionRequest, provider: AiProv
       if (!potion) throw new Error(`未知药水候选：${playerId}`);
       return { playerId, name: potion.name };
     }
-    const player = observation.players.find((entry) => entry.id === playerId);
+    const player = entityRoster.find((entry) => entry.id === playerId);
     const name = player?.name ?? `${playerId + 1}号`;
     return { playerId, name };
   });

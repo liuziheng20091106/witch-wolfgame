@@ -43,6 +43,8 @@
   font-weight: 900;
 }
 
+.headerActions { display: flex; gap: 8px; }
+
 .settingsButton {
   min-height: 46px;
   display: inline-flex;

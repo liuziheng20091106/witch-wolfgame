@@ -2,7 +2,7 @@ import { Archive, Bot, ChevronDown, Copy, Gavel, Info, List, LoaderCircle, Rotat
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AiCommandError } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
-import { roleDescriptions, roleNames } from '../../domain/catalog/roles';
+import { roleAlignment, roleDescriptions, roleNames } from '../../domain/catalog/roles';
 import { witchSkillDefinitions } from '../../domain/catalog/witchSkills';
 import { isCreatureId } from '../../domain/engine/selectors';
 import type { GameObservation, PlayerId, SubmittedDecision } from '../../domain/model';
@@ -24,6 +24,7 @@ interface GameViewProps {
   onRetry(): void;
   onLocal(): void;
   onSettings(): void;
+  onReference(): void;
   onPaused(paused: boolean): void;
   onRestart(): void;
   onContinueRound(): void;
@@ -32,6 +33,7 @@ interface GameViewProps {
 }
 
 const phaseNames: Record<GameObservation['phase'], string> = {
+  'role-draft': '顺序选职',
   'first-night': '首夜', 'night-skills': '夜间·魔女们正在行动', 'wolf-suggestions': '狼人正在密议...', 'wolf-decision': '狼人正在准备袭击...',
   'witch-action': '女巫正在行动...', 'seer-action': '预言家正在行动...', 'night-protection': '选择夜间保护...', 'night-resolution': '正在结算夜间行动...',
   dawn: '黎明', 'day-skills': '白天·魔女们正在行动', speeches: '魔女们正在发言', 'vote-skills': '即将投票...', voting: '正在投票...',
@@ -52,14 +54,7 @@ function viewerResultText(observation: GameObservation): string {
     return '对局详细已揭晓~';
   }
   const viewerRole = observation.players.find((player) => player.id === observation.viewerPlayerId)?.roleId;
-  let viewerFaction: 'wolf' | 'good' | 'neutral' | null = null;
-  if (viewerRole === 'wolf' || viewerRole === 'wolf-king' || viewerRole === 'hidden-wolf') {
-    viewerFaction = 'wolf';
-  } else if (viewerRole === 'dodo') {
-    viewerFaction = 'neutral';
-  } else if (viewerRole !== null) {
-    viewerFaction = 'good';
-  }
+  const viewerFaction = viewerRole ? roleAlignment[viewerRole] : null;
   const viewerWin = viewerFaction === observation.result.winner;
   return `你的阵营${viewerWin ? '获胜' : '失败'}。`;
 }
@@ -187,7 +182,7 @@ export function GameView(props: GameViewProps) {
   return <main ref={gameRef} className={`${styles.game} ${mobileChromeHidden ? styles.gameChromeHidden : ''} ${decisionPanelVisible ? styles.decisionPanelVisible : ''}`}>
     <header className={`${styles.topbar} ${chromeClass}`}>
       <div className={styles.brand}><img src={brandMark} alt="魔女狼人杀" /></div>
-      <div className={styles.phase}><small>{observation.roundNumber > 1 ? `ROUND ${String(observation.roundNumber).padStart(2, '0')} · ` : ''}{observation.day === 0 ? 'FIRST NIGHT' : `DAY ${String(observation.day).padStart(2, '0')}`}</small><strong>{phaseNames[observation.phase]}</strong></div>
+      <div className={styles.phase}><small>{observation.roundNumber > 1 ? `ROUND ${String(observation.roundNumber).padStart(2, '0')} · ` : ''}{observation.phase === 'role-draft' ? 'ROLE DRAFT' : observation.day === 0 ? 'FIRST NIGHT' : `DAY ${String(observation.day).padStart(2, '0')}`}</small><strong>{phaseNames[observation.phase]}</strong></div>
       <div className={styles.seedDisplay}><span>{seedCopyStatus === 'copied' ? '已复制' : seedCopyStatus === 'failed' ? '复制失败' : `种子 ${observation.seed}`}</span><button type="button" title="复制本局种子" aria-label={seedCopyStatus === 'failed' ? '复制本局种子失败' : '复制本局种子'} onClick={() => { void copySeed(); }}><Copy /></button></div>
     </header>
     <nav className={`${styles.mobileTabs} ${chromeClass}`} aria-label="游戏视图">
@@ -199,7 +194,7 @@ export function GameView(props: GameViewProps) {
       <div className={`${styles.rosterPane} ${chromeClass}`}><PlayerRoster observation={observation} currentActorId={activeActorId} onSelect={setSelectedPlayerId} /></div>
       <div className={styles.livePane}><Transcript observation={observation} phaseLabel={phaseNames[observation.phase]} onFollowingChange={setFollowingLatestMessage} /></div>
       <aside ref={sidePaneRef} className={`${styles.sidePane} ${chromeClass}`}>
-        <GameControls paused={props.paused} onPaused={props.onPaused} onSettings={props.onSettings} onRestart={() => setConfirmRestart(true)} onExit={props.onExit} />
+        <GameControls paused={props.paused} onPaused={props.onPaused} onSettings={props.onSettings} onReference={props.onReference} onRestart={() => setConfirmRestart(true)} onExit={props.onExit} />
         <DecisionPanel observation={observation} aiError={props.aiError} awaitingRetry={props.awaitingRetry} thinking={props.thinking} decisionError={props.decisionError} onSubmit={props.onSubmit} onRetry={props.onRetry} onLocal={props.onLocal} onSettings={props.onSettings} />
         {observation.omniscient
           ? <section className={`${styles.intel} ${styles.desktopHistory}`} aria-labelledby="desktop-history-title">

@@ -7,6 +7,7 @@ import { getNextLastWordsDecision } from '../skills/lastWords';
 import { getNextShotDecision } from './retaliation';
 
 function sourceLabel(source: string): string {
+  if (source === 'assassination') return '暗杀';
   if (source === 'wolf') return '狼人袭击';
   if (source === 'poison') return '女巫毒药';
   if (source === 'hunter-gun') return '猎人之枪';

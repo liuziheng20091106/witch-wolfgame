@@ -1,0 +1,18 @@
+.editor { margin: 20px 0; min-width: 0; font-family: var(--sans); letter-spacing: 0; }
+.heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.heading h3 { margin: 0; font-size: 18px; }
+.heading small { color: var(--muted); font-size: 13px; font-weight: 400; }
+.editor button { border: 1px solid var(--line-strong); background: var(--paper-bright); color: var(--ink); border-radius: 4px; }
+.editor button:disabled { opacity: .35; cursor: default; }
+.heading button, .role button { display: grid; place-items: center; width: 34px; height: 34px; padding: 6px; flex: none; }
+.editor svg { width: 17px; height: 17px; }
+.modes { display: flex; margin: 12px 0; gap: 8px; }
+.modes button { min-height: 40px; padding: 8px 16px; }
+.modes button[aria-pressed=true] { background: var(--intel-dark); color: var(--paper-bright); }
+.roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 20px; }
+.role { display: grid; grid-template-columns: minmax(65px, 1fr) 34px 30px 34px; align-items: center; gap: 4px; min-height: 50px; border-bottom: 1px solid var(--line); }
+.role>span { border-left: 3px solid var(--intel); padding-left: 8px; }
+.role[data-alignment=wolf]>span { border-color: var(--verdict); }
+.role[data-alignment=neutral]>span { border-color: var(--muted); }
+.role output { text-align: center; font-variant-numeric: tabular-nums; }
+.error { color: var(--verdict-dark); font-size: 13px; }
