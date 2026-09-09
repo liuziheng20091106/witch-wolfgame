@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SPEECH_MAX_LENGTH, VOICE_MIMIC_MAX_LENGTH, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../shared/gamePromptContract.js';
+import { ROLE_IDS, SPEECH_MAX_LENGTH, VOICE_MIMIC_MAX_LENGTH, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../shared/gamePromptContract.js';
 import type { PendingDecision, PlayerId, SpeechDecision, SubmittedDecision, WitchDecision } from '../domain/model';
 import { AiCommandError } from './types';
 
@@ -63,6 +63,8 @@ export const voiceMimicDecisionSchema = z.object({
 export const ignitionDecisionSchema = z.object({ use: z.boolean() });
 
 const schemaByKey = {
+  'role-draft': z.object({ roleId: z.enum(ROLE_IDS).nullable() }),
+  assassin: z.object({ targetPlayerId: z.number().int().nullable(), guessedRoleId: z.enum(ROLE_IDS).nullable() }).refine((value) => (value.targetPlayerId === null) === (value.guessedRoleId === null), '暗杀目标与职业必须同时选择'),
   speech: speechDecisionSchema,
   target: targetDecisionSchema,
   'wolf-council': wolfCouncilDecisionSchema,
@@ -154,6 +156,11 @@ function validateWitchDecision(pending: PendingDecision, decision: SubmittedDeci
 
 function validateDecisionTargets(pending: PendingDecision, decision: SubmittedDecision): void {
   const record = decision as unknown as Record<string, unknown>;
+  for (const key of ['roleId', 'guessedRoleId']) {
+    if (record[key] !== null && record[key] !== undefined && (!Array.isArray(pending.options.roleIds) || !pending.options.roleIds.includes(record[key] as string))) {
+      throw new AiCommandError('target', '职业不在候选中');
+    }
+  }
   for (const key of ['targetPlayerId', 'poisonTargetPlayerId', 'recommendedTargetPlayerId']) {
     const value = record[key];
     if (value !== null && value !== undefined && !pending.candidates.includes(value as PlayerId)) {

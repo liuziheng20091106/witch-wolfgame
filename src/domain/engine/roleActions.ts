@@ -11,6 +11,9 @@ import { applyPostGameSpeech } from '../skills/postGame';
 import { withFactionStrategyGuidance } from '../skills/decisionGuidance';
 import { addExileIntent } from './voting';
 import { resolveDeathBatch } from './night';
+import { applyDraftDecision } from './roleDraft';
+import { applyAssassinDecision, applyMorticianDecision } from './specialRoles';
+import type { AssassinDecision, DraftDecision } from '../model';
 
 function hasPrivateAction(state: GameState, kind: string, actorId: PlayerId): boolean {
   return state.privateEvents.some(
@@ -296,6 +299,9 @@ function validateWolfCouncilDecision(
 
 
 export function applyRoleDecision(state: GameState, pending: PendingDecision, decision: SubmittedDecision): GameState {
+  if (pending.kind === 'role-draft') return applyDraftDecision(state, pending, decision as DraftDecision);
+  if (pending.kind === 'mortician-action') return applyMorticianDecision(state, pending, decision as TargetDecision);
+  if (pending.kind === 'assassin-action') return applyAssassinDecision(state, pending, decision as AssassinDecision);
   if (pending.kind === 'speech') {
     if (pending.options.postGame === true) {
       // 赛后复盘：全员可见的赛后发言，不参与局内发言校验

@@ -9,6 +9,8 @@ import {
   PLAYER_IDS,
   ROLE_IDS,
   WITCH_SKILL_IDS,
+  rolePoolError,
+  formatBoardDescription,
 } from '../../shared/gamePromptContract.js';
 import type { PlayerId } from '../domain/model';
 
@@ -18,6 +20,13 @@ const roleIdSchema = z.enum(ROLE_IDS);
 const skillIdSchema = z.enum(WITCH_SKILL_IDS);
 
 export const gameStateSchema = z.object({
+  rolePool: z.array(roleIdSchema).min(MIN_PLAYERS).max(MAX_PLAYERS).optional(),
+  assignmentMode: z.enum(['classic', 'draft']).default('classic'),
+  roleDraft: z.object({
+    order: z.array(regularPlayerIdSchema).min(MIN_PLAYERS).max(MAX_PLAYERS),
+    selectedPlayerIds: z.array(regularPlayerIdSchema).max(MAX_PLAYERS),
+    remainingRoles: z.array(roleIdSchema).max(MAX_PLAYERS),
+  }).nullable().default(null),
   schemaVersion: z.literal(1),
   gameId: z.string().min(1),
   seriesId: z.string().min(1).optional(),
@@ -42,7 +51,7 @@ export const gameStateSchema = z.object({
   })).min(MIN_PLAYERS).max(MAX_PLAYERS),
   roleAssignments: z.array(z.object({
     id: z.string(), ownerPlayerId: playerIdSchema, roleId: roleIdSchema,
-    resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional(), hunterShot: z.union([z.literal(0), z.literal(1)]).optional(), wolfKingShot: z.union([z.literal(0), z.literal(1)]).optional(), lastGuardNight: z.number().int().min(0).optional(), lastGuardTargetPlayerId: playerIdSchema.optional() }),
+    resources: z.object({ assassination: z.union([z.literal(0), z.literal(1)]).optional(), antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional(), hunterShot: z.union([z.literal(0), z.literal(1)]).optional(), wolfKingShot: z.union([z.literal(0), z.literal(1)]).optional(), lastGuardNight: z.number().int().min(0).optional(), lastGuardTargetPlayerId: playerIdSchema.optional() }),
   })).min(MIN_PLAYERS).max(MAX_PLAYERS + 1),
   skillInstances: z.array(z.object({
     id: z.string(), definitionId: skillIdSchema, ownerPlayerId: playerIdSchema,
@@ -55,7 +64,7 @@ export const gameStateSchema = z.object({
     characterId: z.enum(CHARACTER_IDS),
     roleAssignmentId: z.string(),
     alive: z.boolean(),
-    resources: z.object({ antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional(), hunterShot: z.union([z.literal(0), z.literal(1)]).optional(), wolfKingShot: z.union([z.literal(0), z.literal(1)]).optional(), lastGuardNight: z.number().int().min(0).optional(), lastGuardTargetPlayerId: playerIdSchema.optional() }),
+    resources: z.object({ assassination: z.union([z.literal(0), z.literal(1)]).optional(), antidote: z.union([z.literal(0), z.literal(1)]).optional(), poison: z.union([z.literal(0), z.literal(1)]).optional(), hunterShot: z.union([z.literal(0), z.literal(1)]).optional(), wolfKingShot: z.union([z.literal(0), z.literal(1)]).optional(), lastGuardNight: z.number().int().min(0).optional(), lastGuardTargetPlayerId: playerIdSchema.optional() }),
   })).default([]),
   speechOrder: z.array(regularPlayerIdSchema).min(MIN_PLAYERS).max(MAX_PLAYERS),
   publicEvents: z.array(z.unknown()),
@@ -67,6 +76,19 @@ export const gameStateSchema = z.object({
   causalLocks: z.array(z.string()),
   result: z.unknown().nullable(),
 }).superRefine((state, context) => {
+  if (state.rolePool && (rolePoolError(state.rolePool, state.players.length) !== null || state.board !== formatBoardDescription(state.rolePool))) context.addIssue({ code: 'custom', message: '自定义版型不合法或与描述不一致' });
+  if ((state.phase === 'role-draft') !== (state.roleDraft !== null)) context.addIssue({ code: 'custom', message: '轮抽阶段与状态不一致' });
+  if (state.roleDraft) {
+    const draft = state.roleDraft;
+    if (state.assignmentMode !== 'draft' || !state.rolePool || draft.order.length !== state.players.length
+      || new Set(draft.order).size !== state.players.length || draft.order.some((id) => !state.players.some((player) => player.id === id))
+      || draft.selectedPlayerIds.some((id, index) => id !== draft.order[index])
+      || draft.remainingRoles.length + draft.selectedPlayerIds.length !== state.players.length) context.addIssue({ code: 'custom', message: '轮抽顺序或人数不一致' });
+    const remaining = state.roleAssignments.filter((entry) => !draft.selectedPlayerIds.includes(entry.ownerPlayerId as Exclude<PlayerId, 99>)).map((entry) => entry.roleId).sort();
+    if (JSON.stringify(remaining) !== JSON.stringify([...draft.remainingRoles].sort())) context.addIssue({ code: 'custom', message: '轮抽剩余职业不一致' });
+    if (state.day !== 0 || state.creatures.length !== 0 || state.morningCheckpoint !== null
+      || JSON.stringify(state.roleAssignments.map((entry) => entry.roleId).sort()) !== JSON.stringify([...(state.rolePool ?? [])].sort())) context.addIssue({ code: 'custom', message: '轮抽开局配置不一致' });
+  }
   const expectedPlayerIds = Array.from({ length: state.players.length }, (_, index) => index);
   const actualPlayerIds = state.players.map((player) => player.id).sort((left, right) => left - right);
   const playerIds = new Set(state.players.map((player) => player.id));
@@ -77,7 +99,9 @@ export const gameStateSchema = z.object({
   if (actualPlayerIds.some((id, index) => id !== expectedPlayerIds[index])) context.addIssue({ code: 'custom', message: '玩家席位必须从 0 连续排列' });
   if (new Set(state.players.map((player) => player.characterId)).size !== state.players.length) context.addIssue({ code: 'custom', message: '玩家角色重复' });
   if (new Set(state.roleAssignments.map((assignment) => assignment.id)).size !== state.roleAssignments.length || new Set(state.roleAssignments.map((assignment) => assignment.ownerPlayerId)).size !== state.roleAssignments.length) context.addIssue({ code: 'custom', message: '职业分配重复' });
-  if (new Set(state.skillInstances.map((skill) => skill.id)).size !== state.skillInstances.length || new Set(state.skillInstances.map((skill) => skill.ownerPlayerId)).size !== state.skillInstances.length) context.addIssue({ code: 'custom', message: '技能实例重复' });
+  // 回收后保留已耗尽的回收技能记录，同一所有者可以同时拥有该记录和当前技能。
+  const activeSkills = state.skillInstances.filter((skill) => skill.status !== 'exhausted');
+  if (new Set(state.skillInstances.map((skill) => skill.id)).size !== state.skillInstances.length || new Set(activeSkills.map((skill) => skill.ownerPlayerId)).size !== activeSkills.length) context.addIssue({ code: 'custom', message: '技能实例重复' });
   if (state.roleAssignments.length !== state.players.length + state.creatures.length) context.addIssue({ code: 'custom', message: '职业数量与实体不一致' });
   for (const player of state.players) {
     const assignment = state.roleAssignments.find((entry) => entry.id === player.roleAssignmentId);

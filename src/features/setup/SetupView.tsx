@@ -1,5 +1,5 @@
-import { Bot, Check, ChevronRight, Copy, Eye, Minus, Play, Plus, Settings, Trash2, TriangleAlert, UserRound } from 'lucide-react';
-import { MAX_PLAYERS, MIN_PLAYERS } from '../../../shared/gamePromptContract.js';
+import { BookOpen, Bot, Check, ChevronRight, Copy, Eye, Minus, Play, Plus, Settings, Trash2, TriangleAlert, UserRound } from 'lucide-react';
+import { MAX_PLAYERS, MIN_PLAYERS, rolePoolError, rolePoolForPlayerCount } from '../../../shared/gamePromptContract.js';
 import { useState } from 'react';
 import type { AiProviderConfig } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
@@ -10,6 +10,7 @@ import { getSavedGameCompatibilityWarning, type GameHistoryEntry, type SavedGame
 import brandMark from '../../assets/icon.ico';
 import type { MultiplayerController } from '../../multiplayer/useMultiplayerRoom';
 import { MultiplayerLobby } from './MultiplayerLobby';
+import { RosterEditor } from './RosterEditor';
 import styles from './SetupView.module.css';
 
 function winnerLabel(winner: GameHistoryEntry['winner']): string {
@@ -28,6 +29,7 @@ interface SetupViewProps {
   multiplayer: MultiplayerController;
   onUpdateSetup(setup: SetupPreferences): void;
   onOpenSettings(): void;
+  onOpenReference(): void;
   onContinue(): void;
   onStart(): void;
   onClearHistory(): void;
@@ -46,14 +48,14 @@ function hasUsableSettings(settings: AiProviderConfig): boolean {
   }
 }
 
-export function SetupView({ settings, setup, history, historyError, savedGame, storageError, multiplayer, onUpdateSetup, onOpenSettings, onContinue, onStart, onClearHistory, onDiscard }: SetupViewProps) {
+export function SetupView({ settings, setup, history, historyError, savedGame, storageError, multiplayer, onUpdateSetup, onOpenSettings, onOpenReference, onContinue, onStart, onClearHistory, onDiscard }: SetupViewProps) {
   const [confirming, setConfirming] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copiedSeed, setCopiedSeed] = useState<number | null>(null);
   const customRosterComplete = setup.selectedCharacterIds.length === 0 || setup.selectedCharacterIds.length === setup.playerCount;
   const humanCharacterReady = setup.mode === 'spectator'
     || (setup.humanCharacterId !== null && (setup.selectedCharacterIds.length === 0 || setup.selectedCharacterIds.includes(setup.humanCharacterId)));
-  const ready = hasUsableSettings(settings) && customRosterComplete && humanCharacterReady;
+  const ready = hasUsableSettings(settings) && customRosterComplete && humanCharacterReady && rolePoolError(setup.rolePool ?? rolePoolForPlayerCount(setup.playerCount), setup.playerCount) === null;
   const savedLabel = savedGame
     ? `${savedGame.state.day === 0 ? '首夜' : `第 ${savedGame.state.day} 天`} · ${savedGame.state.phase === 'ended' || savedGame.state.phase === 'post-game' ? '已结束' : '进行中'}`
     : null;
@@ -77,7 +79,8 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
     const humanCharacterId = setup.humanCharacterId && selectedCharacterIds.length > 0 && !selectedCharacterIds.includes(setup.humanCharacterId)
       ? null
       : setup.humanCharacterId;
-    onUpdateSetup({ ...setup, playerCount: boundedCount, selectedCharacterIds, humanCharacterId });
+    const { rolePool: _pool, ...rest } = setup;
+    onUpdateSetup({ ...rest, playerCount: boundedCount, selectedCharacterIds, humanCharacterId });
   };
   const copySeed = async (seed: number) => {
     try {
@@ -106,7 +109,10 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
       <header className={styles.masthead}>
         <div className={styles.brandLockup}><img className={styles.brandMark} src={brandMark} alt="" /><div><span>MAJO WOLF / CASE SYSTEM</span><strong>魔女狼人杀</strong></div></div>
         <p>在封闭审判中观察证言、身份与魔法留下的裂痕。</p>
-        <button className={styles.settingsButton} type="button" onClick={onOpenSettings}><Settings />设置</button>
+        <div className={styles.headerActions}>
+          <button className={styles.settingsButton} type="button" onClick={onOpenReference} aria-label="职业与魔法图鉴" title="职业与魔法图鉴"><BookOpen />图鉴</button>
+          <button className={styles.settingsButton} type="button" onClick={onOpenSettings} aria-label="设置" title="设置"><Settings />设置</button>
+        </div>
       </header>
 
       <section className={styles.commandBand} aria-labelledby="setup-title">
@@ -134,6 +140,12 @@ export function SetupView({ settings, setup, history, historyError, savedGame, s
         </div>
       </section>
 
+      <section className={styles.characterSection} aria-label="职业版型">
+        <RosterEditor playerCount={setup.playerCount} value={setup} onChange={(value) => {
+          const { rolePool: _pool, ...rest } = setup;
+          onUpdateSetup({ ...rest, ...value });
+        }} />
+      </section>
       <section className={styles.characterSection} aria-labelledby="character-title">
         <div className={styles.sectionHeading}><div><span>CAST SELECTION</span><h2 id="character-title">配置出庭阵容</h2></div><p>{setup.selectedCharacterIds.length === 0 ? `当前使用种子随机选择 ${setup.playerCount} 人` : `已选择 ${setup.selectedCharacterIds.length} / ${setup.playerCount} 人`}{setup.mode === 'player' ? '；先将角色加入阵容，再点击角色卡下方独立的「设为我的角色」按钮认领席位。' : '。'}</p></div>
         <div className={styles.characterGrid}>

@@ -4,7 +4,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import { z } from 'zod';
-import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS, PLAYER_IDS } from '../shared/gamePromptContract.js';
+import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS, PLAYER_IDS, ROLE_IDS, rolePoolError } from '../shared/gamePromptContract.js';
 import { requestDecision } from '../src/ai/client.js';
 import { FREE_PROVIDER_ENDPOINT, type FreeAiProviderConfig } from '../src/ai/types.js';
 import { fallbackDecision } from '../src/ai/fallback.js';
@@ -12,7 +12,7 @@ import { createGame } from '../src/domain/engine/createGame.js';
 import { reduceGame } from '../src/domain/engine/reducer.js';
 import { selectObservation } from '../src/domain/engine/selectors.js';
 import { gameStateSchema, playerIdSchema } from '../src/storage/gameStateSchema.js';
-import type { CharacterId, GameObservation, GameState, PlayerId, SubmittedDecision } from '../src/domain/model.js';
+import type { CharacterId, GameObservation, GameState, PlayerId, SubmittedDecision, RosterOptions } from '../src/domain/model.js';
 import {
   encodeMultiplayerMessage,
   multiplayerClientMessageSchema,
@@ -84,6 +84,8 @@ const MULTIPLAYER_UPDATE_FILES = [
   'src/domain/engine/reducer.ts',
   'src/domain/engine/retaliation.ts',
   'src/domain/engine/roleActions.ts',
+  'src/domain/engine/roleDraft.ts',
+  'src/domain/engine/specialRoles.ts',
   'src/domain/engine/selectors.ts',
   'src/domain/engine/vote.ts',
   'src/domain/engine/voting.ts',
@@ -137,7 +139,7 @@ interface Participant {
   connected: boolean;
 }
 
-interface Room {
+interface Room extends RosterOptions {
   roomCode: string;
   status: 'lobby' | 'playing' | 'ended' | 'failed';
   hostParticipantId: string;
@@ -167,6 +169,8 @@ const driverSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('human'), participantId: z.string().min(1) }),
 ]);
 const persistedRoomSchema = z.strictObject({
+  rolePool: z.array(z.enum(ROLE_IDS)).max(MAX_PLAYERS).optional(),
+  assignmentMode: z.enum(['classic', 'draft']).default('classic'),
   roomCode: z.string().regex(/^[A-Z2-9]{6}$/),
   status: z.enum(['lobby', 'playing', 'ended', 'failed']),
   hostParticipantId: z.string().min(1),
@@ -178,6 +182,7 @@ const persistedRoomSchema = z.strictObject({
   failureMessage: z.string().max(500).nullable().default(null),
   updatedAt: z.number().int().nonnegative(),
 }).superRefine((room, context) => {
+  if (room.rolePool && rolePoolError(room.rolePool, room.playerCount) !== null) context.addIssue({ code: 'custom', message: '房间版型不合法' });
   const participantIds = new Set(room.participants.map((participant) => participant.participantId));
   const playerIds = new Set(room.participants.map((participant) => participant.playerId));
   if (room.drivers.length !== room.playerCount) context.addIssue({ code: 'custom', message: '驱动数量必须等于房间人数' });
@@ -268,6 +273,8 @@ function roomView(room: Room, participant: Participant): MultiplayerRoomView {
     selfPlayerId: participant.playerId,
     hostParticipantId: room.hostParticipantId,
     playerCount: room.playerCount,
+    ...(room.rolePool ? { rolePool: room.rolePool } : {}),
+    assignmentMode: room.assignmentMode ?? 'classic',
     participants,
     drivers: room.drivers.map((driver) => ({ ...driver })),
     observation,
@@ -762,6 +769,8 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
           hostParticipantId: participantId,
           seed: message.seed ?? randomBytes(4).readUInt32LE(0),
           playerCount: message.playerCount,
+          ...(message.rolePool ? { rolePool: message.rolePool } : {}),
+          assignmentMode: message.assignmentMode ?? 'classic',
           participants: [participant],
           drivers: PLAYER_IDS.slice(0, message.playerCount).map((playerId) => playerId === 0 ? { kind: 'human', participantId } : { kind: 'ai' }),
           game: null,
@@ -840,7 +849,7 @@ webSocketServer.on('connection', (socket: WebSocket, _request: IncomingMessage, 
           return characterId;
         });
         if (new Set(seatCharacterIds).size !== activeRoom.playerCount) throw new Error('无法分配唯一角色');
-        activeRoom.game = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: activeRoom.playerCount, selectedCharacterIds: [], seatCharacterIds, seed: activeRoom.seed });
+        activeRoom.game = createGame({ mode: 'spectator', humanCharacterId: null, playerCount: activeRoom.playerCount, selectedCharacterIds: [], seatCharacterIds, seed: activeRoom.seed, ...(activeRoom.rolePool ? { rolePool: activeRoom.rolePool } : {}), assignmentMode: activeRoom.assignmentMode ?? 'classic' });
         activeRoom.status = 'playing';
         activeRoom.updatedAt = Date.now();
         broadcast(activeRoom);

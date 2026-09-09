@@ -73,6 +73,11 @@ function fallbackSpeech(state: GameState, speakerId: PlayerId, pending: PendingD
 }
 
 export function fallbackDecision(state: GameState, pending: PendingDecision, template: FallbackTemplate = DEFAULT_FALLBACK_TEMPLATE): FallbackResult {
+  if (pending.schemaKey === 'role-draft') return { decision: { roleId: null }, rngState: state.rngState };
+  if (pending.schemaKey === 'assassin') {
+    const fact = state.knowledgeByPlayer[pending.actorId].findLast((entry) => entry.kind === 'role' && pending.candidates.includes(entry.subjectPlayerId) && roleAlignment[entry.value as RoleId] !== 'wolf');
+    return { decision: { targetPlayerId: fact?.subjectPlayerId ?? null, guessedRoleId: fact ? fact.value as RoleId : null }, rngState: state.rngState };
+  }
   if (pending.schemaKey === 'speech') {
     const speech = fallbackSpeech(state, pending.actorId, pending, state.rngState);
     return { decision: { speech: speech.speech }, rngState: speech.rngState };

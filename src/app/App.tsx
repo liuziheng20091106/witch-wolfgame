@@ -8,6 +8,7 @@ import { useServiceWorker } from './useServiceWorker';
 // Static imports would merge these optional surfaces into the setup entry chunk; React.lazy requires dynamic module loading for this split.
 const LazyGameView = lazy(async () => ({ default: (await import('../features/game/GameView')).GameView }));
 const LazyAiSettingsDrawer = lazy(async () => ({ default: (await import('../features/settings/AiSettingsDrawer')).AiSettingsDrawer }));
+const LazySkillReference = lazy(async () => ({ default: (await import('../features/reference/SkillReference')).SkillReference }));
 
 function getSystemDark(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -21,6 +22,7 @@ export function App() {
     ? multiplayer.room.observation
     : null;
   const [systemDark, setSystemDark] = useState(getSystemDark);
+  const [referenceOpen, setReferenceOpen] = useState(false);
   const previousThemeRef = useRef<string | null>(null);
   const gameObservation = multiplayerObservation ?? controller.observation;
   const judgmentPhase = gameObservation?.phase ?? null;
@@ -71,6 +73,7 @@ export function App() {
       multiplayer={multiplayer}
       onUpdateSetup={controller.updateSetup}
       onOpenSettings={() => controller.setSettingsOpen(true)}
+      onOpenReference={() => setReferenceOpen(true)}
       onContinue={controller.continueSavedGame}
       onStart={controller.startNewGame}
       onClearHistory={controller.clearHistory}
@@ -86,12 +89,14 @@ export function App() {
       onRetry={multiplayerObservation ? multiplayer.clearError : controller.retryAi}
       onLocal={multiplayerObservation ? multiplayer.leaveRoom : controller.useLocalFallback}
       onSettings={() => controller.setSettingsOpen(true)}
+      onReference={() => setReferenceOpen(true)}
       onPaused={multiplayerObservation ? () => undefined : controller.setPaused}
       onRestart={multiplayerObservation ? multiplayer.leaveRoom : controller.startNewGame}
       showContinueRound={!multiplayerObservation}
       onContinueRound={multiplayerObservation ? multiplayer.leaveRoom : controller.continueWithNewRoles}
       onExit={multiplayerObservation ? multiplayer.leaveRoom : controller.returnToSetup}
     /></Suspense> : null}
+    {referenceOpen && <Suspense fallback={null}><LazySkillReference onClose={() => setReferenceOpen(false)} /></Suspense>}
     {controller.settingsOpen && <Suspense fallback={null}><LazyAiSettingsDrawer
       open={controller.settingsOpen}
       config={controller.settings}

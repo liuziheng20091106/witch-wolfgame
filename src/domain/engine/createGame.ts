@@ -1,4 +1,4 @@
-import { CREATURE_ID, MAX_PLAYERS, MIN_PLAYERS, PLAYER_IDS, formatBoardDescription, rolePoolForPlayerCount } from '../../../shared/gamePromptContract.js';
+import { CREATURE_ID, MAX_PLAYERS, MIN_PLAYERS, PLAYER_IDS, formatBoardDescription, rolePoolForPlayerCount, rolePoolError } from '../../../shared/gamePromptContract.js';
 import { characterById, characters } from '../catalog/characters';
 import { initialRoleResources } from '../catalog/roles';
 import { defaultSkillByCharacterId, witchSkillDefinitions } from '../catalog/witchSkills';
@@ -19,7 +19,7 @@ export function createRewindSnapshot(state: GameState): RewindSnapshot {
   return structuredClone(snapshot);
 }
 
-interface RoundInput {
+interface RoundInput extends Pick<GameSetup, 'rolePool' | 'assignmentMode'> {
   mode: GameSetup['mode'];
   humanCharacterId: CharacterId | null;
   humanPlayerId: PlayerId | null;
@@ -34,13 +34,17 @@ interface RoundInput {
 
 function createRound(input: RoundInput): GameState {
   const activePlayerIds = PLAYER_IDS.slice(0, input.playerCount);
-  const rolePool = rolePoolForPlayerCount(input.playerCount);
+  const rolePool = input.rolePool ?? rolePoolForPlayerCount(input.playerCount);
+  const rosterError = rolePoolError(rolePool, input.playerCount);
+  if (rosterError) throw new Error(rosterError);
   const board = formatBoardDescription(rolePool);
   let rngState = input.initialRngState;
   const shuffledRoles = shuffleWithState(rolePool, rngState);
   rngState = shuffledRoles.state;
   const shuffledSpeech = shuffleWithState(activePlayerIds, rngState);
   rngState = shuffledSpeech.state;
+  const draftOrder = input.assignmentMode === 'draft' ? shuffleWithState(activePlayerIds, rngState) : null;
+  if (draftOrder) rngState = draftOrder.state;
   const roleAssignments = activePlayerIds.map((playerId) => {
     const roleId = shuffledRoles.items[playerId];
     if (!roleId) throw new Error(`座位 ${playerId} 缺少职业`);
@@ -82,6 +86,9 @@ function createRound(input: RoundInput): GameState {
     seriesId: input.seriesId,
     roundNumber: input.roundNumber,
     board,
+    rolePool: [...rolePool],
+    assignmentMode: input.assignmentMode ?? 'classic',
+    roleDraft: draftOrder ? { order: draftOrder.items, selectedPlayerIds: [], remainingRoles: [...rolePool] } : null,
     mode: input.mode,
     automationMode: input.automationMode,
     usedFreeProvider: false,
@@ -91,7 +98,7 @@ function createRound(input: RoundInput): GameState {
     seed: input.seed,
     rngState,
     day: 0,
-    phase: 'first-night',
+    phase: draftOrder ? 'role-draft' : 'first-night',
     players,
     creatures: [],
     roleAssignments,
@@ -108,7 +115,7 @@ function createRound(input: RoundInput): GameState {
     result: null,
   };
   const roundLabel = input.roundNumber > 1 ? `连续审判第 ${input.roundNumber} 轮。` : '';
-  const startEvent = addPublicEvent(state, 'system', `${roundLabel}本局版型：${board}。${input.playerCount} 名少女进入审判庭，身份已重新分配，首夜开始。`);
+  const startEvent = addPublicEvent(state, 'system', `${roundLabel}本局版型：${board}。${input.playerCount} 名少女进入审判庭，${draftOrder ? '顺序选职开始' : '身份已重新分配，首夜开始'}。`);
   const speechOrderText = shuffledSpeech.items.map((playerId, index) => {
     const characterId = input.selectedCharacters[playerId];
     if (!characterId) throw new Error(`座位 ${playerId} 缺少发言顺序角色信息`);
@@ -124,7 +131,7 @@ function createRound(input: RoundInput): GameState {
   for (const playerId of activePlayerIds) {
     const roleId = roleAssignments[playerId]?.roleId;
     if (!roleId) throw new Error(`座位 ${playerId} 缺少初始职业事实`);
-    state.knowledgeByPlayer[playerId].push({
+    if (!draftOrder) state.knowledgeByPlayer[playerId].push({
       id: `${state.gameId}-fact-${playerId}-self`,
       subjectPlayerId: playerId,
       kind: 'role',
@@ -138,7 +145,7 @@ function createRound(input: RoundInput): GameState {
       addKnowledge(state, playerId, { subjectPlayerId: subjectId, kind: 'skill', value: subjectSkill.definitionId, observedDay: 0 }, skillAnnouncement.id);
     }
   }
-  state.morningCheckpoint = createRewindSnapshot(state);
+  state.morningCheckpoint = draftOrder ? null : createRewindSnapshot(state);
   return state;
 }
 
@@ -194,9 +201,12 @@ export function createGame(setup: GameSetup): GameState {
   }
   if (selectedCharacters.length !== playerCount) throw new Error('可用角色不足');
   const rosterSignature = [...selectedCharacters].sort().join(',');
-  const seriesId = `game-${seed}-${setup.mode}-${playerCount}-${humanCharacterId ?? 'auto'}-${rosterSignature}`;
+  const configSignature = setup.rolePool || setup.assignmentMode === 'draft' ? `-${setup.assignmentMode ?? 'classic'}-${(setup.rolePool ?? rolePoolForPlayerCount(playerCount)).join(',')}` : '';
+  const seriesId = `game-${seed}-${setup.mode}-${playerCount}-${humanCharacterId ?? 'auto'}-${rosterSignature}${configSignature}`;
   return createRound({
     mode: setup.mode,
+    ...(setup.rolePool ? { rolePool: setup.rolePool } : {}),
+    assignmentMode: setup.assignmentMode ?? 'classic',
     humanCharacterId,
     humanPlayerId,
     selectedCharacters,
@@ -224,6 +234,8 @@ export function continueGameWithNewRoles(previous: GameState): GameState {
     : previous.players.find((player) => player.id === previous.humanPlayerId)?.characterId ?? null;
   return createRound({
     mode: previous.mode,
+    ...(previous.rolePool ? { rolePool: previous.rolePool } : {}),
+    assignmentMode: previous.assignmentMode ?? 'classic',
     humanCharacterId,
     humanPlayerId: previous.humanPlayerId,
     selectedCharacters,

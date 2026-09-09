@@ -1,4 +1,6 @@
 import { makeRoleDecision } from './decisions';
+import { advanceRoleDraft } from './roleDraft';
+import { getAssassinDecision, getMorticianDecision } from './specialRoles';
 import { advanceWolfSuggestions, advanceWolfDecision, advanceWitch, advanceSeer, getGuardDecision, applyRoleDecision } from './roleActions';
 import { advanceVoting, advanceRunoff } from './voting';
 import { SPEECH_MAX_LENGTH, SPEECH_PROMPT_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
@@ -55,6 +57,11 @@ function advanceNightSkills(state: GameState): GameState {
 }
 
 function advanceProtection(state: GameState): GameState {
+  const mortician = getMorticianDecision(state);
+  if (mortician) {
+    state.pendingDecision = mortician;
+    return state;
+  }
   const guardPending = getGuardDecision(state);
   if (guardPending) {
     state.pendingDecision = guardPending;
@@ -148,6 +155,12 @@ function advanceSpeeches(state: GameState): GameState {
 }
 
 function advanceVoteSkills(state: GameState): GameState {
+  if (state.publicEvents.some((event) => event.day === state.day && event.kind === 'death' && Array.isArray(event.data.sources) && event.data.sources.includes('assassination')) && finalizeGameIfWon(state)) return state;
+  const assassin = getAssassinDecision(state);
+  if (assassin) {
+    state.pendingDecision = assassin;
+    return state;
+  }
   const pending = getVoteSkillDecision(state);
   if (pending) {
     state.pendingDecision = pending;
@@ -215,6 +228,7 @@ function advance(state: GameState): GameState {
     return state;
   }
   switch (state.phase) {
+    case 'role-draft': return advanceRoleDraft(state);
     case 'first-night': state.phase = 'night-skills'; return state;
     case 'night-skills': return advanceNightSkills(state);
     case 'wolf-suggestions': return advanceWolfSuggestions(state);

@@ -105,13 +105,16 @@ export function selectObservation(
 ): GameObservation {
   const omniscient = viewer.kind === 'spectator' || state.phase === 'ended' || state.phase === 'post-game';
   const viewerPlayerId = viewer.kind === 'player' ? viewer.playerId : null;
-  const viewerRole = viewerPlayerId === null ? null : getRoleAssignment(state, viewerPlayerId).roleId;
+  const drafting = state.phase === 'role-draft';
+  const viewerRole = viewerPlayerId === null || drafting ? null : getRoleAssignment(state, viewerPlayerId).roleId;
   const viewerAlignment = viewerRole === null ? null : roleAlignment[viewerRole];
 
   const players = state.players.map((player) => {
     const assignment = getRoleAssignment(state, player.id);
     const showWolfTeammate = viewerAlignment === 'wolf' && roleAlignment[assignment.roleId] === 'wolf';
-    const showPrivate = omniscient || player.id === viewerPlayerId || showWolfTeammate;
+    const showPrivate = drafting
+      ? (state.roleDraft?.selectedPlayerIds.includes(player.id) === true && (omniscient || player.id === viewerPlayerId))
+      : omniscient || player.id === viewerPlayerId || showWolfTeammate;
     const character = characterById[player.characterId];
     return {
       id: player.id,
