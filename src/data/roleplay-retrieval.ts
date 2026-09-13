@@ -5,7 +5,11 @@ import type {
   WitchSkillId,
 } from '../domain/model';
 
-export type RoleplayRetrievalCategory = 'argument_moves' | 'pressure_reactions' | 'original_case';
+export type RoleplayRetrievalCategory =
+  | 'argument_moves'
+  | 'pressure_reactions'
+  | 'original_case'
+  | 'voice_examples';
 
 export interface RoleplayRetrievalQuery {
   actorCharacterId: CharacterId;
@@ -178,7 +182,93 @@ export const ORIGINAL_CASE_LORE_CARDS = [
   },
 ] as const satisfies readonly OriginalCaseLoreCard[];
 
-const RETRIEVAL_CONTEXT_MAX_LENGTH = 320;
+/** 原文台词样本：对照游戏内文本逐字摘录，只用于校准说话方式。 */
+export const VOICE_EXAMPLES_BY_CHARACTER_ID = {
+  'soul-0': [
+    '希罗，给你添麻烦了，对不起……',
+    '谢谢你愿意跟我说。',
+    '我会不会……搞错了……？',
+    '（重要的点，会不会在于诺亚她在什么时候出于什么目的画的呢……）',
+  ],
+  'soul-1': [
+    '（看来我搞错了……）',
+    '（可恶……！明明再差一点就能说服她们了……）',
+    '你搞错了。我不是邪恶。',
+    '如果有人在说谎，那么没有不在场证明的就不止我一个了。',
+  ],
+  'soul-2': [
+    '『吾辈是夏目安安。今后，请各位不要找吾辈说话』',
+    '『吾辈已经将大家的不在场证明都整理好了。有需要的时候就看这个吧』',
+    '你有可能在撒谎！',
+    '不要妨碍吾辈的讨论！妨碍者……当处以极刑！',
+  ],
+  'soul-3': [
+    '大家也不害怕诺亚的魔法。欸嘿嘿，好开心。',
+    '对不起哦。但诺亚想起了一件很重要的事。',
+    '当然，能画出很多很多画，诺亚也很开心哦？',
+  ],
+  'soul-4': [
+    '嗨嗨～！我叫橘雪莉。哪里有案件哪里就有我！一切就交给我这位名侦探吧！',
+    '也就是说，会空中飘浮魔法的汉娜就是唯一的嫌疑犯！',
+    '原来如此～……这么想的话，确实有可能搞错。',
+  ],
+  'soul-5': [
+    '请不要在人家说到一半的时候打断好吗！',
+    '可恶！总是事不如愿！',
+    '可恶，不甘心哇，太不甘心了——！',
+  ],
+  'soul-6': [
+    '而你，却是少数几个愿意和我做朋友的人',
+    '【你会帮我的吧？毕竟我们是朋友呀】',
+    '并不是我先区分人类。',
+  ],
+  'soul-7': [
+    '哎呀哎呀，怎么催得这么急呢？我叫宝生玛格哦。',
+    '不是我干的，或许啦。呵呵。',
+    '哎呀呀，谢谢你愿意接着我的话往下说♡不过这恐怕有点难哦。',
+  ],
+  'soul-8': [
+    '请、请不要再伤害任何人了……！',
+    '请不要吵架……！',
+    '嗯……听说安安小姐情况不太好，我安不下心来，就……对不起。',
+  ],
+  'soul-9': [
+    '啧……又是你。走路能不能不要做白日梦啊！',
+    '……开什么玩笑！我才不管什么规定不规定！',
+    '你搞什么，见人就说别人是小偷！？开什么玩笑啊你！',
+  ],
+  'soul-10': [
+    '大叔我可是努力了好一番呢～！只管相信我就好！',
+    '安安，一直躺在这里很无聊吧？要不要和大叔我去看电影啊？',
+    '……大家，对不起。',
+  ],
+  'soul-11': [
+    '我想相信同伴。相信我们之间的牵绊。',
+    '……请大家更理性一点思考吧。',
+    '呵呵，请不要太高估我了。',
+  ],
+  'soul-12': [
+    '如果被害人死亡的时刻有人无法出现在现场，那这个人就不可能是凶手……',
+    '首先按顺序整理一下发生的事吧。',
+    '……抱歉，樱羽艾玛。这个假设不成立。',
+  ],
+  'soul-13': [
+    '艾玛亲，你不要随口撒谎把讨论搅乱哦？很影响别人欸～',
+    '会的，我一定会回去的。哎呀，都说了不要再担心人家啦！',
+    '哎哟～还在信什么手拉手好朋友吗？恶心！！',
+  ],
+} as const satisfies Record<CharacterId, readonly string[]>;
+
+function selectVoiceExamplesCard(characterId: CharacterId): RoleplayRetrievalCard {
+  const examples = VOICE_EXAMPLES_BY_CHARACTER_ID[characterId];
+  return {
+    id: 'voice-examples.' + characterId,
+    category: 'voice_examples',
+    content: '该角色原文台词样本（只校准语气与断句，不作为本局证据，也不得当作本局身份或行动依据）：' + examples.join(' ／ '),
+  };
+}
+
+const RETRIEVAL_CONTEXT_MAX_LENGTH = 520;
 const ORIGINAL_CASE_MIN_SCORE = 65;
 
 function includesCharacter(characterIds: readonly CharacterId[], characterId: CharacterId): boolean {
@@ -282,6 +372,7 @@ export function selectRoleplayRetrievalCards(query: RoleplayRetrievalQuery): rea
   if (originalCase !== null) {
     selected.push(formatOriginalCase(originalCase));
   }
+  selected.push(selectVoiceExamplesCard(query.actorCharacterId));
 
   const fitted: RoleplayRetrievalCard[] = [];
   let usedLength = 0;
