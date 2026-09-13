@@ -259,8 +259,27 @@ export const VOICE_EXAMPLES_BY_CHARACTER_ID = {
   ],
 } as const satisfies Record<CharacterId, readonly string[]>;
 
+/**
+ * 取某个角色的台词样本。
+ * 旧存档或未知角色可能带来表外的 ID，这里显式兜底：绝不把 undefined 交给 join，也绝不抛错。
+ */
+function voiceExamplesFor(characterId: CharacterId): readonly string[] {
+  const examples: readonly string[] | undefined = VOICE_EXAMPLES_BY_CHARACTER_ID[characterId];
+  if (examples === undefined || examples.length === 0) {
+    return GENERIC_VOICE_EXAMPLES;
+  }
+  return examples;
+}
+
+/** 未知角色用的通用台词样本：只保证语气像普通少女，不代表任何具体人设。 */
+const GENERIC_VOICE_EXAMPLES: readonly string[] = [
+  '我觉得，先按顺序把大家知道的事整理一下吧。',
+  '等一下……这里好像对不上？',
+  '我不太确定，但我想先说清楚我知道的部分。',
+];
+
 function selectVoiceExamplesCard(characterId: CharacterId): RoleplayRetrievalCard {
-  const examples = VOICE_EXAMPLES_BY_CHARACTER_ID[characterId];
+  const examples = voiceExamplesFor(characterId);
   return {
     id: 'voice-examples.' + characterId,
     category: 'voice_examples',
