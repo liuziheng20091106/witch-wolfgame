@@ -21,6 +21,7 @@ let ORIGINAL_CASE_SUMMARY_MAX_LENGTH;
 let selectRoleplayRetrievalCards;
 let buildRoleplayPersonality;
 let buildRoleplaySpeechStyle;
+let inspectRoleplayStaticCards;
 let buildDecisionPrompt;
 try {
   ({ ROLEPLAY_STATIC_BY_CHARACTER_ID } = await server.ssrLoadModule('/src/data/roleplay-static.ts'));
@@ -30,12 +31,17 @@ try {
     ORIGINAL_CASE_SUMMARY_MAX_LENGTH,
     selectRoleplayRetrievalCards,
   } = await server.ssrLoadModule('/src/data/roleplay-retrieval.ts'));
-  ({ buildRoleplayPersonality, buildRoleplaySpeechStyle } = await server.ssrLoadModule('/src/ai/roleplayLore.ts'));
+  ({
+    buildRoleplayPersonality,
+    buildRoleplaySpeechStyle,
+    inspectRoleplayStaticCards,
+  } = await server.ssrLoadModule('/src/ai/roleplayLore.ts'));
   ({ buildDecisionPrompt } = await server.ssrLoadModule('/src/ai/prompts.ts'));
 } finally {
   await server.close();
 }
 
+assert.deepEqual(inspectRoleplayStaticCards(), [], '角色卡自检必须全部通过（缺卡、锚点超限、版本不明确都会在这里列出）');
 const cards = Object.values(ROLEPLAY_STATIC_BY_CHARACTER_ID);
 assert.equal(cards.length, CHARACTER_CATALOG.length, '静态卡数量必须覆盖全部角色');
 assert.equal(new Set(cards.map((card) => card.characterId)).size, cards.length, '静态卡 ID 必须唯一');
@@ -172,6 +178,11 @@ const retrievalDefaults = {
 };
 const noCaseCards = selectRoleplayRetrievalCards(retrievalDefaults);
 assert.equal(noCaseCards.some((card) => card.category === 'original_case'), false, '只有角色信号时不得常驻案件');
+const voiceExampleCards = noCaseCards.filter((card) => card.category === 'voice_examples');
+assert.equal(voiceExampleCards.length, 1, '每个角色必须注入且只注入一张原文台词样本卡');
+assert.equal(voiceExampleCards[0]?.id, 'voice-examples.soul-13', '原文台词样本卡必须对应当前行动者');
+assert.ok((voiceExampleCards[0]?.content ?? '').includes('艾玛亲'), '泽渡可可的原文台词样本必须逐字取自原文');
+assert.ok((voiceExampleCards[0]?.content ?? '').includes('不作为本局证据'), '原文台词样本必须携带本局隔离边界');
 const knowledgeMatchedCards = selectRoleplayRetrievalCards({ ...retrievalDefaults, privateKnowledgeCount: 1, currentSpeechCount: 3 });
 assert.equal(knowledgeMatchedCards.some((card) => card.id === 'argument.use-private-knowledge'), true, '私有查验应优先选择知识使用卡');
 const pressureMatchedCards = selectRoleplayRetrievalCards({ ...retrievalDefaults, votesAgainstActor: 1 });
