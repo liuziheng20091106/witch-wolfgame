@@ -123,7 +123,7 @@ export function selectObservation(
       avatarUrl: character.avatarUrl,
       alive: player.alive,
       roleId: showPrivate ? assignment.roleId : null,
-      skillId: showPrivate ? getSkillInstance(state, player.id)?.definitionId ?? null : null,
+      skillId: viewer.kind === 'blind' && !omniscient ? null : getSkillInstance(state, player.id)?.definitionId ?? null,
       isSelf: player.id === viewerPlayerId,
     };
   });

@@ -208,7 +208,7 @@ export function GameView(props: GameViewProps) {
         <GameControls paused={props.paused} onPaused={props.onPaused} onSettings={props.onSettings} onReference={props.onReference} onRestart={() => setConfirmRestart(true)} onExit={props.onExit} />
         <DecisionPanel observation={observation} redactDebug={blindActive} aiError={props.aiError} awaitingRetry={props.awaitingRetry} thinking={props.thinking} decisionError={props.decisionError} onSubmit={props.onSubmit} onRetry={props.onRetry} onLocal={props.onLocal} onSettings={props.onSettings} />
         {props.blindTrial
-          ? <div className={styles.desktopSuspects}><SuspectBook observation={observation} notes={props.caseNotes} onUpdate={props.onUpdateSuspectNote} /></div>
+          ? <div className={styles.desktopSuspects}><SuspectBook headingId="desktop-suspect-title" observation={observation} notes={props.caseNotes} onUpdate={props.onUpdateSuspectNote} /></div>
           : observation.omniscient
           ? <section className={`${styles.intel} ${styles.desktopHistory}`} aria-labelledby="desktop-history-title">
             <header><Archive /><div><span>CASE ARCHIVE</span><h2 id="desktop-history-title">完整记录</h2></div></header>
@@ -223,7 +223,7 @@ export function GameView(props: GameViewProps) {
         <header><Archive /><div><span>CASE ARCHIVE</span><h2 id="history-title">完整记录</h2></div></header>
         <HistoryBody observation={observation} />
       </section>
-      {props.blindTrial && <div className={styles.suspectPane}><SuspectBook observation={observation} notes={props.caseNotes} onUpdate={props.onUpdateSuspectNote} /></div>}
+      {props.blindTrial && <div className={styles.suspectPane}><SuspectBook headingId="mobile-suspect-title" observation={observation} notes={props.caseNotes} onUpdate={props.onUpdateSuspectNote} /></div>}
     </div>
     {!decisionPanelVisible && <div className={styles.automationBar} aria-live="polite"><Bot /><div><span>{automationModeLabel(observation)}</span><strong>{automationStatus(observation)}</strong></div>{observation.result && props.showContinueRound && <button className={styles.mobileExport} type="button" onClick={props.onExportCaseFile} title="导出案件卷宗" aria-label="导出案件卷宗"><Download /></button>}{observation.result && <button className={styles.mobileRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button>}{props.thinking && <LoaderCircle className={styles.automationSpin} />}</div>}
     {mobileChromeHidden && <button className={styles.mobileReveal} type="button" onClick={(event) => { event.stopPropagation(); revealMobileChrome(); }} aria-label="显示游戏控制"><ChevronDown />展开面板</button>}

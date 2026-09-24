@@ -5,6 +5,7 @@ import type { CaseNotes, SuspectNote, Suspicion } from '../../storage/browserSto
 import styles from './SuspectBook.module.css';
 
 interface SuspectBookProps {
+  headingId: string;
   observation: GameObservation;
   notes: CaseNotes;
   onUpdate(playerId: number, note: SuspectNote): void;
@@ -17,10 +18,10 @@ const options: { value: Suspicion; label: string }[] = [
   { value: 'wolf', label: '偏狼人' },
 ];
 
-export function SuspectBook({ observation, notes, onUpdate }: SuspectBookProps) {
+export function SuspectBook({ headingId, observation, notes, onUpdate }: SuspectBookProps) {
   const speeches = observation.publicEvents.filter((event) => event.kind === 'speech' || event.kind === 'last-words');
-  return <section className={styles.book} aria-labelledby="suspect-title">
-    <header><BookOpen /><div><span>BLIND TRIAL</span><h2 id="suspect-title">嫌疑簿</h2></div></header>
+  return <section className={styles.book} aria-labelledby={headingId}>
+    <header><BookOpen /><div><span>BLIND TRIAL</span><h2 id={headingId}>嫌疑簿</h2></div></header>
     <div className={styles.scroll}>
       {observation.players.filter((player) => player.id !== 99).map((player) => {
         const note = notes.suspects[String(player.id)] ?? emptyNote;

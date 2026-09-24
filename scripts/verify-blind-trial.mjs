@@ -34,6 +34,8 @@ state.publicEvents.push({
 state.privateEvents.push({ ...state.publicEvents[0], id: 'secret', text: '狼队秘密', viewerPlayerIds: [1, 2] });
 state.pendingDecision = { id: 'secret-decision', kind: 'wolf-decision', schemaKey: 'target', actorId: 1, title: '狼队袭击', description: '', candidates: [0], allowAbstain: false, skillInstanceId: null, options: {} };
 const blind = selectObservation(state, { kind: 'blind' });
+const playerView = selectObservation(state, { kind: 'player', playerId: 0 });
+assert.notEqual(playerView.players[1].skillId, null);
 assert.equal(blind.seed, 0);
 assert.equal(blind.omniscient, false);
 assert.equal(blind.players.every((player) => player.roleId === null && player.skillId === null), true);
