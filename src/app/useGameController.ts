@@ -161,7 +161,7 @@ export function useGameController(): GameController {
     }
     if (next.result && (next.phase === 'ended' && prev?.phase !== 'ended' || next.phase === 'post-game' && postGameDone(next))) {
       void saveCaseFile(next.gameId, formatCaseFile(next, caseNotesRef.current)).catch((error: unknown) => {
-        setHistoryError(error instanceof Error ? `案件卷宗保存失败：${error.message}` : '案件卷宗保存失败');
+        setStorageError(error instanceof Error ? `案件卷宗保存失败：${error.message}` : '案件卷宗保存失败');
       });
     }
     // 对局结束（phase 首次变为 ended）时记入对局历史，按 gameId 去重，最多保留 50 条
@@ -390,7 +390,7 @@ export function useGameController(): GameController {
   const clearHistory = useCallback(() => {
     try {
       clearStoredHistory();
-      void clearCaseFiles().catch((error: unknown) => setHistoryError(error instanceof Error ? `卷宗清除失败：${error.message}` : '卷宗清除失败'));
+      void clearCaseFiles().catch((error: unknown) => setStorageError(error instanceof Error ? `卷宗清除失败：${error.message}` : '卷宗清除失败'));
       historyRef.current = [];
       setHistory([]);
       setHistoryError(null);
@@ -411,7 +411,7 @@ export function useGameController(): GameController {
       setStorageError(error instanceof Error ? error.message : '嫌疑簿保存失败');
     }
     if (current.result) void saveCaseFile(current.gameId, formatCaseFile(current, caseNotesRef.current)).catch((error: unknown) => {
-      setHistoryError(error instanceof Error ? `卷宗保存失败：${error.message}` : '卷宗保存失败');
+      setStorageError(error instanceof Error ? `卷宗保存失败：${error.message}` : '卷宗保存失败');
     });
   }, []);
 
