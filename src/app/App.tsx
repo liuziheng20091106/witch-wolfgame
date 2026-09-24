@@ -80,6 +80,10 @@ export function App() {
       onDiscard={controller.discardSavedGame}
     /> : gameObservation ? <Suspense fallback={null}><LazyGameView
       observation={gameObservation}
+      blindTrial={!multiplayerObservation && controller.blindTrial}
+      caseNotes={controller.caseNotes}
+      onUpdateSuspectNote={controller.updateSuspectNote}
+      onExportCaseFile={controller.exportCaseFile}
       aiError={multiplayerObservation ? null : controller.aiError}
       awaitingRetry={multiplayerObservation ? false : controller.awaitingRetry}
       thinking={multiplayerObservation ? false : controller.thinking}

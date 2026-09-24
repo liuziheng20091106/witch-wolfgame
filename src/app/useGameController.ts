@@ -8,10 +8,13 @@ import { reduceGame } from '../domain/engine/reducer';
 import { selectObservation } from '../domain/engine/selectors';
 import { postGameDone } from '../domain/skills/postGame';
 import type { GameEvent, GameObservation, GameState, SubmittedDecision } from '../domain/model';
+import { clearCaseFiles, formatCaseFile, saveCaseFile } from './caseFile';
+import { downloadTextFile } from './download';
 import {
   clearSavedGame,
   clearHistory as clearStoredHistory,
   defaultThemeSettings,
+  emptyCaseNotes,
   loadGame,
   loadHistory,
   loadSessionId,
@@ -24,6 +27,8 @@ import {
   saveSetup,
   saveThemeSettings,
   type GameHistoryEntry,
+  type CaseNotes,
+  type SuspectNote,
   type SavedGameEnvelope,
   type SetupPreferences,
   type ThemeSettings,
@@ -37,6 +42,10 @@ export interface GameController {
   observation: GameObservation | null;
   savedGame: SavedGameEnvelope | null;
   history: GameHistoryEntry[];
+  blindTrial: boolean;
+  caseNotes: CaseNotes;
+  updateSuspectNote(playerId: number, note: SuspectNote): void;
+  exportCaseFile(): void;
   settings: AiProviderConfig;
   theme: ThemeSettings;
   setup: SetupPreferences;
@@ -85,7 +94,7 @@ function readInitialBrowserState(): InitialBrowserState {
   return {
     settings: settingsResult.ok && settingsResult.value ? settingsResult.value : defaultAiConfig,
     theme: themeResult.ok && themeResult.value ? themeResult.value : defaultThemeSettings,
-    setup: setupResult.ok && setupResult.value ? setupResult.value : { mode: 'spectator', humanCharacterId: null, playerCount: 6, selectedCharacterIds: [], seed: 1, randomSeed: true },
+    setup: setupResult.ok && setupResult.value ? setupResult.value : { mode: 'spectator', blindTrial: false, humanCharacterId: null, playerCount: 6, selectedCharacterIds: [], seed: 1, randomSeed: true },
     savedGame: gameResult.ok ? gameResult.value : null,
     history: historyResult.ok && historyResult.value ? historyResult.value : [],
     historyError: historyResult.ok ? null : historyResult.error,
@@ -125,18 +134,35 @@ export function useGameController(): GameController {
   const [historyError, setHistoryError] = useState<string | null>(initial.historyError);
   const [history, setHistory] = useState<GameHistoryEntry[]>(initial.history);
   const historyRef = useRef<GameHistoryEntry[]>(initial.history);
+  const [blindTrial, setBlindTrial] = useState(initial.savedGame?.blindTrial ?? false);
+  const blindTrialRef = useRef(initial.savedGame?.blindTrial ?? false);
+  const [caseNotes, setCaseNotes] = useState<CaseNotes>(initial.savedGame?.caseNotes ?? emptyCaseNotes());
+  const caseNotesRef = useRef(caseNotes);
   const sessionIdRef = useRef(loadSessionId());
   const activeRequestRef = useRef<string | null>(null);
 
   const commit = useCallback((next: GameState) => {
     const prev = gameRef.current;
+    if (blindTrialRef.current && prev && prev.day === next.day &&
+      (next.phase === 'voting' && prev.phase !== 'voting' || next.phase === 'runoff' && prev.phase !== 'runoff')) {
+      const round = next.phase === 'runoff' ? 2 : 1;
+      if (!caseNotesRef.current.snapshots.some((entry) => entry.day === next.day && entry.round === round)) {
+        caseNotesRef.current = { ...caseNotesRef.current, snapshots: [...caseNotesRef.current.snapshots, { day: next.day, round, notes: structuredClone(caseNotesRef.current.suspects) }] };
+        setCaseNotes(caseNotesRef.current);
+      }
+    }
     gameRef.current = next;
     setGame(next);
     try {
-      setSavedGame(saveGame(next, savedGameVersionRef.current));
+      setSavedGame(saveGame(next, savedGameVersionRef.current, blindTrialRef.current, caseNotesRef.current));
       setStorageError(null);
     } catch (error) {
       setStorageError(error instanceof Error ? error.message : '保存游戏失败');
+    }
+    if (next.result && (next.phase === 'ended' && prev?.phase !== 'ended' || next.phase === 'post-game' && postGameDone(next))) {
+      void saveCaseFile(next.gameId, formatCaseFile(next, caseNotesRef.current)).catch((error: unknown) => {
+        setHistoryError(error instanceof Error ? `案件卷宗保存失败：${error.message}` : '案件卷宗保存失败');
+      });
     }
     // 对局结束（phase 首次变为 ended）时记入对局历史，按 gameId 去重，最多保留 50 条
     if (prev?.phase !== 'ended' && next.phase === 'ended' && next.result) {
@@ -173,9 +199,9 @@ export function useGameController(): GameController {
   const observation = useMemo(() => {
     if (!game) return null;
     return game.mode === 'spectator'
-      ? selectObservation(game, { kind: 'spectator' })
+      ? selectObservation(game, blindTrial && game.phase !== 'ended' && game.phase !== 'post-game' ? { kind: 'blind' } : { kind: 'spectator' })
       : selectObservation(game, { kind: 'player', playerId: game.humanPlayerId ?? 0 });
-  }, [game]);
+  }, [game, blindTrial]);
 
   useEffect(() => {
     if (view !== 'game' || !game || paused || aiError || awaitingRetry) return;
@@ -287,6 +313,10 @@ export function useGameController(): GameController {
 
   const beginGame = useCallback((seed: number) => {
     const next = createGame({ ...setup, seed });
+    blindTrialRef.current = setup.mode === 'spectator' && setup.blindTrial;
+    setBlindTrial(blindTrialRef.current);
+    caseNotesRef.current = emptyCaseNotes();
+    setCaseNotes(caseNotesRef.current);
     savedGameVersionRef.current = APP_VERSION;
     commit(next);
     setAiError(null);
@@ -306,6 +336,8 @@ export function useGameController(): GameController {
     if (!current) return;
     try {
       const next = continueGameWithNewRoles(current);
+      caseNotesRef.current = emptyCaseNotes();
+      setCaseNotes(caseNotesRef.current);
       savedGameVersionRef.current = APP_VERSION;
       commit(next);
       setAiError(null);
@@ -320,6 +352,10 @@ export function useGameController(): GameController {
   const continueSavedGame = useCallback(() => {
     if (!savedGame) return;
     const restored = structuredClone(savedGame.state);
+    blindTrialRef.current = savedGame.blindTrial;
+    setBlindTrial(savedGame.blindTrial);
+    caseNotesRef.current = savedGame.caseNotes;
+    setCaseNotes(savedGame.caseNotes);
     savedGameVersionRef.current = savedGame.appVersion;
     gameRef.current = restored;
     setGame(restored);
@@ -346,16 +382,43 @@ export function useGameController(): GameController {
     setSavedGame(null);
     gameRef.current = null;
     setGame(null);
+    blindTrialRef.current = false;
+    setBlindTrial(false);
+    caseNotesRef.current = emptyCaseNotes();
+    setCaseNotes(caseNotesRef.current);
   }, []);
   const clearHistory = useCallback(() => {
     try {
       clearStoredHistory();
+      void clearCaseFiles().catch((error: unknown) => setHistoryError(error instanceof Error ? `卷宗清除失败：${error.message}` : '卷宗清除失败'));
       historyRef.current = [];
       setHistory([]);
       setHistoryError(null);
     } catch (error) {
       setHistoryError(error instanceof Error ? `清除对局历史失败：${error.message}` : '清除对局历史失败');
     }
+  }, []);
+
+  const updateSuspectNote = useCallback((playerId: number, note: SuspectNote) => {
+    const current = gameRef.current;
+    if (!blindTrialRef.current || !current || !current.players.some((player) => player.id === playerId)) return;
+    caseNotesRef.current = { ...caseNotesRef.current, suspects: { ...caseNotesRef.current.suspects, [playerId]: note } };
+    setCaseNotes(caseNotesRef.current);
+    try {
+      setSavedGame(saveGame(current, savedGameVersionRef.current, true, caseNotesRef.current));
+      setStorageError(null);
+    } catch (error) {
+      setStorageError(error instanceof Error ? error.message : '嫌疑簿保存失败');
+    }
+    if (current.result) void saveCaseFile(current.gameId, formatCaseFile(current, caseNotesRef.current)).catch((error: unknown) => {
+      setHistoryError(error instanceof Error ? `卷宗保存失败：${error.message}` : '卷宗保存失败');
+    });
+  }, []);
+
+  const exportCaseFile = useCallback(() => {
+    const current = gameRef.current;
+    if (!current?.result) return;
+    downloadTextFile(formatCaseFile(current, caseNotesRef.current), `majo-wolf-case-${current.gameId.replace(/[^a-zA-Z0-9_-]/g, '-')}.md`, 'text/markdown;charset=utf-8');
   }, []);
 
   const submitHumanDecision = useCallback((decision: SubmittedDecision) => {
@@ -381,7 +444,7 @@ export function useGameController(): GameController {
   }, [commit]);
 
   return {
-    view, game, observation, savedGame, history, historyError, settings, theme, setup, storageError, aiError, decisionError,
+    view, game, observation, savedGame, history, historyError, blindTrial, caseNotes, updateSuspectNote, exportCaseFile, settings, theme, setup, storageError, aiError, decisionError,
     awaitingRetry, thinking, paused, settingsOpen, setSettingsOpen, updateSetup, saveAiSettings,
     startNewGame, continueWithNewRoles, continueSavedGame, returnToSetup, discardSavedGame, clearHistory, submitHumanDecision,
     retryAi, useLocalFallback, setPaused,

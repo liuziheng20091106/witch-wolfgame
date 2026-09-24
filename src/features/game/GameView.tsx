@@ -1,4 +1,4 @@
-import { Archive, Bot, ChevronDown, Copy, Gavel, Info, List, LoaderCircle, RotateCcw, ScrollText, Sparkles, Users, X } from 'lucide-react';
+import { Archive, BookOpen, Bot, ChevronDown, Copy, Download, Gavel, Info, List, LoaderCircle, RotateCcw, ScrollText, Sparkles, Users, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AiCommandError } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
@@ -6,15 +6,21 @@ import { roleAlignment, roleDescriptions, roleNames } from '../../domain/catalog
 import { witchSkillDefinitions } from '../../domain/catalog/witchSkills';
 import { isCreatureId } from '../../domain/engine/selectors';
 import type { GameObservation, PlayerId, SubmittedDecision } from '../../domain/model';
+import type { CaseNotes, SuspectNote } from '../../storage/browserStorage';
 import brandMark from '../../assets/icon.ico';
 import { DecisionPanel } from './DecisionPanel';
 import { GameControls } from './GameControls';
 import { PlayerRoster } from './PlayerRoster';
 import { Transcript } from './Transcript';
+import { SuspectBook } from './SuspectBook';
 import styles from './GameView.module.css';
 
 interface GameViewProps {
   observation: GameObservation;
+  blindTrial: boolean;
+  caseNotes: CaseNotes;
+  onUpdateSuspectNote(playerId: number, note: SuspectNote): void;
+  onExportCaseFile(): void;
   aiError: AiCommandError | null;
   awaitingRetry: boolean;
   thinking: boolean;
@@ -40,7 +46,7 @@ const phaseNames: Record<GameObservation['phase'], string> = {
   runoff: '平票？重投！', 'day-resolution': '正在结算白天行动...', ended: '审判结束', 'post-game': '赛后复盘',
 };
 
-type MobileTab = 'live' | 'players' | 'history';
+type MobileTab = 'live' | 'players' | 'history' | 'suspects';
 
 function winnerTitle(winner: 'wolf' | 'good' | 'neutral'): string {
   if (winner === 'wolf') return '狼人阵营获胜';
@@ -101,6 +107,10 @@ function HistoryBody({ observation }: { observation: GameObservation }) {
 
 export function GameView(props: GameViewProps) {
   const { observation } = props;
+  const blindActive = props.blindTrial && observation.result === null;
+  const phaseLabel = blindActive && (observation.day === 0 || ['night-skills', 'wolf-suggestions', 'wolf-decision', 'witch-action', 'seer-action', 'night-protection', 'night-resolution'].includes(observation.phase))
+    ? '夜间审理'
+    : blindActive && observation.phase === 'role-draft' ? '入场准备' : phaseNames[observation.phase];
   const [mobileTab, setMobileTab] = useState<MobileTab>('live');
   const [followingLatestMessage, setFollowingLatestMessage] = useState(true);
   const [selectedPlayerId, setSelectedPlayerId] = useState<PlayerId | null>(null);
@@ -182,21 +192,24 @@ export function GameView(props: GameViewProps) {
   return <main ref={gameRef} className={`${styles.game} ${mobileChromeHidden ? styles.gameChromeHidden : ''} ${decisionPanelVisible ? styles.decisionPanelVisible : ''}`}>
     <header className={`${styles.topbar} ${chromeClass}`}>
       <div className={styles.brand}><img src={brandMark} alt="魔女狼人杀" /></div>
-      <div className={styles.phase}><small>{observation.roundNumber > 1 ? `ROUND ${String(observation.roundNumber).padStart(2, '0')} · ` : ''}{observation.phase === 'role-draft' ? 'ROLE DRAFT' : observation.day === 0 ? 'FIRST NIGHT' : `DAY ${String(observation.day).padStart(2, '0')}`}</small><strong>{phaseNames[observation.phase]}</strong></div>
-      <div className={styles.seedDisplay}><span>{seedCopyStatus === 'copied' ? '已复制' : seedCopyStatus === 'failed' ? '复制失败' : `种子 ${observation.seed}`}</span><button type="button" title="复制本局种子" aria-label={seedCopyStatus === 'failed' ? '复制本局种子失败' : '复制本局种子'} onClick={() => { void copySeed(); }}><Copy /></button></div>
+      <div className={styles.phase}><small>{observation.roundNumber > 1 ? `ROUND ${String(observation.roundNumber).padStart(2, '0')} · ` : ''}{observation.phase === 'role-draft' ? 'ROLE DRAFT' : observation.day === 0 ? 'FIRST NIGHT' : `DAY ${String(observation.day).padStart(2, '0')}`}</small><strong>{phaseLabel}</strong></div>
+      <div className={styles.seedDisplay}><span>{props.blindTrial && !hasResult ? '种子已封存' : seedCopyStatus === 'copied' ? '已复制' : seedCopyStatus === 'failed' ? '复制失败' : `种子 ${observation.seed}`}</span>{(!props.blindTrial || hasResult) && <button type="button" title="复制本局种子" aria-label={seedCopyStatus === 'failed' ? '复制本局种子失败' : '复制本局种子'} onClick={() => { void copySeed(); }}><Copy /></button>}</div>
     </header>
-    <nav className={`${styles.mobileTabs} ${chromeClass}`} aria-label="游戏视图">
+    <nav className={`${styles.mobileTabs} ${props.blindTrial ? styles.blindTabs : ''} ${chromeClass}`} aria-label="游戏视图">
       <button type="button" className={mobileTab === 'live' ? styles.activeTab : ''} onClick={() => { revealMobileChrome(); setMobileTab('live'); }}><ScrollText />发言</button>
       <button type="button" className={mobileTab === 'players' ? styles.activeTab : ''} onClick={() => { revealMobileChrome(); setMobileTab('players'); }}><Users />角色</button>
       <button type="button" className={mobileTab === 'history' ? styles.activeTab : ''} onClick={() => { revealMobileChrome(); setMobileTab('history'); }}><List />观察</button>
+      {props.blindTrial && <button type="button" className={mobileTab === 'suspects' ? styles.activeTab : ''} onClick={() => { revealMobileChrome(); setMobileTab('suspects'); }}><BookOpen />嫌疑</button>}
     </nav>
     <div className={styles.workspace} data-mobile-tab={mobileTab} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <div className={`${styles.rosterPane} ${chromeClass}`}><PlayerRoster observation={observation} currentActorId={activeActorId} onSelect={setSelectedPlayerId} /></div>
-      <div className={styles.livePane}><Transcript observation={observation} phaseLabel={phaseNames[observation.phase]} onFollowingChange={setFollowingLatestMessage} /></div>
+      <div className={styles.livePane}><Transcript observation={observation} phaseLabel={phaseLabel} onFollowingChange={setFollowingLatestMessage} /></div>
       <aside ref={sidePaneRef} className={`${styles.sidePane} ${chromeClass}`}>
         <GameControls paused={props.paused} onPaused={props.onPaused} onSettings={props.onSettings} onReference={props.onReference} onRestart={() => setConfirmRestart(true)} onExit={props.onExit} />
-        <DecisionPanel observation={observation} aiError={props.aiError} awaitingRetry={props.awaitingRetry} thinking={props.thinking} decisionError={props.decisionError} onSubmit={props.onSubmit} onRetry={props.onRetry} onLocal={props.onLocal} onSettings={props.onSettings} />
-        {observation.omniscient
+        <DecisionPanel observation={observation} redactDebug={blindActive} aiError={props.aiError} awaitingRetry={props.awaitingRetry} thinking={props.thinking} decisionError={props.decisionError} onSubmit={props.onSubmit} onRetry={props.onRetry} onLocal={props.onLocal} onSettings={props.onSettings} />
+        {props.blindTrial
+          ? <div className={styles.desktopSuspects}><SuspectBook observation={observation} notes={props.caseNotes} onUpdate={props.onUpdateSuspectNote} /></div>
+          : observation.omniscient
           ? <section className={`${styles.intel} ${styles.desktopHistory}`} aria-labelledby="desktop-history-title">
             <header><Archive /><div><span>CASE ARCHIVE</span><h2 id="desktop-history-title">完整记录</h2></div></header>
             <HistoryBody observation={observation} />
@@ -210,11 +223,12 @@ export function GameView(props: GameViewProps) {
         <header><Archive /><div><span>CASE ARCHIVE</span><h2 id="history-title">完整记录</h2></div></header>
         <HistoryBody observation={observation} />
       </section>
+      {props.blindTrial && <div className={styles.suspectPane}><SuspectBook observation={observation} notes={props.caseNotes} onUpdate={props.onUpdateSuspectNote} /></div>}
     </div>
-    {!decisionPanelVisible && <div className={styles.automationBar} aria-live="polite"><Bot /><div><span>{automationModeLabel(observation)}</span><strong>{automationStatus(observation)}</strong></div>{observation.result && <button className={styles.mobileRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button>}{props.thinking && <LoaderCircle className={styles.automationSpin} />}</div>}
+    {!decisionPanelVisible && <div className={styles.automationBar} aria-live="polite"><Bot /><div><span>{automationModeLabel(observation)}</span><strong>{automationStatus(observation)}</strong></div>{observation.result && props.showContinueRound && <button className={styles.mobileExport} type="button" onClick={props.onExportCaseFile} title="导出案件卷宗" aria-label="导出案件卷宗"><Download /></button>}{observation.result && <button className={styles.mobileRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button>}{props.thinking && <LoaderCircle className={styles.automationSpin} />}</div>}
     {mobileChromeHidden && <button className={styles.mobileReveal} type="button" onClick={(event) => { event.stopPropagation(); revealMobileChrome(); }} aria-label="显示游戏控制"><ChevronDown />展开面板</button>}
     {selectedPlayer && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectedPlayerId(null)}><section className={styles.playerDialog} role="dialog" aria-modal="true" aria-labelledby="player-detail-title"><button className={styles.close} type="button" onClick={() => setSelectedPlayerId(null)} aria-label="关闭角色详情"><X /></button><img src={selectedPlayer.avatarUrl} alt="" /><div><span>{selectedSeatLabel}</span><h2 id="player-detail-title">{selectedPlayer.name}</h2><p>{selectedPlayer.alive ? '存活' : '已死亡'}</p><dl><dt>基础职业</dt><dd>{selectedPlayer.roleId ? `${roleNames[selectedPlayer.roleId]} · ${roleDescriptions[selectedPlayer.roleId]}` : '尚未公开'}</dd><dt>魔女技</dt><dd>{selectedPlayer.skillId ? `${witchSkillDefinitions[selectedPlayer.skillId].name} · ${witchSkillDefinitions[selectedPlayer.skillId].description}` : '尚未公开'}</dd></dl></div></section></div>}
-    {observation.result && !resultDismissed && <section className={`${styles.result} ${resultFaded ? styles.resultFaded : ''}`} aria-live="assertive"><Gavel /><div><span>FINAL VERDICT · ROUND {observation.roundNumber}</span><h2>{winnerTitle(observation.result.winner)}</h2><p>{viewerResultText(observation)}</p></div><div className={styles.resultActions}>{props.showContinueRound && <button type="button" onClick={props.onContinueRound}><Sparkles />重新分配身份并继续</button>}<button className={styles.desktopRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button><button type="button" onClick={props.onExit}>离开</button></div></section>}
+    {observation.result && !resultDismissed && <section className={`${styles.result} ${resultFaded ? styles.resultFaded : ''}`} aria-live="assertive"><Gavel /><div><span>FINAL VERDICT · ROUND {observation.roundNumber}</span><h2>{winnerTitle(observation.result.winner)}</h2><p>{viewerResultText(observation)}</p></div><div className={styles.resultActions}>{props.showContinueRound && <button type="button" onClick={props.onExportCaseFile}><Download />导出案件卷宗</button>}{props.showContinueRound && <button type="button" onClick={props.onContinueRound}><Sparkles />重新分配身份并继续</button>}<button className={styles.desktopRestart} type="button" onClick={() => setConfirmRestart(true)}><RotateCcw />再来一局</button><button type="button" onClick={props.onExit}>离开</button></div></section>}
     {confirmRestart && <div className={styles.modalBackdrop} role="presentation"><section className={styles.confirm} role="alertdialog" aria-modal="true" aria-labelledby="restart-title"><Sparkles /><span>NEW CASE</span><h2 id="restart-title">开始同配置新局？</h2><p>当前存档将被覆盖，并重新随机生成种子。</p><div><button type="button" onClick={() => setConfirmRestart(false)}>取消</button><button type="button" className={styles.danger} onClick={() => { setConfirmRestart(false); props.onRestart(); }}>覆盖并重开</button></div></section></div>}
   </main>;
 }

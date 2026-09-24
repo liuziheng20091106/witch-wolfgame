@@ -101,7 +101,7 @@ function revealedCurrentVotes(state: GameState) {
 
 export function selectObservation(
   state: GameState,
-  viewer: { kind: 'spectator' } | { kind: 'player'; playerId: PlayerId },
+  viewer: { kind: 'spectator' } | { kind: 'blind' } | { kind: 'player'; playerId: PlayerId },
 ): GameObservation {
   const omniscient = viewer.kind === 'spectator' || state.phase === 'ended' || state.phase === 'post-game';
   const viewerPlayerId = viewer.kind === 'player' ? viewer.playerId : null;
@@ -123,7 +123,7 @@ export function selectObservation(
       avatarUrl: character.avatarUrl,
       alive: player.alive,
       roleId: showPrivate ? assignment.roleId : null,
-      skillId: getSkillInstance(state, player.id)?.definitionId ?? null,
+      skillId: showPrivate ? getSkillInstance(state, player.id)?.definitionId ?? null : null,
       isSelf: player.id === viewerPlayerId,
     };
   });
@@ -157,10 +157,12 @@ export function selectObservation(
 
   const publicEvents = omniscient
     ? state.publicEvents
-    : state.publicEvents.map((event) => ({ ...event, actualAuthorPlayerId: null }));
+    : state.publicEvents.map((event) => viewer.kind === 'blind'
+      ? { ...event, actorPlayerId: null, targetPlayerIds: [], actualAuthorPlayerId: null, data: {} }
+      : { ...event, actualAuthorPlayerId: null });
   const privateEvents = omniscient
     ? state.privateEvents
-    : state.privateEvents.filter((event) => event.viewerPlayerIds.includes(viewer.playerId));
+    : viewer.kind === 'player' ? state.privateEvents.filter((event) => event.viewerPlayerIds.includes(viewer.playerId)) : [];
 
   return {
     gameId: state.gameId,
@@ -168,12 +170,13 @@ export function selectObservation(
     mode: state.mode,
     automationMode: state.automationMode,
     board: state.board,
-    seed: state.seed,
+    seed: viewer.kind === 'blind' && !omniscient ? 0 : state.seed,
     usedFreeProvider: state.usedFreeProvider,
     aiFailureOccurred: state.aiFailureOccurred,
-    lastAiFailure: state.lastAiFailure,
+    lastAiFailure: viewer.kind === 'blind' && !omniscient ? null : state.lastAiFailure,
     day: state.day,
-    phase: state.phase,
+    phase: viewer.kind === 'blind' && !omniscient && ['first-night', 'night-skills', 'wolf-suggestions', 'wolf-decision', 'witch-action', 'seer-action', 'night-protection', 'night-resolution'].includes(state.phase)
+      ? 'night-skills' : state.phase,
     viewerPlayerId,
     omniscient,
     players,
