@@ -55,6 +55,7 @@ function formatPayloadSize(text: string): string {
 
 interface DecisionPanelProps {
   observation: GameObservation;
+  redactDebug?: boolean;
   aiError: AiCommandError | null;
   awaitingRetry: boolean;
   thinking: boolean;
@@ -65,10 +66,10 @@ interface DecisionPanelProps {
   onSettings(): void;
 }
 
-export function DecisionPanel({ observation, aiError, awaitingRetry, decisionError, onSubmit, onRetry, onLocal, onSettings }: DecisionPanelProps) {
+export function DecisionPanel({ observation, redactDebug, aiError, awaitingRetry, decisionError, onSubmit, onRetry, onLocal, onSettings }: DecisionPanelProps) {
   const [debugExportStatus, setDebugExportStatus] = useState<'idle' | 'copied' | 'downloaded' | 'failed'>('idle');
   const [debugExportError, setDebugExportError] = useState<string | null>(null);
-  const debugReportText = aiError?.debugReport ? formatAiDebugReport(aiError.debugReport) : null;
+  const debugReportText = !redactDebug && aiError?.debugReport ? formatAiDebugReport(aiError.debugReport) : null;
   const debugReportSize = debugReportText ? formatPayloadSize(debugReportText) : null;
   const copyDebugReport = async () => {
     if (!debugReportText) return;
@@ -144,8 +145,8 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, decisionErr
   if (aiError || awaitingRetry) {
     return <section className={styles.panel} aria-live="polite">
       <div className={styles.errorHead}><AlertTriangle /><div><span>AI COMMAND PAUSED</span><h2>{aiError ? 'AI 决策失败' : '已恢复待处理决策'}</h2></div></div>
-      <p>{aiError?.message ?? '为避免刷新后自动重复产生费用，本次 AI 请求等待你的确认。'}</p>
-      {errorMeta && <p className={styles.errorMeta}>{errorMeta}</p>}
+      <p>{redactDebug ? '决策已暂停，可重试或切换本地策略。' : aiError?.message ?? '为避免刷新后自动重复产生费用，本次 AI 请求等待你的确认。'}</p>
+      {!redactDebug && errorMeta && <p className={styles.errorMeta}>{errorMeta}</p>}
       {debugReportText && debugReportSize && <div className={styles.debugActions}>
         <button type="button" onClick={copyDebugReport}><Clipboard />{debugExportStatus === 'copied' ? `已复制 ${debugReportSize}` : `复制调试信息 · ${debugReportSize}`}</button>
         <button type="button" onClick={downloadDebugReport}><Download />{debugExportStatus === 'downloaded' ? `已下载 ${debugReportSize}` : `下载调试信息 · ${debugReportSize}`}</button>
