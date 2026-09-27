@@ -81,7 +81,7 @@ try {
         }
       }
       assert.equal(gameStateSchema.safeParse(state).success, true);
-      storage.saveGame(state, '2.4.0');
+      storage.saveGame(state, '3.0.0');
       assert.deepEqual(storage.loadGame().value.state, state);
       assert.notEqual(state, before);
     }
@@ -138,7 +138,7 @@ try {
   assert.equal(recovered.pendingDecision.skillInstanceId, recovery.id);
   recovered = submit(recovered, { use: true, targetPlayerId: donorSkill.ownerPlayerId });
   assert.equal(recovered.players[recovery.ownerPlayerId].skillInstanceId, donorSkill.id);
-  storage.saveGame(recovered, '2.4.0');
+  storage.saveGame(recovered, '3.0.0');
   assert.deepEqual(storage.loadGame().value.state, recovered);
   const duplicateActive = structuredClone(recovered);
   duplicateActive.skillInstances.find((skill) => skill.id === recovery.id).status = 'ready';
