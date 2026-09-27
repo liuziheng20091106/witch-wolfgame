@@ -189,6 +189,51 @@ try {
   const archivedContent = await readFile(join(archiveRoot, '.runtime', 'update-backups', archiveBackups[0], 'server/gameProtocol.mjs'), 'utf8');
   assert.equal(archivedContent, '// 旧协议 v1', '归档备份应是旧版本内容');
 
+  // 文件清单随源码发布：新增文件由清单决定，否则运行中的旧版本永远收不到新文件
+  sourceFiles.set('manifest.json', JSON.stringify({ files: ['shared/gamePromptContract.js', 'server/gameProtocol.mjs', 'proxy/server.mjs', 'proxy/newFile.mjs'] }));
+  sourceFiles.set('proxy/newFile.mjs', '// 新文件 v2');
+  sourceFiles.set('bad-manifest.json', 'not json');
+  const manifestConfig = {
+    passEnv: 'MAJO_UPDATE_PASS',
+    source: `http://127.0.0.1:${port}/download/{file}`,
+    manifest: 'manifest.json',
+    restartOnSuccess: false,
+  };
+  const manifestRoot = await mkdtemp(join(tmpdir(), 'update-manifest-'));
+  roots.push(manifestRoot);
+  await mkdir(join(manifestRoot, 'shared'), { recursive: true });
+  await mkdir(join(manifestRoot, 'server'), { recursive: true });
+  await mkdir(join(manifestRoot, 'proxy'), { recursive: true });
+  await writeFile(join(manifestRoot, 'shared/gamePromptContract.js'), '// 旧共享契约 v1');
+  await writeFile(join(manifestRoot, 'server/gameProtocol.mjs'), '// 旧协议 v1');
+  await writeFile(join(manifestRoot, 'proxy/server.mjs'), '// 旧代理 v1');
+  const manifestHandler = createUpdateHandler(manifestConfig, manifestRoot, () => { });
+  const manifestResult = responseRecorder();
+  await manifestHandler(updateRequest(), manifestResult);
+  assert.equal(manifestResult.status, 200);
+  assert.deepEqual(JSON.parse(manifestResult.body).updated, ['shared/gamePromptContract.js', 'server/gameProtocol.mjs', 'proxy/server.mjs', 'proxy/newFile.mjs']);
+  assert.equal(await readFile(join(manifestRoot, 'proxy/newFile.mjs'), 'utf8'), '// 新文件 v2', '清单中的新增文件应被下载');
+
+  // 清单配置下同样能恢复中断的替换
+  await rm(join(manifestRoot, 'proxy/server.mjs'));
+  await writeFile(join(manifestRoot, 'proxy/server.mjs.update-crash-3'), '// 半成品');
+  await writeFile(join(manifestRoot, 'proxy/server.mjs.backup-crash-3'), '// 旧代理 v1');
+  const manifestRecovery = await recoverInterruptedUpdate(manifestConfig, manifestRoot, () => { });
+  assert.equal(manifestRecovery.removedTemp, 1);
+  assert.equal(manifestRecovery.restored, 1, '清单配置下应从备份恢复中断的文件');
+  assert.equal(await readFile(join(manifestRoot, 'proxy/server.mjs'), 'utf8'), '// 旧代理 v1');
+
+  // 清单损坏时更新整体失败，不落地任何文件
+  const badManifestRoot = await mkdtemp(join(tmpdir(), 'update-bad-manifest-'));
+  roots.push(badManifestRoot);
+  await mkdir(join(badManifestRoot, 'proxy'), { recursive: true });
+  await writeFile(join(badManifestRoot, 'proxy/server.mjs'), '// 旧代理 v1');
+  const badManifestHandler = createUpdateHandler({ ...manifestConfig, manifest: 'bad-manifest.json' }, badManifestRoot, () => { });
+  const badManifest = responseRecorder();
+  await badManifestHandler(updateRequest(), badManifest);
+  assert.equal(badManifest.status, 502);
+  assert.equal(await readFile(join(badManifestRoot, 'proxy/server.mjs'), 'utf8'), '// 旧代理 v1');
+
   // 健康确认：节点更新后轮询 /healthz
   let healthy = true;
   const healthServer = createServer((request, response) => {
