@@ -113,6 +113,8 @@ export function parseUpdateConfig(update, projectRoot, log) {
   const sourceTemplate = update.source;
   let files = [];
   if (Array.isArray(update.files)) files = update.files;
+  let manifestPath = null;
+  if (typeof update.manifest === 'string' && update.manifest.length > 0) manifestPath = update.manifest;
   const root = resolve(projectRoot ?? '.');
   const restartOnSuccess = update.restartOnSuccess !== false;
   let restartSignalPath = null;
@@ -155,11 +157,38 @@ export function parseUpdateConfig(update, projectRoot, log) {
     log(`[update] 未启用：${error.message}`);
     return null;
   }
-  if (!pass || typeof sourceTemplate !== 'string' || !sourceTemplate.includes('{file}') || !validFiles) {
-    log('[update] 未启用：需设置 passEnv 对应环境变量、含 {file} 的 HTTPS source，以及非空且无重复的 files');
+  if (!pass || typeof sourceTemplate !== 'string' || !sourceTemplate.includes('{file}') || (!validFiles && !manifestPath)) {
+    log('[update] 未启用：需设置 passEnv 对应环境变量、含 {file} 的 HTTPS source，以及非空且无重复的 files 或 manifest');
     return null;
   }
-  return { pass, sourceTemplate, files, root, restartOnSuccess, restartSignalPath, downloadOptions, backupKeepCount, backupsRoot, update };
+  return { pass, sourceTemplate, files, manifestPath, root, restartOnSuccess, restartSignalPath, downloadOptions, backupKeepCount, backupsRoot, update };
+}
+
+function manifestUrl(config) {
+  const encoded = config.manifestPath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  return config.sourceTemplate.replaceAll('{file}', encoded);
+}
+
+function parseManifestFiles(content, manifestPath) {
+  let parsed;
+  try {
+    parsed = JSON.parse(content.toString('utf8'));
+  } catch {
+    throw new Error(`更新清单不是合法 JSON: ${manifestPath}`);
+  }
+  const files = parsed?.files;
+  const valid = Array.isArray(files) && files.length > 0 && files.length <= 500
+    && files.every((file) => typeof file === 'string' && file.length > 0 && !file.startsWith('/') && !file.split('/').includes('..'))
+    && new Set(files).size === files.length;
+  if (!valid) throw new Error(`更新清单内容无效: ${manifestPath}`);
+  return files;
+}
+
+// 文件清单随源码一起发布：运行中的旧版本无法知道后续新增的文件，硬编码清单会漏掉新文件
+async function resolveUpdateFiles(config, log) {
+  if (!config.manifestPath) return config.files;
+  const content = await downloadFile(manifestUrl(config), config.downloadOptions, null, log);
+  return parseManifestFiles(content, config.manifestPath);
 }
 
 async function pathExists(path) {
@@ -227,8 +256,9 @@ export function createUpdateHandler(update, projectRoot, log = console.log) {
         await readBody(request);
       } catch { /* 请求体与更新无关 */ }
 
-      log(`[update] 收到更新请求，共 ${config.files.length} 个文件`);
-      for (const file of config.files) {
+      const files = await resolveUpdateFiles(config, log);
+      log(`[update] 收到更新请求，共 ${files.length} 个文件`);
+      for (const file of files) {
         const targetPath = resolve(config.root, file);
         if (targetPath !== config.root && !targetPath.startsWith(config.root + sep)) {
           throw new Error(`文件路径越界: ${file}`);
@@ -250,16 +280,21 @@ export function createUpdateHandler(update, projectRoot, log = console.log) {
 
       const updated = [];
       for (const entry of staged) {
-        await rename(entry.targetPath, entry.backupPath);
-        entry.backedUp = true;
+        // 清单可能引入本地尚不存在的新文件，此时无需备份
+        if (await pathExists(entry.targetPath)) {
+          await rename(entry.targetPath, entry.backupPath);
+          entry.backedUp = true;
+        }
         try {
           await rename(entry.tempPath, entry.targetPath);
           entry.installed = true;
           updated.push(entry.file);
           log(`[update] 已替换: ${entry.file}`);
         } catch (error) {
-          await rename(entry.backupPath, entry.targetPath);
-          entry.backedUp = false;
+          if (entry.backedUp) {
+            await rename(entry.backupPath, entry.targetPath);
+            entry.backedUp = false;
+          }
           throw error;
         }
       }
@@ -317,7 +352,14 @@ export async function recoverInterruptedUpdate(update, projectRoot, log = consol
   if (!config) return { restored: 0, removedTemp: 0 };
   let restored = 0;
   let removedTemp = 0;
-  for (const file of config.files) {
+  let files;
+  try {
+    files = await resolveUpdateFiles(config, log);
+  } catch (error) {
+    log(`[update] 恢复检查跳过，无法读取文件清单: ${error.message}`);
+    return { restored: 0, removedTemp: 0 };
+  }
+  for (const file of files) {
     const targetPath = resolve(config.root, file);
     if (targetPath !== config.root && !targetPath.startsWith(config.root + sep)) continue;
     const directory = dirname(targetPath);

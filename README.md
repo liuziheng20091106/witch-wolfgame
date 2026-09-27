@@ -117,6 +117,7 @@ docker compose ps
 `deploy.main.env` 保存主后端连接密码、`MAJO_PROXY_UPDATE_PASS` 和 `MAJO_MAIN_UPDATE_PASS`；其中 `MAJO_PROXY_UPDATE_PASS` 必须与 `deploy.proxy.env` 中的 `MAJO_UPDATE_PASS` 保持一致，`MAJO_MAIN_UPDATE_PASS` 由主后端和多人服务共用。`deploy.proxy.env` 还保存 `providers.json` 引用的 API Key 环境变量。两个真实文件均被 Git 忽略，且 `MAJO_PROXY_PASSWORD_PRIMARY` 必须一致。
 主后端收到 `MAJO_MAIN_UPDATE_PASS` 后，先调用 `multiplayerUpdateNodes` 更新多人服务并确认其 `/healthz` 恢复，再执行主后端自身更新；代理更新使用独立的 `MAJO_PROXY_UPDATE_PASS`。多人服务更新完成后由 Compose 自动重启，代码更新无需重建镜像。
 代理自动更新接口仍受 mTLS 保护，并额外要求请求头 `Authorization: Bearer <MAJO_UPDATE_PASS>`；密钥不接受查询字符串。下载允许最多 5 次 HTTPS 重定向，网络错误、HTTP 408/425/429 和 5xx 默认自动重试 3 次，并在流式读取超过 8MB 时立即中止。更新文件先完整暂存，任一下载或替换失败都会清理临时文件并回滚已替换文件。同一时刻只允许一个更新事务；多人服务复用同一更新逻辑。
+`update.files` 与 `update.manifest` 二选一：`manifest` 指向源码仓库中随版本发布的 JSON 清单（当前为 `multiplayer/update-manifest.json`，格式 `{ "files": [...] }`），每次更新先下载清单再按清单取文件。多人服务使用清单，因为硬编码在运行代码里的列表无法包含后续版本新增的文件；清单中的新文件在本地不存在时直接写入，不做备份。更新中断后的恢复同样以清单为准，清单不可用时跳过恢复并保留现场。
 主后端保持 HTTP 监听，由外部 Cloudflare/反向代理负责公网 HTTPS 终止；不要给主后端配置或暴露独立 HTTPS 端口。代理节点内部继续使用 TLS 1.3 mTLS。
 
 
