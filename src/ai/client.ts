@@ -79,12 +79,19 @@ async function requestContent(
   if (signal.aborted) throw new AiCommandError('cancelled', 'AI 请求已取消');
   if (config.provider === 'custom') validateCustomConfig(config);
   const timeoutController = new AbortController();
-  const timeout = globalThis.setTimeout(() => timeoutController.abort(), 60_000);
+  let requestTimeoutMs = 60_000;
+  if (config.provider === 'custom' && config.timeoutMs !== undefined) {
+    requestTimeoutMs = config.timeoutMs;
+  }
+  const timeout = globalThis.setTimeout(() => timeoutController.abort(), requestTimeoutMs);
   const abort = () => timeoutController.abort();
   signal.addEventListener('abort', abort, { once: true });
   const endpoint = config.provider === 'free' ? config.endpoint?.trim() || FREE_PROVIDER_ENDPOINT : config.endpoint;
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Majo-Wolf-Session': sessionId };
+  // X-Majo-Wolf-Session 是公益主后端协议头；自定义服务（含本地 Ollama 等 OpenAI 兼容端点）
+  // 不认识它，且自定义头会触发浏览器 preflight 白名单校验，因此仅 free 请求携带。
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (config.provider === 'free') {
+    headers['X-Majo-Wolf-Session'] = sessionId;
     headers['X-Majo-Wolf-Client'] = FREE_CLIENT_PROTOCOL.name;
     headers['X-Majo-Wolf-Version'] = APP_VERSION;
     if (config.origin) headers.Origin = config.origin;

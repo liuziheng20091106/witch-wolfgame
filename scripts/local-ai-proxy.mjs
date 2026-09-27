@@ -1,6 +1,20 @@
 #!/usr/bin/env node
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
+
+const logTarget = process.env.LOCAL_AI_LOG ?? '';
+function writeLog(line) {
+  if (!logTarget) return;
+  const text = `[${new Date().toISOString()}] ${line}`;
+  if (logTarget === 'stdout') {
+    console.log(text);
+    return;
+  }
+  try {
+    appendFileSync(logTarget, `${text}\n`, 'utf8');
+  } catch (error) {
+  }
+}
 
 const HOST = process.env.LOCAL_AI_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.LOCAL_AI_PORT ?? 34025);
@@ -104,8 +118,36 @@ async function forwardChat(request, response) {
       'Cache-Control': 'no-store',
     });
     response.end(Buffer.from(upstreamBody));
+    let requestMeta = '';
+    try {
+      const parsedRequest = JSON.parse(body);
+      const messages = Array.isArray(parsedRequest.messages) ? parsedRequest.messages : [];
+      const last = messages[messages.length - 1];
+      const lastLen = last !== undefined && typeof last.content === 'string' ? last.content.length : 0;
+      requestMeta = `model=${parsedRequest.model ?? '?'} msgs=${messages.length} lastContentChars=${lastLen}`;
+    } catch {
+      requestMeta = 'meta-unavailable';
+    }
+    if (upstreamResponse.ok) {
+      let replySummary = '';
+      try {
+        const upstreamText = Buffer.from(upstreamBody).toString('utf8');
+        const parsed = JSON.parse(upstreamText);
+        const content = parsed.choices?.[0]?.message?.content;
+        if (typeof content === 'string') {
+          replySummary = content.slice(0, 600).replace(/\s+/g, ' ');
+        }
+      } catch {
+        replySummary = '(响应不可解析)';
+      }
+      writeLog(`OK status=${upstreamResponse.status} ${requestMeta} reply=${replySummary}`);
+    } else {
+      const upstreamText = Buffer.from(upstreamBody).toString('utf8');
+      writeLog(`ERR status=${upstreamResponse.status} ${requestMeta} body=${upstreamText.slice(0, 300)}`);
+    }
   } catch (error) {
     const message = error instanceof Error && error.name === 'AbortError' ? '上游 AI 请求超时' : '上游 AI 请求失败';
+    writeLog(`FAIL ${message}`);
     respond(request, response, 502, { error: 'upstream_unavailable', message });
   } finally {
     clearTimeout(timer);

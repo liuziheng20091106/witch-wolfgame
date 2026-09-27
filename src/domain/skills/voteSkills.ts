@@ -1,13 +1,8 @@
-import { characterById } from '../catalog/characters';
 import type { GameState, LevitationDecision, PendingDecision, PlayerId, SubmittedDecision } from '../model';
 import { addPrivateEvent, addPublicEvent } from '../engine/events';
-import { getAlivePlayerIds, getName, getPlayer } from '../engine/selectors';
+import { getName, getPlayer } from '../engine/selectors';
 import { attachBrainwashSuggestion } from './speechSkills';
-import { exhaustSkill, makeSkillDecision, markOffered, offerKey, wasOffered } from './types';
-
-function nameOf(state: GameState, playerId: PlayerId): string {
-  return getName(state, playerId);
-}
+import { exhaustSkill, markOffered, offerKey } from './types';
 
 export function getVoteSkillDecision(state: GameState): PendingDecision | null {
   // 漂浮已重构为隐匿技（night-start 发动），旧投票操纵决策停用；
@@ -24,7 +19,7 @@ export function applyVoteSkillDecision(state: GameState, pending: PendingDecisio
   markOffered(skill, offerKey(state, 'before-vote'));
   const levitation = decision as LevitationDecision;
   if (!levitation.use) {
-    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${nameOf(state, skill.ownerPlayerId)} 保留了漂浮。`, { actorPlayerId: skill.ownerPlayerId });
+    addPrivateEvent(state, [skill.ownerPlayerId], 'skill', `${getName(state, skill.ownerPlayerId)} 保留了漂浮。`, { actorPlayerId: skill.ownerPlayerId });
     return;
   }
   if (!levitation.mode) {
@@ -39,8 +34,8 @@ export function applyVoteSkillDecision(state: GameState, pending: PendingDecisio
   skill.data.voteDay = state.day;
   skill.data.voteMode = levitation.mode;
   exhaustSkill(skill);
-  const targetText = levitation.targetPlayerId === null ? '' : `，目标为 ${nameOf(state, levitation.targetPlayerId)}`;
-  addPublicEvent(state, 'skill', `${nameOf(state, skill.ownerPlayerId)} 使用漂浮：${levitation.mode}${targetText}。`, {
+  const targetText = levitation.targetPlayerId === null ? '' : `，目标为 ${getName(state, levitation.targetPlayerId)}`;
+  addPublicEvent(state, 'skill', `${getName(state, skill.ownerPlayerId)} 使用漂浮：${levitation.mode}${targetText}。`, {
     actorPlayerId: skill.ownerPlayerId,
     targetPlayerIds: levitation.targetPlayerId === null ? [] : [levitation.targetPlayerId],
     data: { mode: levitation.mode },

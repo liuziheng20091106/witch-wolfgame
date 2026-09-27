@@ -1,11 +1,11 @@
-import { POTION_CHOICE_CATALOG, SPEECH_MAX_LENGTH, VOICE_MIMIC_MAX_LENGTH, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
+import { POTION_CHOICE_CATALOG, ROLE_CATALOG, SPEECH_MAX_LENGTH, VOICE_MIMIC_MAX_LENGTH, WOLF_COUNCIL_MESSAGE_MAX_LENGTH } from '../../../shared/gamePromptContract.js';
 import { AlertTriangle, Clipboard, Download, RefreshCcw, Send, Settings, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { aiDebugReportFilename, formatAiDebugReport } from '../../ai/debugReport';
 import type { AiCommandError } from '../../ai/types';
 import { copyTextToClipboard } from '../../app/clipboard';
 import { downloadTextFile } from '../../app/download';
-import type { GameObservation, PendingDecision, PlayerId, SubmittedDecision } from '../../domain/model';
+import type { GameObservation, PendingDecision, PlayerId, RoleId, SubmittedDecision } from '../../domain/model';
 import { isCreatureId } from '../../domain/engine/selectors';
 import styles from './DecisionPanel.module.css';
 
@@ -55,6 +55,7 @@ function formatPayloadSize(text: string): string {
 
 interface DecisionPanelProps {
   observation: GameObservation;
+  redactDebug?: boolean;
   aiError: AiCommandError | null;
   awaitingRetry: boolean;
   thinking: boolean;
@@ -65,10 +66,10 @@ interface DecisionPanelProps {
   onSettings(): void;
 }
 
-export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, decisionError, onSubmit, onRetry, onLocal, onSettings }: DecisionPanelProps) {
+export function DecisionPanel({ observation, redactDebug, aiError, awaitingRetry, decisionError, onSubmit, onRetry, onLocal, onSettings }: DecisionPanelProps) {
   const [debugExportStatus, setDebugExportStatus] = useState<'idle' | 'copied' | 'downloaded' | 'failed'>('idle');
   const [debugExportError, setDebugExportError] = useState<string | null>(null);
-  const debugReportText = aiError?.debugReport ? formatAiDebugReport(aiError.debugReport) : null;
+  const debugReportText = !redactDebug && aiError?.debugReport ? formatAiDebugReport(aiError.debugReport) : null;
   const debugReportSize = debugReportText ? formatPayloadSize(debugReportText) : null;
   const copyDebugReport = async () => {
     if (!debugReportText) return;
@@ -123,7 +124,7 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
     setDebugExportError(null);
   }, [aiError]);
 
-  const candidateNames = useMemo(() => new Map(observation.players.map((player) => [player.id, player.name])), [observation.players]);
+  const candidateNames = useMemo(() => new Map((observation.entityRoster ?? observation.players).map((player) => [player.id, player.name])), [observation.entityRoster, observation.players]);
   const wolfCouncilMessages = useMemo(() => readWolfCouncilMessages(pending), [pending]);
   const candidateLabel = (playerId: PlayerId): string => {
     const name = candidateNames.get(playerId) ?? '未知目标';
@@ -144,8 +145,8 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   if (aiError || awaitingRetry) {
     return <section className={styles.panel} aria-live="polite">
       <div className={styles.errorHead}><AlertTriangle /><div><span>AI COMMAND PAUSED</span><h2>{aiError ? 'AI 决策失败' : '已恢复待处理决策'}</h2></div></div>
-      <p>{aiError?.message ?? '为避免刷新后自动重复产生费用，本次 AI 请求等待你的确认。'}</p>
-      {errorMeta && <p className={styles.errorMeta}>{errorMeta}</p>}
+      <p>{redactDebug ? '决策已暂停，可重试或切换本地策略。' : aiError?.message ?? '为避免刷新后自动重复产生费用，本次 AI 请求等待你的确认。'}</p>
+      {!redactDebug && errorMeta && <p className={styles.errorMeta}>{errorMeta}</p>}
       {debugReportText && debugReportSize && <div className={styles.debugActions}>
         <button type="button" onClick={copyDebugReport}><Clipboard />{debugExportStatus === 'copied' ? `已复制 ${debugReportSize}` : `复制调试信息 · ${debugReportSize}`}</button>
         <button type="button" onClick={downloadDebugReport}><Download />{debugExportStatus === 'downloaded' ? `已下载 ${debugReportSize}` : `下载调试信息 · ${debugReportSize}`}</button>
@@ -174,6 +175,7 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   </fieldset>;
 
   let valid = true;
+  if (pending.schemaKey === 'assassin') valid = target === '' || mode !== '';
   if (pending.schemaKey === 'speech') valid = speech.length <= SPEECH_MAX_LENGTH && mentionsRequired(speech);
   if (pending.schemaKey === 'wolf-council') valid = speech.trim().length > 0 && speech.length <= WOLF_COUNCIL_MESSAGE_MAX_LENGTH && target !== '';
   if (pending.schemaKey === 'target') valid = pending.allowAbstain || target !== '';
@@ -184,7 +186,9 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
 
   const submit = () => {
     let decision: SubmittedDecision;
-    if (pending.schemaKey === 'speech') decision = { speech };
+    if (pending.schemaKey === 'role-draft') decision = { roleId: mode === '' ? null : mode as RoleId };
+    else if (pending.schemaKey === 'assassin') decision = { targetPlayerId: target === '' ? null : Number(target) as PlayerId, guessedRoleId: target === '' ? null : mode as RoleId };
+    else if (pending.schemaKey === 'speech') decision = { speech };
     else if (pending.schemaKey === 'wolf-council') decision = { message: speech.trim(), recommendedTargetPlayerId: Number(target) as PlayerId };
     else if (pending.schemaKey === 'target') decision = { targetPlayerId: target === '' ? null : Number(target) as PlayerId };
     else if (pending.schemaKey === 'optional-target') decision = { use: useSkill, targetPlayerId: useSkill ? Number(target) as PlayerId : null };
@@ -213,6 +217,12 @@ export function DecisionPanel({ observation, aiError, awaitingRetry, thinking, d
   return <section className={styles.panel} aria-labelledby="decision-title">
     <header><span>YOUR DECISION</span><h2 id="decision-title">{pending.title}</h2><p>{pending.description}</p></header>
     <div className={styles.body}>
+      {pending.schemaKey === 'assassin' && targetControl(true)}
+      {(pending.schemaKey === 'role-draft' || (pending.schemaKey === 'assassin' && target !== '')) && <fieldset className={styles.candidates}>
+        <legend>{pending.schemaKey === 'role-draft' ? '选择职业' : '猜测职业'}</legend>
+        {pending.schemaKey === 'role-draft' && <label><input type="radio" name="role" checked={mode === ''} onChange={() => setMode('')} /><span>随机职业</span></label>}
+        {ROLE_CATALOG.filter((role) => Array.isArray(pending.options.roleIds) && pending.options.roleIds.includes(role.id)).map((role) => <label key={role.id} title={role.description}><input type="radio" name="role" checked={mode === role.id} onChange={() => setMode(role.id)} /><span>{role.name}</span></label>)}
+      </fieldset>}
       {wolfCouncilMessages.length > 0 && <section className={styles.councilLog} aria-labelledby="wolf-council-title">
         <h3 id="wolf-council-title">狼人内部频道</h3>
         {wolfCouncilMessages.map((entry) => <div key={entry.speakerPlayerId}>

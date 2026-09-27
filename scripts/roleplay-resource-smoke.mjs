@@ -21,6 +21,7 @@ let ORIGINAL_CASE_SUMMARY_MAX_LENGTH;
 let selectRoleplayRetrievalCards;
 let buildRoleplayPersonality;
 let buildRoleplaySpeechStyle;
+let inspectRoleplayStaticCards;
 let buildDecisionPrompt;
 try {
   ({ ROLEPLAY_STATIC_BY_CHARACTER_ID } = await server.ssrLoadModule('/src/data/roleplay-static.ts'));
@@ -30,12 +31,17 @@ try {
     ORIGINAL_CASE_SUMMARY_MAX_LENGTH,
     selectRoleplayRetrievalCards,
   } = await server.ssrLoadModule('/src/data/roleplay-retrieval.ts'));
-  ({ buildRoleplayPersonality, buildRoleplaySpeechStyle } = await server.ssrLoadModule('/src/ai/roleplayLore.ts'));
+  ({
+    buildRoleplayPersonality,
+    buildRoleplaySpeechStyle,
+    inspectRoleplayStaticCards,
+  } = await server.ssrLoadModule('/src/ai/roleplayLore.ts'));
   ({ buildDecisionPrompt } = await server.ssrLoadModule('/src/ai/prompts.ts'));
 } finally {
   await server.close();
 }
 
+assert.deepEqual(inspectRoleplayStaticCards(), [], '角色卡自检必须全部通过（缺卡、锚点超限、版本不明确都会在这里列出）');
 const cards = Object.values(ROLEPLAY_STATIC_BY_CHARACTER_ID);
 assert.equal(cards.length, CHARACTER_CATALOG.length, '静态卡数量必须覆盖全部角色');
 assert.equal(new Set(cards.map((card) => card.characterId)).size, cards.length, '静态卡 ID 必须唯一');
@@ -172,6 +178,11 @@ const retrievalDefaults = {
 };
 const noCaseCards = selectRoleplayRetrievalCards(retrievalDefaults);
 assert.equal(noCaseCards.some((card) => card.category === 'original_case'), false, '只有角色信号时不得常驻案件');
+const voiceExampleCards = noCaseCards.filter((card) => card.category === 'voice_examples');
+assert.equal(voiceExampleCards.length, 1, '每个角色必须注入且只注入一张原文台词样本卡');
+assert.equal(voiceExampleCards[0]?.id, 'voice-examples.soul-13', '原文台词样本卡必须对应当前行动者');
+assert.ok((voiceExampleCards[0]?.content ?? '').includes('艾玛亲'), '泽渡可可的原文台词样本必须逐字取自原文');
+assert.ok((voiceExampleCards[0]?.content ?? '').includes('不作为本局证据'), '原文台词样本必须携带本局隔离边界');
 const knowledgeMatchedCards = selectRoleplayRetrievalCards({ ...retrievalDefaults, privateKnowledgeCount: 1, currentSpeechCount: 3 });
 assert.equal(knowledgeMatchedCards.some((card) => card.id === 'argument.use-private-knowledge'), true, '私有查验应优先选择知识使用卡');
 const pressureMatchedCards = selectRoleplayRetrievalCards({ ...retrievalDefaults, votesAgainstActor: 1 });
@@ -228,13 +239,21 @@ const dynamicPrompt = buildDecisionPrompt({
 const dynamicPayload = JSON.parse(dynamicPrompt[1].content);
 assert.match(dynamicPayload.actor.personality, /original-case\.A2-C2/, '实际提示词应注入动态命中的可可案');
 assert.match(dynamicPayload.actor.personality, /不得作为本局身份、投票或行动依据/, '案件卡必须携带本局隔离边界');
-assert.match(dynamicPayload.actor.role, /不要仅因诚实、正义或避免猜疑而自曝狼人/, '狼人必须收到阵营胜利与谨慎自曝建议');
+assert.doesNotMatch(buildGameSystemPrompt('speech'), /狼人不自曝/, '通用系统提示不得注入狼队策略');
+assert.match(dynamicPayload.actor.role, /不要公开自曝/, '狼人行动者必须收到谨慎自曝建议');
+const goodPrompt = buildDecisionPrompt({
+  observation: { ...baseObservation, pendingDecision: baseSpeechDecision },
+  pendingDecision: baseSpeechDecision,
+  sessionId: 'roleplay-good-role',
+});
+const goodPayload = JSON.parse(goodPrompt[1].content);
+assert.doesNotMatch(goodPayload.actor.role, /不要公开自曝/, '好人行动者不得收到狼队自曝建议');
 assert.match(dynamicPayload.actor.skill, /第一天信任不足，几乎无人观看/, '千里眼持有者必须收到首日保留建议');
 const noahPublicSkill = dynamicPayload.publicSkills.find((entry) => entry.playerId === 3);
 assert.ok(noahPublicSkill, '公共技能列表必须包含诺亚');
 assert.match(noahPublicSkill.skill, /与主人始终共享同一基础职业与阵营/, '所有玩家必须知道造物与主人共享身份');
 assert.equal(validateGamePrompt(dynamicPrompt).ok, true, '动态案件提示词必须通过后端契约');
-const dynamicBodyBytes = Buffer.byteLength(JSON.stringify(buildFreeClientPayload('2.4.0', dynamicPrompt)), 'utf8');
+const dynamicBodyBytes = Buffer.byteLength(JSON.stringify(buildFreeClientPayload('3.0.0', dynamicPrompt)), 'utf8');
 maxPersonalityLength = Math.max(maxPersonalityLength, dynamicPayload.actor.personality.length);
 maxFreeBodyBytes = Math.max(maxFreeBodyBytes, dynamicBodyBytes);
 assert.ok(dynamicBodyBytes <= 32 * 1024, '动态案件提示词超过目标预算');
@@ -407,7 +426,7 @@ for (let playerId = 0; playerId < players.length; playerId += 1) {
   const payload = JSON.parse(prompt[1].content);
   assert.equal(validateGamePrompt(prompt).ok, true, `角色 ${playerId} 提示词契约校验失败`);
   assert.ok(payload.actor.personality.length <= PROMPT_LIMITS.actorPersonalityMaxLength, `角色 ${playerId} actor personality 超限`);
-  const body = JSON.stringify(buildFreeClientPayload('2.4.0', prompt));
+  const body = JSON.stringify(buildFreeClientPayload('3.0.0', prompt));
   const bodyBytes = Buffer.byteLength(body, 'utf8');
   maxFreeBodyBytes = Math.max(maxFreeBodyBytes, bodyBytes);
   assert.ok(bodyBytes <= CHAT_COMPLETIONS_MAX_BODY_BYTES, `角色 ${playerId} 免费请求体超限`);

@@ -84,6 +84,9 @@
   min-height: 0;
 }
 
+.desktopSuspects { min-height: 0; margin: 8px; overflow: hidden; border: 1px solid var(--line-strong); }
+.suspectPane { display: none; }
+
 .sidePane {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -359,6 +362,9 @@
   font-weight: 800;
 }
 
+.mobileExport { display: none; width: 34px; height: 34px; flex: none; align-items: center; justify-content: center; margin-left: auto; border: 1px solid var(--intel-dark); background: var(--paper-bright); color: var(--intel-dark); }
+.mobileExport svg { width: 16px; }
+
 .desktopRestart {
   display: inline-flex;
   align-items: center;
@@ -534,12 +540,16 @@
     display: none;
   }
 
+  .sidePane>.desktopSuspects { display: block; max-height: 280px; }
+
   .decisionPanelVisible .result {
     bottom: calc(var(--mobile-side-pane-height) + 12px);
   }
 }
 
 @media (max-width: 839px) {
+  .mobileExport { display: inline-flex; }
+  .mobileExport+.mobileRestart { margin-left: 0; }
   .game {
     min-height: 560px;
     grid-template-rows: 62px 52px minmax(0, 1fr) auto;
@@ -613,7 +623,8 @@
 
   .rosterPane,
   .livePane,
-  .historyPane {
+  .historyPane,
+  .suspectPane {
     display: none;
     height: 100%;
   }
@@ -625,6 +636,11 @@
     grid-row: 1;
     display: block;
   }
+
+  .mobileTabs.blindTabs { grid-template-columns: repeat(4, 1fr); }
+
+  .workspace[data-mobile-tab='suspects'] .suspectPane { grid-column: 1; grid-row: 1; display: block; }
+  .sidePane>.desktopSuspects { display: none; }
 
   .sidePane {
     grid-column: 1;

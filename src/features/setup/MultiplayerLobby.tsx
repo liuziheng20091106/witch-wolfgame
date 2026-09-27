@@ -2,7 +2,9 @@ import { Copy, LogIn, Play, Radio, UserRound, Users, Wifi, WifiOff } from 'lucid
 import { useState } from 'react';
 import type { MultiplayerController } from '../../multiplayer/useMultiplayerRoom';
 import { characterById, characters } from '../../domain/catalog/characters';
-import type { CharacterId } from '../../domain/model';
+import type { CharacterId, RosterOptions } from '../../domain/model';
+import { formatBoardDescription, rolePoolError, rolePoolForPlayerCount } from '../../../shared/gamePromptContract.js';
+import { RosterEditor } from './RosterEditor';
 import { copyTextToClipboard } from '../../app/clipboard';
 import styles from './MultiplayerLobby.module.css';
 
@@ -16,6 +18,7 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
   const [roomCode, setRoomCode] = useState('');
   const [characterId, setCharacterId] = useState<CharacterId>(defaultCharacterId ?? 'soul-0');
   const [playerCount, setPlayerCount] = useState(6);
+  const [roster, setRoster] = useState<RosterOptions>({});
   const [copied, setCopied] = useState(false);
   const room = multiplayer.room;
   const self = room?.participants.find((participant) => participant.participantId === room.selfParticipantId) ?? null;
@@ -27,6 +30,7 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
     return <section className={styles.lobby} aria-labelledby="multiplayer-lobby-title">
       <header><Radio /><div><span>ONLINE ROOM · {room.playerCount} SEATS</span><h2 id="multiplayer-lobby-title">房间 {room.roomCode}</h2></div><button type="button" className={styles.copy} onClick={() => { void copyTextToClipboard(room.roomCode).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }); }}><Copy />{copied ? '已复制' : '复制房间号'}</button></header>
       <div className={styles.status}><span>{multiplayer.connected ? <Wifi /> : <WifiOff />}{multiplayer.connected ? '已连接' : '连接中断'}</span><strong>{room.status === 'lobby' ? '等待准备' : room.status === 'playing' ? '审判进行中' : room.status === 'failed' ? '审判异常终止' : '审判已结束'}</strong></div>
+      <p>{room.assignmentMode === 'draft' ? '顺序选职' : '随机分配'} · {formatBoardDescription(room.rolePool ?? rolePoolForPlayerCount(room.playerCount))}</p>
       <div className={styles.participants}>
         {room.participants.map((participant) => {
           const character = characterById[participant.characterId];
@@ -54,10 +58,11 @@ export function MultiplayerLobby({ multiplayer, defaultCharacterId }: Multiplaye
     <div className={styles.fields}>
       <label>显示名<input maxLength={24} value={playerName} onChange={(event) => setPlayerName(event.target.value)} /></label>
       <label>角色<select value={characterId} onChange={(event) => setCharacterId(event.target.value as CharacterId)}>{characters.map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select></label>
-      <label>房间人数<select value={playerCount} onChange={(event) => setPlayerCount(Number(event.target.value))}>{Array.from({ length: 9 }, (_, index) => index + 6).map((count) => <option key={count} value={count}>{count} 人</option>)}</select></label>
+      <label>房间人数<select value={playerCount} onChange={(event) => { setPlayerCount(Number(event.target.value)); setRoster({ assignmentMode: roster.assignmentMode ?? 'classic' }); }}>{Array.from({ length: 9 }, (_, index) => index + 6).map((count) => <option key={count} value={count}>{count} 人</option>)}</select></label>
       <label>房间号<input maxLength={6} value={roomCode} onChange={(event) => setRoomCode(event.target.value.toUpperCase())} placeholder="ABC234" /></label>
     </div>
-    <div className={styles.actions}><button type="button" onClick={() => multiplayer.createRoom(playerName.trim(), characterId, playerCount)} disabled={multiplayer.connecting || !playerName.trim()}><Radio />创建房间</button><button type="button" onClick={() => multiplayer.joinRoom(roomCode, playerName.trim(), characterId)} disabled={multiplayer.connecting || roomCode.length !== 6 || !playerName.trim()}><LogIn />加入房间</button></div>
+    <RosterEditor playerCount={playerCount} value={roster} onChange={setRoster} />
+    <div className={styles.actions}><button type="button" onClick={() => multiplayer.createRoom(playerName.trim(), characterId, playerCount, undefined, roster)} disabled={multiplayer.connecting || !playerName.trim() || rolePoolError(roster.rolePool ?? rolePoolForPlayerCount(playerCount), playerCount) !== null}><Radio />创建房间</button><button type="button" onClick={() => multiplayer.joinRoom(roomCode, playerName.trim(), characterId)} disabled={multiplayer.connecting || roomCode.length !== 6 || !playerName.trim()}><LogIn />加入房间（使用房主版型）</button></div>
     {multiplayer.connecting && <p>正在连接多人服务器…</p>}
     {multiplayer.error && <p className={styles.error} role="alert">{multiplayer.error}</p>}
   </section>;

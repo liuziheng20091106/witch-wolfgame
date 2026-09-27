@@ -69,7 +69,7 @@ function validPayload() {
     name: character.name,
   }));
   return {
-    client: { ...FREE_CLIENT_PROTOCOL, version: '2.4.0' },
+    client: { ...FREE_CLIENT_PROTOCOL, version: '3.0.0' },
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: buildGameSystemPrompt('target') },
@@ -277,7 +277,7 @@ try {
   await writeFile(proxyConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 },
     tls: { ca: join(certs, 'ca.crt'), cert: join(certs, 'proxy-server.crt'), key: join(certs, 'proxy-server.key') },
-    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.4.0'], providersFile,
+    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['3.0.0'], providersFile,
   }));
   process.env.MAJO_PROXY_PASSWORD_PRIMARY = 'backend-smoke-long-random-password';
   process.env.SMOKE_API_KEYS = 'key-one,key-two';
@@ -306,7 +306,7 @@ try {
     proxies: [{ name: '水梦梦的服务器', url: `https://127.0.0.1:${proxyPort}/internal/v1/chat/completions`, ca: join(certs, 'ca.crt'), clientCert: join(certs, 'main-client.crt'), clientKey: join(certs, 'main-client.key'), serverName: 'proxy.internal', connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', timeoutMs: 5000 }],
     multiplayerUpdateNodes: [{ name: 'multiplayer', url: `http://127.0.0.1:${managedUpdaterPort}/update`, updatePassEnv: 'MAJO_MAIN_UPDATE_PASS', updateTimeoutMs: 5000 }],
     rateLimit: { windowMs: 60000, maxRequests: 2, maxConcurrent: 2 },
-    acceptedClientVersions: ['2.4.0'],
+    acceptedClientVersions: ['3.0.0'],
     update: { passEnv: 'MAJO_MAIN_UPDATE_PASS', source: 'https://raw.githubusercontent.com/liuziheng20091106/witch-wolfgame/main/{file}', files: [] },
   }));
   multiplayerUpstream = new WebSocketServer({ port: 0, host: '127.0.0.1' });
@@ -627,7 +627,7 @@ try {
   await writeFile(fallbackProxyConfig, JSON.stringify({
     listen: { host: '127.0.0.1', port: 0 },
     tls: { ca: join(certs, 'ca.crt'), cert: join(certs, 'proxy-server.crt'), key: join(certs, 'proxy-server.key') },
-    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['2.4.0'], providersFile: fallbackProvidersFile,
+    connectionPasswordEnv: 'MAJO_PROXY_PASSWORD_PRIMARY', acceptedClientVersions: ['3.0.0'], providersFile: fallbackProvidersFile,
   }));
   fallbackProxy = await startProxyServer(fallbackProxyConfig);
   const fallbackProxyPort = fallbackProxy.address().port;

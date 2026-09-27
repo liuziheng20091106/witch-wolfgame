@@ -41,6 +41,7 @@ export interface CustomAiProviderConfig {
   profiles: AiModelProfiles;
   retryCount: number;
   jsonOutputMode: JsonOutputMode;
+  timeoutMs?: number;
 }
 
 export type AiProviderConfig = FreeAiProviderConfig | CustomAiProviderConfig;
@@ -151,4 +152,5 @@ export const defaultCustomAiConfig: CustomAiProviderConfig = {
   },
   retryCount: 2,
   jsonOutputMode: 'auto',
+  timeoutMs: 120_000,
 };

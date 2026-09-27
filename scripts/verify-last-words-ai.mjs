@@ -13,17 +13,16 @@ import { validateGamePrompt } from '../server/gameProtocol.mjs';
 const root = resolve(import.meta.dirname, '..');
 const server = await createServer({ root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
 
-let createGame, reduceGame, resolveNight, buildDecisionPrompt, parseDecision, isAllowedDecisionPair, getRoleAssignment;
+let createGame, resolveNight, buildDecisionPrompt, parseDecision, isAllowedDecisionPair, getRoleAssignment, selectObservation;
 try {
   ({ createGame } = await server.ssrLoadModule('/src/domain/engine/createGame.ts'));
-  ({ reduceGame } = await server.ssrLoadModule('/src/domain/engine/reducer.ts'));
   ({ resolveNight } = await server.ssrLoadModule('/src/domain/engine/night.ts'));
   ({ buildDecisionPrompt } = await server.ssrLoadModule('/src/ai/prompts.ts'));
   ({ parseDecision } = await server.ssrLoadModule('/src/ai/schemas.ts'));
   ({ isAllowedDecisionPair } = await server.ssrLoadModule('/shared/gamePromptContract.js'));
-  ({ getRoleAssignment } = await server.ssrLoadModule('/src/domain/engine/selectors.ts'));
+  ({ getRoleAssignment, selectObservation } = await server.ssrLoadModule('/src/domain/engine/selectors.ts'));
 } finally {
-  // 保持 server 打开
+  await server.close();
 }
 
 let failures = 0;
@@ -45,10 +44,10 @@ function check(label, ok, detail = '') {
 // 找一个对局并构造首夜狼刀死亡 → 遗言决策
 const game = createGame({ mode: 'spectator', humanCharacterId: null, seed: 42 >>> 0, playerCount: 6, selectedCharacterIds: [] });
 const realWolf = game.players.find((p) => getRoleAssignment(game, p.id).roleId === 'wolf');
-const victim = game.players.find((p) => p.id !== realWolf?.id);
+// 首夜猎人会先收到开枪决策；使用村民直接验证遗言提示词。
+const victim = game.players.find((p) => getRoleAssignment(game, p.id).roleId === 'villager');
 if (!realWolf || !victim) {
   console.log('FAIL 对局缺少狼人');
-  await server.close();
   process.exit(1);
 }
 console.log(`  狼人座位: ${realWolf.id}，死者座位: ${victim.id}`);
@@ -69,14 +68,12 @@ const resolved = resolveNight(game);
 const pending = resolved.pendingDecision;
 check('出现遗言决策', pending !== null && pending.title === '遗言');
 if (!pending) {
-  await server.close();
   process.exit(1);
 }
 
 check('契约允许 speech/speech 组合', isAllowedDecisionPair('speech', 'speech'));
 
 // 以死者视角组装 AI 提示词（模拟 useGameController 的请求路径）
-const { selectObservation } = await server.ssrLoadModule('/src/domain/engine/selectors.ts');
 const observation = selectObservation(resolved, { kind: 'player', playerId: pending.actorId });
 let prompt;
 try {
@@ -119,7 +116,6 @@ try {
 
 console.log(`\n===== 结果 =====`);
 console.log(`检查项: ${checks} | 失败: ${failures}`);
-await server.close();
 if (failures > 0) {
   process.exit(1);
 } else {

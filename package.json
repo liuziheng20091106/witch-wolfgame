@@ -1,6 +1,6 @@
 {
   "name": "majo-wolf",
-  "version": "2.4.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,6 +25,7 @@
     "test:visual-evidence": "node scripts/integration-visual-test.mjs",
     "test:continuation": "node scripts/verify-continuation.mjs",
     "test:roster": "node scripts/configurable-roster-smoke.mjs",
+    "test:custom-roster": "node scripts/custom-roster-draft-smoke.mjs",
     "test:voting": "node scripts/verify-voting.mjs",
     "sim": "node scripts/monte-carlo.mjs"
   },

@@ -73,6 +73,11 @@ export interface CreatureState {
 export interface RoleResources {
   antidote?: 0 | 1;
   poison?: 0 | 1;
+  hunterShot?: 0 | 1;
+  wolfKingShot?: 0 | 1;
+  assassination?: 0 | 1;
+  lastGuardNight?: number;
+  lastGuardTargetPlayerId?: PlayerId;
 }
 
 export interface RoleAssignmentState {
@@ -155,7 +160,7 @@ export interface VoteRecord {
 
 export interface DeathIntent {
   targetPlayerId: PlayerId;
-  source: 'wolf' | 'poison' | 'precise-kill';
+  source: 'wolf' | 'poison' | 'precise-kill' | 'hunter-gun' | 'wolf-king-gun' | 'assassination';
   preventable: boolean;
 }
 
@@ -215,7 +220,21 @@ export interface IgnitionDecision {
   use: boolean;
 }
 
+export interface DraftDecision { roleId: RoleId | null }
+export interface AssassinDecision extends TargetDecision { guessedRoleId: RoleId | null }
+export interface RosterOptions {
+  rolePool?: RoleId[];
+  assignmentMode?: 'classic' | 'draft';
+}
+export interface RoleDraft {
+  order: PlayerId[];
+  selectedPlayerIds: PlayerId[];
+  remainingRoles: RoleId[];
+}
+
 export type SubmittedDecision =
+  | DraftDecision
+  | AssassinDecision
   | TargetDecision
   | OptionalTargetDecision
   | SpeechDecision
@@ -228,11 +247,12 @@ export type SubmittedDecision =
 
 export interface GameResult {
   winner: Alignment;
-  reason: 'wolves-eliminated' | 'parity';
+  reason: 'wolves-eliminated' | 'parity' | 'dodo-exiled';
   finishedDay: number;
 }
 
-export interface GameState {
+export interface GameState extends RosterOptions {
+  roleDraft?: RoleDraft | null;
   schemaVersion: 1;
   gameId: string;
   seriesId: string;
@@ -265,7 +285,7 @@ export interface GameState {
 }
 export type RewindSnapshot = Omit<GameState, 'morningCheckpoint' | 'causalLocks' | 'archivedTimelines' | 'usedFreeProvider' | 'aiFailureOccurred' | 'lastAiFailure'>;
 
-export interface GameSetup {
+export interface GameSetup extends RosterOptions {
   mode: GameMode;
   humanCharacterId: CharacterId | null;
   playerCount: number;

@@ -30,7 +30,9 @@ const aiServer = createServer((request, response) => {
       const payload = JSON.parse(raw);
       const prompt = JSON.parse(payload.messages[1].content);
       const candidate = prompt.legalCandidates[0]?.playerId ?? null;
-      const decision = prompt.action.schema === 'speech'
+      const decision = prompt.action.schema === 'role-draft' ? { roleId: null }
+        : prompt.action.schema === 'assassin' ? { targetPlayerId: null, guessedRoleId: null }
+        : prompt.action.schema === 'speech'
         ? { speech: '[FAKE-AI] 这是模型生成的公开判断。' }
         : prompt.action.schema === 'wolf-council'
           ? { message: '[FAKE-AI] 依据公开信息选择目标。', recommendedTargetPlayerId: candidate }
@@ -120,6 +122,8 @@ function client() {
 }
 
 function decisionFor(pending, speech) {
+  if (pending.schemaKey === 'role-draft') return { roleId: null };
+  if (pending.schemaKey === 'assassin') return { targetPlayerId: null, guessedRoleId: null };
   const targetPlayerId = pending.candidates[0] ?? null;
   if (pending.schemaKey === 'speech') return { speech };
   if (pending.schemaKey === 'wolf-council') return { message: '优先处理公开判断最准确的目标。', recommendedTargetPlayerId: targetPlayerId };
@@ -140,6 +144,32 @@ try {
   const blankNameError = await blankName.next((message) => message.type === 'error', '空白名称拒绝');
   assert.equal(blankNameError.code, 'invalid_message');
   blankName.socket.close();
+
+  const draftHost = client();
+  await draftHost.open();
+  const rolePool = ['wolf', 'assassin', 'mortician', 'seer', 'witch', 'villager'];
+  draftHost.send({ type: 'create-room', playerName: '轮抽测试', characterId: 'soul-0', playerCount: 6, seed: 12, rolePool, assignmentMode: 'draft' });
+  const draftWelcome = await draftHost.next((message) => message.type === 'welcome', '自定义轮抽建房');
+  assert.deepEqual(draftWelcome.room.rolePool, rolePool);
+  assert.equal(draftWelcome.room.assignmentMode, 'draft');
+  draftHost.send({ type: 'set-ready', ready: true });
+  await draftHost.next((message) => message.type === 'room-state' && message.room.participants[0].ready, '轮抽准备');
+  draftHost.send({ type: 'start-game' });
+  const draftTurn = await draftHost.next((message) => message.room?.observation?.pendingDecision?.kind === 'role-draft', '轮抽真人回合', 10000);
+  assert.equal(draftTurn.room.observation.players.every((player) => player.roleId === null), true, '轮抽中不能提前暴露分配或狼队');
+  const draftResume = client();
+  await draftResume.open();
+  draftResume.send({ type: 'resume-room', roomCode: draftWelcome.room.roomCode, resumeToken: draftWelcome.resumeToken });
+  const restoredDraft = await draftResume.next((message) => message.type === 'welcome', '轮抽中途重连');
+  assert.deepEqual(restoredDraft.room.observation.pendingDecision, draftTurn.room.observation.pendingDecision, '重连不得重抽候选职业');
+  draftResume.send({ type: 'submit-decision', pendingDecisionId: restoredDraft.room.observation.pendingDecision.id, decision: { roleId: 'invalid' } });
+  await draftResume.next((message) => message.type === 'error' && message.code === 'room_error', '非法轮抽职业');
+  draftResume.send({ type: 'submit-decision', pendingDecisionId: restoredDraft.room.observation.pendingDecision.id, decision: { roleId: null } });
+  const drafted = await draftResume.next((message) => message.room?.observation && message.room.observation.phase !== 'role-draft', '轮抽完成', 10000);
+  assert.equal(drafted.room.observation.players.find((player) => player.isSelf)?.roleId !== null, true);
+  draftResume.send({ type: 'leave-room' });
+  draftHost.socket.close();
+  draftResume.socket.close();
 
   const host = client();
   await host.open();

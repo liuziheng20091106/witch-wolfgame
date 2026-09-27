@@ -232,7 +232,8 @@ console.log('=== 3. 第二夜（day 1）夜晚死亡 → 无遗言 ===');
   if (!game) process.exit(1);
   game.day = 1;
   const wolfId = game.players.find((p) => getRoleAssignment(game, p.id).roleId === 'wolf');
-  const villagerId = game.players.find((p) => p.id !== wolfId.id);
+  // 猎人死亡会先等待开枪；本场景只验证普通村民的无遗言流程。
+  const villagerId = game.players.find((p) => getRoleAssignment(game, p.id).roleId === 'villager');
   injectNightDeath(game, villagerId.id, 'wolf', wolfId.id);
   const resolved = resolveNight(game);
   check('第二夜死亡不产生遗言决策', resolved.pendingDecision === null || resolved.pendingDecision.options.lastWords !== true, JSON.stringify(resolved.pendingDecision?.title ?? '无'));

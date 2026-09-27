@@ -1,0 +1,30 @@
+.book { height: 100%; min-height: 0; display: flex; flex-direction: column; background: var(--paper-bright); color: var(--ink); }
+.book>header { display: flex; gap: 10px; align-items: center; padding: 14px 16px; border-bottom: 2px solid var(--ink); }
+.book>header svg { width: 20px; color: var(--verdict); }
+.book>header span { color: var(--verdict); font-family: var(--sans); font-size: 9px; font-weight: 900; }
+.book h2 { margin: 2px 0 0; font-size: 20px; }
+.scroll { min-height: 0; overflow-y: auto; padding: 4px 16px 24px; }
+.suspect { padding: 15px 0; border-bottom: 1px solid var(--line); }
+.identity { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+.identity strong { font-size: 15px; }
+.identity span { color: var(--muted); font-size: 12px; }
+.segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line-strong); }
+.segmented button { min-height: 36px; border: 0; background: transparent; color: var(--ink); font-size: 12px; font-weight: 800; }
+.segmented button+button { border-left: 1px solid var(--line-strong); }
+.segmented button[aria-pressed='true'] { background: var(--intel); color: white; }
+.reasonLabel,.evidenceLabel { display: grid; gap: 5px; margin-top: 10px; color: var(--muted); font-family: var(--sans); font-size: 11px; font-weight: 800; }
+.reasonLabel textarea,.evidenceLabel select { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--line-strong); border-radius: 0; background: var(--paper); color: var(--ink); font: inherit; font-size: 12px; }
+.reasonLabel textarea { resize: vertical; line-height: 1.5; }
+.evidenceLabel { grid-template-columns: 16px 1fr; align-items: center; }
+.evidenceLabel svg { width: 14px; }
+.evidenceLabel select { grid-column: 1 / -1; }
+.evidence { list-style: none; margin: 8px 0 0; padding: 0; }
+.evidence li { display: flex; align-items: center; gap: 6px; padding: 5px 0; font-size: 11px; }
+.evidence li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evidence button { width: 28px; height: 28px; border: 0; background: transparent; color: var(--verdict); }
+.evidence button svg { width: 14px; }
+.snapshots { padding: 14px 0; }
+.snapshots h3 { margin: 0 0 8px; font-size: 15px; }
+.snapshots details { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.snapshots summary { cursor: pointer; font-weight: 800; }
+.snapshots ul { padding-left: 18px; line-height: 1.7; }

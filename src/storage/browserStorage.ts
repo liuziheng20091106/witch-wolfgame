@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS } from '../../shared/gamePromptContract.js';
+import { CHARACTER_IDS, MAX_PLAYERS, MIN_PLAYERS, ROLE_IDS } from '../../shared/gamePromptContract.js';
 import { APP_VERSION } from '../config/version';
-import type { CharacterId, GameMode, GameState, PlayerId, RewindSnapshot } from '../domain/model';
+import type { CharacterId, GameMode, GameState, PlayerId, RewindSnapshot, RosterOptions } from '../domain/model';
 import type { AiProviderConfig } from '../ai/types';
 import { gameStateSchema } from './gameStateSchema';
 
@@ -23,8 +23,9 @@ export const defaultThemeSettings: ThemeSettings = {
   judgmentMode: false,
 };
 
-export interface SetupPreferences {
+export interface SetupPreferences extends RosterOptions {
   mode: GameMode;
+  blindTrial: boolean;
   humanCharacterId: CharacterId | null;
   playerCount: number;
   selectedCharacterIds: CharacterId[];
@@ -37,7 +38,27 @@ export interface SavedGameEnvelope {
   appVersion: string | null;
   savedAt: string;
   state: GameState;
+  blindTrial: boolean;
+  caseNotes: CaseNotes;
 }
+
+export type Suspicion = 'unknown' | 'good' | 'wolf';
+export interface SuspectNote {
+  suspicion: Suspicion;
+  reason: string;
+  evidenceIds: string[];
+}
+export interface NoteSnapshot {
+  day: number;
+  round: 1 | 2;
+  notes: Record<string, SuspectNote>;
+}
+export interface CaseNotes {
+  suspects: Record<string, SuspectNote>;
+  snapshots: NoteSnapshot[];
+}
+
+export const emptyCaseNotes = (): CaseNotes => ({ suspects: {}, snapshots: [] });
 
 export type StorageResult<T> =
   | { ok: true; value: T | null }
@@ -68,6 +89,7 @@ const customSettingsSchema = z.object({
   }),
   retryCount: z.number().int().min(0).max(5).default(2),
   jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
+  timeoutMs: z.number().int().min(10_000).max(600_000).default(120_000),
 });
 const settingsSchema = z.discriminatedUnion('provider', [freeSettingsSchema, customSettingsSchema]);
 const singleProfileSettingsSchema = z.object({
@@ -78,6 +100,7 @@ const singleProfileSettingsSchema = z.object({
   reasoningEffort: reasoningEffortSchema.default('low'),
   retryCount: z.number().int().min(0).max(5).default(2),
   jsonOutputMode: z.enum(['auto', 'force', 'disabled']).default('auto'),
+  timeoutMs: z.number().int().min(10_000).max(600_000).default(120_000),
 });
 const legacySettingsSchema = z.object({
   endpoint: z.string(),
@@ -86,18 +109,38 @@ const legacySettingsSchema = z.object({
   reasoningEffort: reasoningEffortSchema.default('low'),
 }).passthrough();
 const setupSchema = z.strictObject({
+  rolePool: z.array(z.enum(ROLE_IDS)).max(MAX_PLAYERS).optional(),
+  assignmentMode: z.enum(['classic', 'draft']).default('classic'),
   mode: z.enum(['spectator', 'player']),
+  blindTrial: z.boolean().default(false),
   humanCharacterId: z.enum(CHARACTER_IDS).nullable(),
   playerCount: z.number().int().min(MIN_PLAYERS).max(MAX_PLAYERS).default(MIN_PLAYERS),
   selectedCharacterIds: z.array(z.enum(CHARACTER_IDS)).max(MAX_PLAYERS).default([]),
   seed: z.number().int().min(0).max(0xffff_ffff),
   randomSeed: z.boolean().default(true),
-});
+}).transform(({ rolePool, ...value }) => rolePool === undefined ? value : { ...value, rolePool });
 const envelopeSchema = z.strictObject({
   schemaVersion: z.literal(1),
   appVersion: z.string().trim().min(1).max(64).nullable().default(null),
   savedAt: z.iso.datetime(),
   state: gameStateSchema,
+  blindTrial: z.boolean().default(false),
+  caseNotes: z.object({
+    suspects: z.record(z.string(), z.object({
+      suspicion: z.enum(['unknown', 'good', 'wolf']),
+      reason: z.string().max(2000),
+      evidenceIds: z.array(z.string()).max(20),
+    })),
+    snapshots: z.array(z.object({
+      day: z.number().int().min(0),
+      round: z.union([z.literal(1), z.literal(2)]),
+      notes: z.record(z.string(), z.object({
+        suspicion: z.enum(['unknown', 'good', 'wolf']),
+        reason: z.string().max(2000),
+        evidenceIds: z.array(z.string()).max(20),
+      })),
+    })).max(100),
+  }).default(emptyCaseNotes),
 });
 
 function readValue<T>(key: string, schema: z.ZodType<T>): StorageResult<T> {
@@ -141,6 +184,7 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
         },
         retryCount: singleProfile.data.retryCount,
         jsonOutputMode: singleProfile.data.jsonOutputMode,
+        timeoutMs: singleProfile.data.timeoutMs,
       },
     };
   }
@@ -162,6 +206,7 @@ export function loadSettings(): StorageResult<AiProviderConfig> {
         },
         retryCount: 2,
         jsonOutputMode: 'auto',
+        timeoutMs: 120_000,
       },
     };
   }
@@ -228,8 +273,8 @@ export function getSavedGameCompatibilityWarning(envelope: SavedGameEnvelope): s
   return `此存档由 v${envelope.appVersion} 创建，当前游戏为 v${APP_VERSION}，继续游戏可能出现兼容性问题。`;
 }
 
-export function saveGame(state: GameState, appVersion: string | null): SavedGameEnvelope {
-  const envelope: SavedGameEnvelope = { schemaVersion: 1, appVersion, savedAt: new Date().toISOString(), state };
+export function saveGame(state: GameState, appVersion: string | null, blindTrial = false, caseNotes = emptyCaseNotes()): SavedGameEnvelope {
+  const envelope: SavedGameEnvelope = { schemaVersion: 1, appVersion, savedAt: new Date().toISOString(), state, blindTrial, caseNotes };
   envelopeSchema.parse(envelope);
   localStorage.setItem(GAME_KEY, JSON.stringify(envelope));
   return envelope;
@@ -249,7 +294,7 @@ export interface GameHistoryEntry {
   gameId: string;
   seed: number;
   finishedDay: number;
-  winner: 'wolf' | 'good';
+  winner: 'wolf' | 'good' | 'neutral';
   finishedAt: string;
 }
 
@@ -257,7 +302,7 @@ const historySchema = z.array(z.strictObject({
   gameId: z.string().min(1),
   seed: z.number().int().min(0).max(0xffff_ffff),
   finishedDay: z.number().int().min(0),
-  winner: z.enum(['wolf', 'good']),
+  winner: z.enum(['wolf', 'good', 'neutral']),
   finishedAt: z.iso.datetime(),
 })).max(50);
 

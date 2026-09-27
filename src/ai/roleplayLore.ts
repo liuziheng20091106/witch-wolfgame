@@ -1,5 +1,10 @@
-import { formatRoleplaySpeechStyle, getRoleplayStaticCard } from '../data/roleplay-static';
+import {
+  formatRoleplaySpeechStyle,
+  getRoleplayStaticCard,
+  ROLEPLAY_STATIC_BY_CHARACTER_ID,
+} from '../data/roleplay-static';
 import { selectRoleplayRetrievalCards } from '../data/roleplay-retrieval';
+import type { RoleplayRetrievalCard } from '../data/roleplay-retrieval';
 import type {
   CharacterId,
   GameObservation,
@@ -8,6 +13,11 @@ import type {
   TimelineEvent,
   TimelineEventKind,
 } from '../domain/model';
+
+const CHARACTER_IDS: readonly CharacterId[] = [
+  'soul-0', 'soul-1', 'soul-2', 'soul-3', 'soul-4', 'soul-5', 'soul-6',
+  'soul-7', 'soul-8', 'soul-9', 'soul-10', 'soul-11', 'soul-12', 'soul-13',
+];
 
 function joinValues(values: readonly string[]): string {
   return values.join('；');
@@ -110,9 +120,15 @@ export function buildRoleplayPersonality(
   pendingDecision: PendingDecision,
 ): string {
   const card = getRoleplayStaticCard(characterId);
-  const retrievalCards = selectRoleplayRetrievalCards(
-    buildRetrievalQuery(characterId, observation, pendingDecision),
-  );
+  let retrievalCards: readonly RoleplayRetrievalCard[] = [];
+  try {
+    retrievalCards = selectRoleplayRetrievalCards(
+      buildRetrievalQuery(characterId, observation, pendingDecision),
+    );
+  } catch {
+    // 检索失败只影响语气细节，不能中断对局：丢掉动态上下文继续发言。
+    retrievalCards = [];
+  }
   const sections = [
     `【角色静态卡｜版本：${card.canonicalVersion}】`,
     `身份核心：${joinValues(card.identityCore)}`,
@@ -134,20 +150,27 @@ export function buildRoleplaySpeechStyle(characterId: CharacterId): string {
   return formatRoleplaySpeechStyle(characterId);
 }
 
-export function validateRoleplayStaticCards(): void {
-  const characterIds: CharacterId[] = [
-    'soul-0', 'soul-1', 'soul-2', 'soul-3', 'soul-4', 'soul-5', 'soul-6',
-    'soul-7', 'soul-8', 'soul-9', 'soul-10', 'soul-11', 'soul-12', 'soul-13',
-  ];
-  for (const characterId of characterIds) {
-    const card = getRoleplayStaticCard(characterId);
+/**
+ * 只读自检：返回当前角色卡的问题列表，供测试和排查使用。
+ * 故意不在模块加载期抛错——人设数据出问题只应让味道变淡，不应该让整局游戏打不开。
+ */
+export function inspectRoleplayStaticCards(): readonly string[] {
+  const problems: string[] = [];
+  for (const characterId of CHARACTER_IDS) {
+    const card = ROLEPLAY_STATIC_BY_CHARACTER_ID[characterId];
+    if (card === undefined) {
+      problems.push(`缺少角色卡：${characterId}`);
+      continue;
+    }
     if (card.relationshipAnchors.length > 2) {
-      throw new Error(`角色关系锚点超过上限：${characterId}`);
+      problems.push(`关系锚点超过上限：${characterId}`);
     }
     if (card.canonicalVersion !== '后日谈') {
-      throw new Error(`角色静态卡版本不明确：${characterId}`);
+      problems.push(`版本不明确：${characterId}`);
+    }
+    if (card.identityCore.length === 0) {
+      problems.push(`身份核心为空：${characterId}`);
     }
   }
+  return problems;
 }
-
-validateRoleplayStaticCards();

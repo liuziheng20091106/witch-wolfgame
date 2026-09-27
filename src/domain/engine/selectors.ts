@@ -35,7 +35,7 @@ export function getName(state: GameState, playerId: PlayerId): string {
 }
 
 /** 把造物适配成"影子玩家"形态，使 getPlayer/getRoleAssignment 等对 99 号透明。 */
-export function creatureAsPlayer(state: GameState, creature: CreatureState): PlayerState {
+export function creatureAsPlayer(_state: GameState, creature: CreatureState): PlayerState {
   return {
     id: creature.id,
     characterId: creature.characterId,
@@ -101,16 +101,20 @@ function revealedCurrentVotes(state: GameState) {
 
 export function selectObservation(
   state: GameState,
-  viewer: { kind: 'spectator' } | { kind: 'player'; playerId: PlayerId },
+  viewer: { kind: 'spectator' } | { kind: 'blind' } | { kind: 'player'; playerId: PlayerId },
 ): GameObservation {
   const omniscient = viewer.kind === 'spectator' || state.phase === 'ended' || state.phase === 'post-game';
   const viewerPlayerId = viewer.kind === 'player' ? viewer.playerId : null;
-  const viewerRole = viewerPlayerId === null ? null : getRoleAssignment(state, viewerPlayerId).roleId;
+  const drafting = state.phase === 'role-draft';
+  const viewerRole = viewerPlayerId === null || drafting ? null : getRoleAssignment(state, viewerPlayerId).roleId;
+  const viewerAlignment = viewerRole === null ? null : roleAlignment[viewerRole];
 
   const players = state.players.map((player) => {
     const assignment = getRoleAssignment(state, player.id);
-    const showWolfTeammate = viewerRole === 'wolf' && assignment.roleId === 'wolf';
-    const showPrivate = omniscient || player.id === viewerPlayerId || showWolfTeammate;
+    const showWolfTeammate = viewerAlignment === 'wolf' && roleAlignment[assignment.roleId] === 'wolf';
+    const showPrivate = drafting
+      ? (state.roleDraft?.selectedPlayerIds.includes(player.id) === true && (omniscient || player.id === viewerPlayerId))
+      : omniscient || player.id === viewerPlayerId || showWolfTeammate;
     const character = characterById[player.characterId];
     return {
       id: player.id,
@@ -119,7 +123,7 @@ export function selectObservation(
       avatarUrl: character.avatarUrl,
       alive: player.alive,
       roleId: showPrivate ? assignment.roleId : null,
-      skillId: getSkillInstance(state, player.id)?.definitionId ?? null,
+      skillId: viewer.kind === 'blind' && !omniscient ? null : getSkillInstance(state, player.id)?.definitionId ?? null,
       isSelf: player.id === viewerPlayerId,
     };
   });
@@ -130,7 +134,7 @@ export function selectObservation(
     }
     const ownerName = getName(state, creature.ownerPlayerId);
     const assignment = getRoleAssignment(state, creature.id);
-    const showWolfTeammate = viewerRole === 'wolf' && assignment.roleId === 'wolf';
+    const showWolfTeammate = viewerAlignment === 'wolf' && roleAlignment[assignment.roleId] === 'wolf';
     // 造物自己或主人查看时，能看到造物的职业（造物决策需要知道自己的身份）
     const viewerIsCreatureOrOwner = creature.id === viewerPlayerId || creature.ownerPlayerId === viewerPlayerId;
     const showPrivate = omniscient || viewerIsCreatureOrOwner || showWolfTeammate;
@@ -153,10 +157,12 @@ export function selectObservation(
 
   const publicEvents = omniscient
     ? state.publicEvents
-    : state.publicEvents.map((event) => ({ ...event, actualAuthorPlayerId: null }));
+    : state.publicEvents.map((event) => viewer.kind === 'blind'
+      ? { ...event, actorPlayerId: null, targetPlayerIds: [], actualAuthorPlayerId: null, data: {} }
+      : { ...event, actualAuthorPlayerId: null });
   const privateEvents = omniscient
     ? state.privateEvents
-    : state.privateEvents.filter((event) => event.viewerPlayerIds.includes(viewer.playerId));
+    : viewer.kind === 'player' ? state.privateEvents.filter((event) => event.viewerPlayerIds.includes(viewer.playerId)) : [];
 
   return {
     gameId: state.gameId,
@@ -164,12 +170,13 @@ export function selectObservation(
     mode: state.mode,
     automationMode: state.automationMode,
     board: state.board,
-    seed: state.seed,
+    seed: viewer.kind === 'blind' && !omniscient ? 0 : state.seed,
     usedFreeProvider: state.usedFreeProvider,
     aiFailureOccurred: state.aiFailureOccurred,
-    lastAiFailure: state.lastAiFailure,
+    lastAiFailure: viewer.kind === 'blind' && !omniscient ? null : state.lastAiFailure,
     day: state.day,
-    phase: state.phase,
+    phase: viewer.kind === 'blind' && !omniscient && ['first-night', 'night-skills', 'wolf-suggestions', 'wolf-decision', 'witch-action', 'seer-action', 'night-protection', 'night-resolution'].includes(state.phase)
+      ? 'night-skills' : state.phase,
     viewerPlayerId,
     omniscient,
     players,

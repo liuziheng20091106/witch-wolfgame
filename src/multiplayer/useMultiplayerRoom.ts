@@ -32,7 +32,7 @@ export interface MultiplayerController {
   connecting: boolean;
   room: MultiplayerRoomView | null;
   error: string | null;
-  createRoom(playerName: string, characterId: CharacterId, playerCount: number, seed?: number): void;
+  createRoom(playerName: string, characterId: CharacterId, playerCount: number, seed?: number, roster?: import('../domain/model').RosterOptions): void;
   joinRoom(roomCode: string, playerName: string, characterId: CharacterId): void;
   setReady(ready: boolean): void;
   startGame(): void;
@@ -133,11 +133,11 @@ export function useMultiplayerRoom(): MultiplayerController {
     return () => socketRef.current?.close();
   }, [connect]);
 
-  const createRoom = useCallback((playerName: string, characterId: CharacterId, playerCount: number, seed?: number) => {
+  const createRoom = useCallback((playerName: string, characterId: CharacterId, playerCount: number, seed?: number, roster: import('../domain/model').RosterOptions = {}) => {
     const message: MultiplayerClientMessage = seed === undefined
       ? { type: 'create-room', playerName, characterId, playerCount }
       : { type: 'create-room', playerName, characterId, playerCount, seed };
-    connect(message);
+    connect({ ...message, ...roster });
   }, [connect]);
   const joinRoom = useCallback((roomCode: string, playerName: string, characterId: CharacterId) => {
     connect({ type: 'join-room', roomCode: roomCode.trim().toUpperCase(), playerName, characterId });

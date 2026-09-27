@@ -4,14 +4,14 @@ import { createRewindSnapshot } from './createGame';
 import { getName, getPlayer } from './selectors';
 import { checkWin } from './win';
 import { getNextLastWordsDecision } from '../skills/lastWords';
+import { getNextShotDecision } from './retaliation';
 
-function nameOf(state: GameState, playerId: PlayerId): string {
-  return getName(state, playerId);
-}
-
-function sourceLabel(source: DeathIntent['source']): string {
+function sourceLabel(source: string): string {
+  if (source === 'assassination') return '暗杀';
   if (source === 'wolf') return '狼人袭击';
   if (source === 'poison') return '女巫毒药';
+  if (source === 'hunter-gun') return '猎人之枪';
+  if (source === 'wolf-king-gun') return '白狼王的獠牙';
   return '魔女杀手';
 }
 
@@ -74,7 +74,7 @@ function rewindForDeath(state: GameState, deadPlayerIds: PlayerId[]): GameState 
       }
     }
   }
-  addPublicEvent(restored, 'timeline-rewound', `${nameOf(state, trigger.ownerPlayerId)} 的死亡回溯发动，审判返回此前的晨间节点。`, {
+  addPublicEvent(restored, 'timeline-rewound', `${getName(state, trigger.ownerPlayerId)} 的死亡回溯发动，审判返回此前的晨间节点。`, {
     actorPlayerId: trigger.ownerPlayerId,
   });
   return restored;
@@ -114,7 +114,7 @@ export function resolveDeathBatch(
     }
     newlyDead.push(player.id);
     const reason = death.sources.length > 0 ? death.sources.map(sourceLabel).join('、') : '白天放逐';
-    addPublicEvent(state, 'death', `${nameOf(state, player.id)} 死亡。原因：${reason}。`, {
+    addPublicEvent(state, 'death', `${getName(state, player.id)} 死亡。原因：${reason}。`, {
       targetPlayerIds: [player.id],
       data: { sources: death.sources },
     });
@@ -151,16 +151,23 @@ export function resolveNight(state: GameState): GameState {
       .filter((event) => event.day === state.day && typeof event.data.savedWolfTargetPlayerId === 'number')
       .map((event) => event.data.savedWolfTargetPlayerId as PlayerId),
   );
-  const protectedTargets = new Set(
+  const healedTargets = new Set(
     state.privateEvents
       .filter((event) => event.day === state.day && typeof event.data.protectTargetPlayerId === 'number')
       .map((event) => event.data.protectTargetPlayerId as PlayerId),
   );
+  const guardedTargets = new Set(
+    state.privateEvents
+      .filter((event) => event.day === state.day && typeof event.data.guardTargetPlayerId === 'number')
+      .map((event) => event.data.guardTargetPlayerId as PlayerId),
+  );
   const survivingIntents = nightIntents(state).filter((intent) => {
-    if (intent.source === 'wolf' && savedTargets.has(intent.targetPlayerId)) {
-      return false;
+    if (intent.source === 'wolf') {
+      if (savedTargets.has(intent.targetPlayerId) || guardedTargets.has(intent.targetPlayerId)) {
+        return false;
+      }
     }
-    return !(intent.preventable && protectedTargets.has(intent.targetPlayerId));
+    return !(intent.preventable && healedTargets.has(intent.targetPlayerId));
   });
   const grouped = new Map<PlayerId, DeathIntent['source'][]>();
   for (const intent of survivingIntents) {
@@ -176,6 +183,12 @@ export function resolveNight(state: GameState): GameState {
   );
   // 死亡回溯返回晨间快照，当前死亡批次已被撤销，不进入遗言或胜负结算。
   if (resolved !== state) return resolved;
+  const retaliation = getNextShotDecision(resolved);
+  if (retaliation) {
+    resolved.pendingDecision = retaliation;
+    resolved.phase = 'night-resolution';
+    return resolved;
+  }
   // 遗言：夜间死亡结算后，若有合格死者需要发布遗言，保持 night-resolution 阶段等待遗言决策。
   // 多个死者时逐个询问；只有全部遗言结束后才确认最终胜负。
   const lastWords = getNextLastWordsDecision(resolved);
